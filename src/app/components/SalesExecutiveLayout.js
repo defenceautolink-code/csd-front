@@ -4,41 +4,81 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { ToastProvider, useToast } from "./Toast";
+import { clearAuthSession, getClientAuthCache, setClientAuthCache } from "@/utils/auth";
 
 function SalesExecutiveLayoutInner({ children }) {
   const router = useRouter();
   const pathname = usePathname();
   const { showToast } = useToast();
   const [currentUser, setCurrentUser] = useState(null);
+  const [isAuthorized, setIsAuthorized] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const cached = getClientAuthCache();
+    if (cached && localStorage.getItem("auth_token") === cached.token) {
+      return true;
+    }
+    return false;
+  });
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       const token = localStorage.getItem("auth_token");
       const userStr = localStorage.getItem("user");
-      if (!token) {
-        router.push("/login");
+      if (!token || !userStr) {
+        clearAuthSession();
+        setIsAuthorized(false);
+        router.replace("/login");
         return;
       }
-      if (userStr) {
-        try {
-          setCurrentUser(JSON.parse(userStr));
-        } catch (e) {
-          console.error(e);
-        }
+      try {
+        const user = JSON.parse(userStr);
+        setCurrentUser(user);
+        setClientAuthCache(token, user);
+        setIsAuthorized(true);
+      } catch (e) {
+        console.error(e);
+        clearAuthSession();
+        setIsAuthorized(false);
+        router.replace("/login");
       }
     }
   }, [router]);
 
   const handleLogout = () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("auth_token");
-      localStorage.removeItem("user");
-    }
+    clearAuthSession();
     showToast("Logged out successfully.", "info");
     setTimeout(() => {
       router.push("/login");
     }, 300);
   };
+
+  if (!isAuthorized) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: "#0d131f",
+          color: "#94a3b8",
+          gap: "14px",
+        }}
+      >
+        <div
+          className="spinner-border text-primary"
+          role="status"
+          style={{ width: "2.4rem", height: "2.4rem", borderWidth: "0.22em" }}
+        >
+          <span className="visually-hidden">Authenticating...</span>
+        </div>
+        <div style={{ fontSize: "0.85rem", letterSpacing: "0.5px" }}>
+          Authenticating session...
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="se-portal-root" style={{ minHeight: "100vh", backgroundColor: "var(--body-bg)", color: "var(--text-primary)" }}>

@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useToast } from "./Toast";
-import { canAccessAdminPath, getRoleDashboardPath } from "@/utils/auth";
+import { canAccessAdminPath, getRoleDashboardPath, clearAuthSession } from "@/utils/auth";
 
 export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
   const pathname = usePathname();
@@ -44,10 +44,7 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
   const canNavigate = (path) => canAccessAdminPath(path, currentUser);
 
   const handleLogout = () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("auth_token");
-      localStorage.removeItem("user");
-    }
+    clearAuthSession();
     showToast("Signed out successfully", "info");
     router.push("/login");
   };

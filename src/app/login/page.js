@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import axios from "axios";
-import { getRoleDashboardPath } from "@/utils/auth";
+import { getRoleDashboardPath, setAuthSession } from "@/utils/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -128,8 +128,7 @@ export default function LoginPage() {
         const token = response.data.data.token;
         const user = response.data.data.user;
 
-        localStorage.setItem("auth_token", token);
-        localStorage.setItem("user", JSON.stringify(user));
+        setAuthSession(token, user);
 
         setSuccessMessage("Authentication verified! Launching workspace...");
 

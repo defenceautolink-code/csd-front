@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useToast } from "./Toast";
-import { hasPermission, hasRole } from "@/utils/auth";
+import { hasPermission, hasRole, clearAuthSession } from "@/utils/auth";
 
 export default function Header({ onToggleSidebar, onQuickAddLead }) {
   const router = useRouter();
@@ -56,10 +56,7 @@ export default function Header({ onToggleSidebar, onQuickAddLead }) {
 
   const handleSignOut = (e) => {
     e.preventDefault();
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("auth_token");
-      localStorage.removeItem("user");
-    }
+    clearAuthSession();
     showToast("Signed out successfully", "info");
     setShowProfileMenu(false);
     router.push("/login");

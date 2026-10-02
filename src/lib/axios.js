@@ -1,4 +1,5 @@
 import axios from "axios";
+import { clearAuthSession } from "@/utils/auth";
 
 // Create Axios Instance with default settings
 const api = axios.create({
@@ -36,8 +37,7 @@ api.interceptors.response.use(
       (msg.includes("user_id") || msg.includes("Integrity constraint violation: 1048"));
 
     if (error.response?.status === 401 && typeof window !== "undefined") {
-      localStorage.removeItem("auth_token");
-      localStorage.removeItem("user");
+      clearAuthSession();
       if (window.location.pathname !== "/login" && window.location.pathname !== "/") {
         window.location.href = "/login";
       }

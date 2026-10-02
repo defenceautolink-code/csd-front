@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import axios from "axios";
+import { setAuthSession } from "@/utils/auth";
 
 export default function CrmLoginPage() {
   const router = useRouter();
@@ -66,8 +67,7 @@ export default function CrmLoginPage() {
         const token = response.data.data.token;
         const user = response.data.data.user;
 
-        localStorage.setItem("auth_token", token);
-        localStorage.setItem("user", JSON.stringify(user));
+        setAuthSession(token, user);
 
         setSuccessMessage("Login successful! Redirecting to dashboard...");
 
