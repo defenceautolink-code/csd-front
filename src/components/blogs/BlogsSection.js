@@ -25,7 +25,7 @@ export default function BlogsSection() {
 
   const handleShare = (slug, id) => {
     if (typeof window !== "undefined") {
-      const shareUrl = `${window.location.origin}/blog-detail/${slug}`;
+      const shareUrl = `${window.location.origin}/blogs/${slug}`;
       if (navigator.clipboard) {
         navigator.clipboard.writeText(shareUrl);
         setCopiedId(id);
@@ -61,7 +61,7 @@ export default function BlogsSection() {
                   <div className="blog-card">
                     {/* Left: Image & Stats */}
                     <div className="blog-card-image-wrap">
-                      <Link href={`/blog-detail/${blog.slug}`} className="blog-card-img-link">
+                      <Link href={`/blogs/${blog.slug}`} className="blog-card-img-link">
                         <img
                           src={blog.image}
                           alt={blog.title}
@@ -102,14 +102,14 @@ export default function BlogsSection() {
                     {/* Right: Content */}
                     <div className="blog-card-body">
                       <h2 className="blog-card-title">
-                        <Link href={`/blog-detail/${blog.slug}`}>{blog.title}</Link>
+                        <Link href={`/blogs/${blog.slug}`}>{blog.title}</Link>
                       </h2>
 
                       <p className="blog-card-excerpt">{blog.snippet}</p>
 
                       <div className="blog-card-footer">
                         <Link
-                          href={`/blog-detail/${blog.slug}`}
+                          href={`/blogs/${blog.slug}`}
                           className="blog-readmore-btn"
                         >
                           Read more
