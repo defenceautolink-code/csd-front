@@ -487,22 +487,32 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
               </li>
               <li className="nav-item">
                 <Link
-                  href="/admin/deals"
-                  className={`nav-link ${isLinkActive("/admin/deals") ? "active" : ""}`}
-                  onClick={onCloseMobile}
-                >
-                  <i className="bi bi-trophy-fill"></i>
-                  <span>Deals & Bookings</span>
-                </Link>
-              </li>
-              <li className="nav-item">
-                <Link
                   href="/admin/follow-up"
                   className={`nav-link ${isLinkActive("/admin/follow-up") ? "active" : ""}`}
                   onClick={onCloseMobile}
                 >
                   <i className="bi bi-telephone-outbound-fill"></i>
                   <span>Follow-Ups</span>
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link
+                  href="/admin/quotation"
+                  className={`nav-link ${isLinkActive("/admin/quotation") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-file-earmark-spreadsheet-fill"></i>
+                  <span>Send Quotation</span>
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link
+                  href="/admin/deals"
+                  className={`nav-link ${isLinkActive("/admin/deals") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-trophy-fill"></i>
+                  <span>Deals & Bookings</span>
                 </Link>
               </li>
               <li className="nav-item">
@@ -567,16 +577,6 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                 >
                   <i className="bi bi-currency-rupee"></i>
                   <span>Update Price</span>
-                </Link>
-              </li>
-              <li className="nav-item">
-                <Link
-                  href="/admin/quotation"
-                  className={`nav-link ${isLinkActive("/admin/quotation") ? "active" : ""}`}
-                  onClick={onCloseMobile}
-                >
-                  <i className="bi bi-file-earmark-spreadsheet-fill"></i>
-                  <span>Send Quotation</span>
                 </Link>
               </li>
               <li className="nav-item">

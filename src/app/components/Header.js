@@ -90,33 +90,17 @@ export default function Header({ onToggleSidebar, onQuickAddLead }) {
       </div>
 
       <div className="header-right">
-        {/* Quick Add Action for Admin and Manager */}
-        {mounted ? (
-          canCreateLead ? (
-            <button
-              className="btn btn-sm btn-primary d-none d-sm-inline-flex align-items-center gap-1"
-              onClick={() => {
-                if (onQuickAddLead) {
-                  onQuickAddLead();
-                } else {
-                  router.push("/admin/leads?action=create");
-                }
-              }}
-            >
-              <i className="bi bi-plus-lg"></i>
-              <span>New Lead</span>
-            </button>
-          ) : currentUser?.role === "Sales Executive" ? (
-            <button
-              className="btn btn-sm btn-outline-primary d-none d-sm-inline-flex align-items-center gap-1 text-white"
-              onClick={() => {
-                router.push("/sales-executive/leads");
-              }}
-            >
-              <i className="bi bi-funnel-fill me-1"></i>
-              <span>My Leads</span>
-            </button>
-          ) : null
+        {/* Quick Add Action removed as per requirement */}
+        {mounted && currentUser?.role === "Sales Executive" ? (
+          <button
+            className="btn btn-sm btn-outline-primary d-none d-sm-inline-flex align-items-center gap-1 text-white"
+            onClick={() => {
+              router.push("/sales-executive/leads");
+            }}
+          >
+            <i className="bi bi-funnel-fill me-1"></i>
+            <span>My Leads</span>
+          </button>
         ) : null}
 
         {/* Notifications Dropdown */}
