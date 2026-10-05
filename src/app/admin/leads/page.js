@@ -3,14 +3,16 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import axios from "axios";
+import { usePathname } from "next/navigation";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
-import { hasPermission } from "@/utils/auth";
+import { hasPermission, hasRole } from "@/utils/auth";
 import LeadImportModal from "./LeadImportModal";
 import ConvertDealModal from "./ConvertDealModal";
 import { getConvertedLeadIds } from "@/services/dealApi";
 
 export default function LeadsPage() {
+  const pathname = usePathname();
   const { showToast } = useToast();
   const [currentUser, setCurrentUser] = useState(null);
   useEffect(() => {
@@ -19,6 +21,9 @@ export default function LeadsPage() {
     if (user) setCurrentUser(JSON.parse(user));
   }, []);
   const can = (permission) => hasPermission(permission, currentUser);
+  const isSalesManager =
+    hasRole(["sales_manager", "manager"], currentUser) ||
+    (typeof pathname === "string" && pathname.startsWith("/sales-manager"));
 
   // API Base URL
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
@@ -754,6 +759,10 @@ export default function LeadsPage() {
   };
 
   const handleExportCSV = (exportSelectedOnly = false) => {
+    if (isSalesManager) {
+      showToast("You do not have permission to export leads.", "error");
+      return;
+    }
     const list = exportSelectedOnly
       ? leads.filter((l) => selectedLeadIds.includes(l.id))
       : filteredLeads;
@@ -875,7 +884,7 @@ export default function LeadsPage() {
               <span>Send Quotation</span>
             </Link>}
 
-            {can("lead.export") && <button
+            {!isSalesManager && can("lead.export") && <button
               className="btn btn-outline-custom"
               onClick={() => handleExportCSV(false)}
               title="Download entire leads database as CSV"
@@ -884,7 +893,7 @@ export default function LeadsPage() {
               <span>Export CSV</span>
             </button>}
 
-            {(can("lead.import") || can("lead.export") || can("lead.create")) && (
+            {(can("lead.import") || (!isSalesManager && can("lead.export")) || can("lead.create")) && (
               <button
                 className="btn btn-outline-custom d-flex align-items-center gap-1"
                 onClick={() => setShowImportModal(true)}
@@ -1112,7 +1121,7 @@ export default function LeadsPage() {
               </div>}
 
               {/* Export Selected to CSV */}
-              {can("lead.export_selected") && <button
+              {!isSalesManager && can("lead.export_selected") && <button
                 className="btn btn-sm btn-outline-custom text-white"
                 onClick={() => handleExportCSV(true)}
                 title="Download CSV for selected leads only"

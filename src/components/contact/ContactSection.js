@@ -133,7 +133,7 @@ export default function ContactSection() {
               </div>
               <div className="contact-card-text">
                 <span className="contact-card-label">PHONE</span>
-                <a href="tel:+918130746111" className="contact-card-val contact-card-link">
+                <a className="contact-card-val contact-card-link">
                   +91 8130746111
                 </a>
               </div>

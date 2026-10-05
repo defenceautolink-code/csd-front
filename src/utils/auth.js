@@ -193,7 +193,6 @@ const ROLE_PERMISSIONS = {
     "lead.status",
     "lead.priority",
     "lead.import",
-    "lead.export",
     "lead.followup",
     "lead.send_quotation",
     "lead.send_wishes",
