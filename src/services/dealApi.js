@@ -156,8 +156,8 @@ export const dealApi = {
   /**
    * Get all deals dynamically from backend 
    */
-  getDeals: async () => {
-    const response = await api.get("/deals");
+  getDeals: async (params = {}) => {
+    const response = await api.get("/deals", { params });
     if (response.data && Array.isArray(response.data.data)) {
       const normalizedList = response.data.data.map(normalizeDeal);
       return {

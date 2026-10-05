@@ -6,6 +6,7 @@ import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
 import dealApi from "@/services/dealApi";
 import { numberToWords, formatIndianCurrency } from "@/utils/numberToWords";
+import Pagination from "@/components/common/Pagination";
 
 export default function DealsPage() {
   const { showToast } = useToast();
@@ -14,6 +15,11 @@ export default function DealsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
+  const [activeActionMenuId, setActiveActionMenuId] = useState(null);
 
   // Payment Modal State
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -32,11 +38,29 @@ export default function DealsPage() {
   // View Deal / Payments Details Modal State
   const [viewDeal, setViewDeal] = useState(null);
 
+  // Close 3-dots action menu on outside click
+  useEffect(() => {
+    const handleOutsideClick = () => setActiveActionMenuId(null);
+    window.addEventListener("click", handleOutsideClick);
+    return () => window.removeEventListener("click", handleOutsideClick);
+  }, []);
+
   // Load Deals
-  const fetchDeals = async () => {
+  const fetchDeals = async (from = startDate, to = endDate) => {
     setIsLoading(true);
     try {
-      const res = await dealApi.getDeals();
+      const params = {};
+      if (from) {
+        params.delivery_from_date = from;
+        params.delivery_start_date = from;
+        params.from_date = from;
+      }
+      if (to) {
+        params.delivery_to_date = to;
+        params.delivery_end_date = to;
+        params.to_date = to;
+      }
+      const res = await dealApi.getDeals(params);
       if (res && res.data) {
         setDeals(res.data);
       }
@@ -49,32 +73,56 @@ export default function DealsPage() {
   };
 
   useEffect(() => {
-    fetchDeals();
+    fetchDeals(startDate, endDate);
 
-    const handleUpdate = () => fetchDeals();
+    const handleUpdate = () => fetchDeals(startDate, endDate);
     window.addEventListener("csd_deals_updated", handleUpdate);
     return () => {
       window.removeEventListener("csd_deals_updated", handleUpdate);
     };
-  }, []);
+  }, [startDate, endDate]);
 
-  // Filtered Deals
+  // Filtered Deals by Status, Delivery Date, and Search
   const filteredDeals = useMemo(() => {
     return deals.filter((deal) => {
       if (statusFilter !== "All" && deal.deal_status !== statusFilter) {
         return false;
       }
+
+      // Delivery Date Filter
+      if (startDate || endDate) {
+        const delDate = deal.expected_delivery_date
+          ? deal.expected_delivery_date.split("T")[0]
+          : null;
+        if (!delDate) return false;
+        if (startDate && delDate < startDate) return false;
+        if (endDate && delDate > endDate) return false;
+      }
+
       if (searchTerm.trim()) {
         const q = searchTerm.toLowerCase();
         const matchesName = deal.customer_name?.toLowerCase().includes(q);
         const matchesPhone = deal.customer_phone?.toLowerCase().includes(q);
         const matchesModel = deal.model_variant?.toLowerCase().includes(q);
         const matchesVin = deal.vin_chassis_number?.toLowerCase().includes(q);
-        return matchesName || matchesPhone || matchesModel || matchesVin;
+        const matchesId = String(deal.id).includes(q) || (deal.deal_number && deal.deal_number.toLowerCase().includes(q));
+        return matchesName || matchesPhone || matchesModel || matchesVin || matchesId;
       }
       return true;
     });
-  }, [deals, statusFilter, searchTerm]);
+  }, [deals, statusFilter, searchTerm, startDate, endDate]);
+
+  // Reset to first page on filter change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, searchTerm, startDate, endDate]);
+
+  // Paginated records for table
+  const totalItems = filteredDeals.length;
+  const lastPage = Math.max(1, Math.ceil(totalItems / perPage));
+  const paginatedDeals = useMemo(() => {
+    return filteredDeals.slice((currentPage - 1) * perPage, currentPage * perPage);
+  }, [filteredDeals, currentPage, perPage]);
 
   // Aggregate Metrics
   const metrics = useMemo(() => {
@@ -303,14 +351,13 @@ export default function DealsPage() {
               </div>
 
               {/* Filters & Search */}
-              <div className="d-flex flex-wrap align-items-center gap-2">
+              <div className="d-flex flex-wrap align-items-center gap-2 ms-auto">
                 <div className="btn-group btn-group-sm" role="group">
                   {["All", "Booked", "Partially Paid", "Fully Paid"].map((st) => (
                     <button
                       key={st}
                       type="button"
-                      className={`btn ${statusFilter === st ? "btn-primary" : "btn-outline-secondary"
-                        }`}
+                      className={`btn ${statusFilter === st ? "btn-primary" : "btn-outline-secondary"}`}
                       onClick={() => setStatusFilter(st)}
                     >
                       {st}
@@ -318,7 +365,55 @@ export default function DealsPage() {
                   ))}
                 </div>
 
-                <div style={{ width: "240px" }}>
+                {/* Delivery Date Filter: From */}
+                <div className="input-group input-group-sm" style={{ width: "165px" }}>
+                  <span className="input-group-text bg-light text-muted px-2" title="Delivery Date From">
+                    <i className="bi bi-calendar-event me-1"></i>
+                    <span style={{ fontSize: "11px", fontWeight: "600" }}>From</span>
+                  </span>
+                  <input
+                    type="date"
+                    className="form-control form-control-sm px-1"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    title="Delivery date from"
+                  />
+                </div>
+
+                {/* Delivery Date Filter: To */}
+                <div className="input-group input-group-sm" style={{ width: "160px" }}>
+                  <span className="input-group-text bg-light text-muted px-2" title="Delivery Date To">
+                    <i className="bi bi-calendar-check me-1"></i>
+                    <span style={{ fontSize: "11px", fontWeight: "600" }}>To</span>
+                  </span>
+                  <input
+                    type="date"
+                    className="form-control form-control-sm px-1"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    title="Delivery date to"
+                  />
+                </div>
+
+                {/* Clear Date Filter Button */}
+                {(startDate || endDate) && (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary px-2 d-flex align-items-center gap-1"
+                    style={{ fontSize: "0.8rem", height: "31px" }}
+                    onClick={() => {
+                      setStartDate("");
+                      setEndDate("");
+                    }}
+                    title="Clear Delivery Date Filter"
+                  >
+                    <i className="bi bi-x-circle"></i>
+                    <span>Reset</span>
+                  </button>
+                )}
+
+                {/* Search */}
+                <div style={{ width: "200px" }}>
                   <div className="input-group input-group-sm">
                     <span className="input-group-text bg-light border-end-0">
                       <i className="bi bi-search text-muted"></i>
@@ -326,7 +421,7 @@ export default function DealsPage() {
                     <input
                       type="text"
                       className="form-control border-start-0"
-                      placeholder="Search name, phone, VIN..."
+                      placeholder="Search name, phone..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
@@ -349,13 +444,13 @@ export default function DealsPage() {
             <table className="table table-custom mb-0">
               <thead>
                 <tr>
-                  <th style={{ width: "60px" }}># Deal</th>
+                  <th style={{ width: "55px" }} className="text-center">Action</th>
+                  <th style={{ width: "80px" }}># Deal</th>
                   <th>Customer</th>
                   <th>Vehicle & Spec</th>
                   <th>Deal Financials</th>
                   <th>Payment Status</th>
                   <th>Delivery Date</th>
-                  <th className="text-end" style={{ width: "160px" }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -379,21 +474,93 @@ export default function DealsPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredDeals.map((deal) => {
+                  paginatedDeals.map((deal) => {
                     const pctPaid = Math.min(
                       100,
                       Math.round(((deal.paid_amount || 0) / (deal.net_amount || 1)) * 100)
                     );
                     return (
                       <tr key={deal.id}>
-                        {/* Deal ID */}
+                        {/* 1. Action First Column with 3-Dots Dropdown */}
+                        <td className="text-center" onClick={(e) => e.stopPropagation()}>
+                          <div className="dropdown position-relative d-inline-block">
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-light border rounded-circle shadow-none p-0 d-inline-flex align-items-center justify-content-center"
+                              style={{ width: "32px", height: "32px", cursor: "pointer" }}
+                              title="Actions"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveActionMenuId(activeActionMenuId === deal.id ? null : deal.id);
+                              }}
+                            >
+                              <i className="bi bi-three-dots-vertical fs-6 text-dark"></i>
+                            </button>
+
+                            {activeActionMenuId === deal.id && (
+                              <div
+                                className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute start-0 text-start"
+                                style={{
+                                  minWidth: "190px",
+                                  zIndex: 1050,
+                                  top: "100%",
+                                  backgroundColor: "#FFFFFF",
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {/* Record Payment */}
+                                {deal.balance_amount > 0 && (
+                                  <button
+                                    type="button"
+                                    className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-success"
+                                    style={{ backgroundColor: "rgba(21, 128, 61, 0.08)" }}
+                                    onClick={() => {
+                                      setActiveActionMenuId(null);
+                                      handleOpenPayment(deal);
+                                    }}
+                                  >
+                                    <i className="bi bi-cash-stack text-success"></i>
+                                    <span>Record Payment</span>
+                                  </button>
+                                )}
+
+                                {/* View Voucher & History */}
+                                <button
+                                  type="button"
+                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-dark"
+                                  onClick={() => {
+                                    setActiveActionMenuId(null);
+                                    setViewDeal(deal);
+                                  }}
+                                >
+                                  <i className="bi bi-receipt text-primary"></i>
+                                  <span>View Voucher & History</span>
+                                </button>
+
+                                {/* Linked Quotation */}
+                                {deal.quotation_id && (
+                                  <Link
+                                    href={`/admin/quotation/${deal.quotation_id}`}
+                                    className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-dark text-decoration-none"
+                                    onClick={() => setActiveActionMenuId(null)}
+                                  >
+                                    <i className="bi bi-file-earmark-text text-info"></i>
+                                    <span>View Quotation #{deal.quotation_id}</span>
+                                  </Link>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 2. Deal ID */}
                         <td>
                           <span className="badge bg-light text-dark border font-monospace px-2 py-1">
                             #{deal.id}
                           </span>
                         </td>
 
-                        {/* Customer */}
+                        {/* 3. Customer */}
                         <td>
                           <div>
                             <h6 className="mb-0 text-dark fw-bold">{deal.customer_name}</h6>
@@ -404,7 +571,7 @@ export default function DealsPage() {
                           </div>
                         </td>
 
-                        {/* Vehicle & Spec */}
+                        {/* 4. Vehicle & Spec */}
                         <td>
                           <div>
                             <div className="fw-semibold text-dark">{deal.model_variant}</div>
@@ -413,26 +580,11 @@ export default function DealsPage() {
                                 <i className="bi bi-palette me-1"></i>
                                 {deal.color || "Standard"}
                               </span>
-                              {deal.vin_chassis_number && (
-                                <span className="font-monospace text-secondary" style={{ fontSize: "11px" }}>
-                                  VIN: {deal.vin_chassis_number}
-                                </span>
-                              )}
-                              {deal.quotation_id && (
-                                <Link
-                                  href={`/admin/quotation/${deal.quotation_id}`}
-                                  className="badge bg-primary-subtle text-primary border border-primary-subtle text-decoration-none"
-                                  title="View Linked Quotation"
-                                >
-                                  <i className="bi bi-file-earmark-text me-1"></i>
-                                  Quote #{deal.quotation_id}
-                                </Link>
-                              )}
                             </div>
                           </div>
                         </td>
 
-                        {/* Deal Financials */}
+                        {/* 5. Deal Financials */}
                         <td>
                           <div>
                             <div className="fw-bold text-dark fs-6">
@@ -443,27 +595,23 @@ export default function DealsPage() {
                                 Incl. ₹{formatIndianCurrency(deal.discount_amount)} discount
                               </div>
                             )}
-                            <div className="text-muted fst-italic" style={{ fontSize: "10px" }}>
-                              {numberToWords(deal.net_amount)}
-                            </div>
                           </div>
                         </td>
 
-                        {/* Payment Status & Progress */}
+                        {/* 6. Payment Status & Progress */}
                         <td>
-                          <div style={{ minWidth: "160px" }}>
+                          <div style={{ maxWidth: "170px" }}>
                             <div className="d-flex justify-content-between align-items-center small mb-1">
-                              <span className="fw-semibold text-success">
+                              <span className="fw-semibold text-success" style={{ fontSize: "11px" }}>
                                 Paid: ₹{formatIndianCurrency(deal.paid_amount || 0)}
                               </span>
-                              <span className="fw-semibold text-danger">
+                              <span className="fw-semibold text-danger" style={{ fontSize: "11px" }}>
                                 Due: ₹{formatIndianCurrency(deal.balance_amount || 0)}
                               </span>
                             </div>
-                            <div className="progress" style={{ height: "6px" }}>
+                            <div className="progress" style={{ height: "5px" }}>
                               <div
-                                className={`progress-bar ${pctPaid === 100 ? "bg-success" : "bg-warning"
-                                  }`}
+                                className={`progress-bar ${pctPaid === 100 ? "bg-success" : "bg-warning"}`}
                                 role="progressbar"
                                 style={{ width: `${pctPaid}%` }}
                                 aria-valuenow={pctPaid}
@@ -476,19 +624,19 @@ export default function DealsPage() {
                                 className={`badge ${deal.deal_status === "Fully Paid"
                                     ? "bg-success-subtle text-success"
                                     : "bg-warning-subtle text-warning"
-                                  } px-2`}
+                                  } px-2 py-0.5`}
                                 style={{ fontSize: "10px" }}
                               >
                                 {deal.deal_status}
                               </span>
                               <span className="text-muted" style={{ fontSize: "10px" }}>
-                                {pctPaid}% Collected
+                                {pctPaid}%
                               </span>
                             </div>
                           </div>
                         </td>
 
-                        {/* Delivery Date */}
+                        {/* 7. Delivery Date */}
                         <td>
                           <span className="small text-dark fw-semibold">
                             <i className="bi bi-calendar-event text-primary me-1"></i>
@@ -501,32 +649,6 @@ export default function DealsPage() {
                               : "Pending"}
                           </span>
                         </td>
-
-                        {/* Actions */}
-                        <td className="text-end">
-                          <div className="d-flex align-items-center justify-content-end gap-1">
-                            {deal.balance_amount > 0 && (
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-outline-success d-inline-flex align-items-center gap-1 py-1 px-2"
-                                title="Record New Payment"
-                                onClick={() => handleOpenPayment(deal)}
-                              >
-                                <i className="bi bi-cash-stack"></i>
-                                <span>Pay</span>
-                              </button>
-                            )}
-
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 py-1 px-2"
-                              title="View Deal Voucher & History"
-                              onClick={() => setViewDeal(deal)}
-                            >
-                              <i className="bi bi-receipt"></i>
-                            </button>
-                          </div>
-                        </td>
                       </tr>
                     );
                   })
@@ -534,6 +656,23 @@ export default function DealsPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {!isLoading && filteredDeals.length > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              lastPage={lastPage}
+              total={totalItems}
+              perPage={perPage}
+              onPageChange={(page) => setCurrentPage(page)}
+              onPerPageChange={(newPerPage) => {
+                setPerPage(newPerPage);
+                setCurrentPage(1);
+              }}
+              perPageOptions={[10, 20, 50, 100]}
+              itemName="deals"
+            />
+          )}
         </div>
 
         {/* ===================================================================

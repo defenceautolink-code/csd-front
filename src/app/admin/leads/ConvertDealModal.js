@@ -443,7 +443,7 @@ export default function ConvertDealModal({
 
             <div className="row g-3 mb-3">
               {/* Color */}
-              <div className="col-md-4">
+              <div className="col-md-6">
                 <label className="form-label text-dark fw-bold small mb-1">
                   Vehicle Color <span className="text-danger">*</span>
                 </label>
@@ -457,22 +457,8 @@ export default function ConvertDealModal({
                 />
               </div>
 
-              {/* VIN / Chassis Number */}
-              <div className="col-md-4">
-                <label className="form-label text-dark fw-bold small mb-1">
-                  VIN / Chassis Number
-                </label>
-                <input
-                  type="text"
-                  className="form-control font-monospace"
-                  placeholder="e.g. MB8NA12347890123"
-                  value={formData.vin_chassis_number}
-                  onChange={(e) => setFormData({ ...formData, vin_chassis_number: e.target.value })}
-                />
-              </div>
-
               {/* Expected Delivery Date */}
-              <div className="col-md-4">
+              <div className="col-md-6">
                 <label className="form-label text-dark fw-bold small mb-1">
                   Expected Delivery Date <span className="text-danger">*</span>
                 </label>
