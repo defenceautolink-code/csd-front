@@ -6,6 +6,7 @@ import axios from "axios";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
 import { hasPermission } from "@/utils/auth";
+import Pagination from "@/components/common/Pagination";
 
 export default function FollowUpPage() {
   const { showToast } = useToast();
@@ -21,8 +22,20 @@ export default function FollowUpPage() {
   const can = (permission) => hasPermission(permission, currentUser);
   const [activeTab, setActiveTab] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
+  const [activeActionMenuId, setActiveActionMenuId] = useState(null);
   const [showLogModal, setShowLogModal] = useState(false);
   const [selectedLead, setSelectedLead] = useState(null);
+
+  // Close 3-dots action menu on outside click
+  useEffect(() => {
+    const handleOutsideClick = () => setActiveActionMenuId(null);
+    window.addEventListener("click", handleOutsideClick);
+    return () => window.removeEventListener("click", handleOutsideClick);
+  }, []);
 
   // Live follow-ups list & KPIs
   const [allFollowUps, setAllFollowUps] = useState([]);
@@ -43,10 +56,19 @@ export default function FollowUpPage() {
   });
 
   // Fetch follow-ups from live backend API
-  const fetchFollowUps = async () => {
+  const fetchFollowUps = async (from = startDate, to = endDate) => {
     try {
       setLoading(true);
-      const res = await axios.get(`${API_URL}/follow-ups`);
+      const params = {};
+      if (from) {
+        params.from_date = from;
+        params.start_date = from;
+      }
+      if (to) {
+        params.to_date = to;
+        params.end_date = to;
+      }
+      const res = await axios.get(`${API_URL}/follow-ups`, { params });
       if (res.data && res.data.status && Array.isArray(res.data.data)) {
         if (res.data.kpis) {
           setKpis({
@@ -70,7 +92,8 @@ export default function FollowUpPage() {
           } else if (desc.length > 45) {
             desc = desc.substring(0, 42) + "...";
           }
-          const dueDate = item.next_follow_up_date || item.follow_up_date || "-";
+          const rawDueDate = item.next_follow_up_date || item.follow_up_date || "";
+          const dueDate = rawDueDate || "-";
           const dueSub = item.next_follow_up_time ? `Scheduled • ${item.next_follow_up_time}` : (item.follow_up_time ? `Recorded • ${item.follow_up_time}` : "-");
           const rep = item.user_name || item.user?.name || item.lead?.assigned_user_name || "-";
           const isHot = item.lead?.priority === "Hot";
@@ -100,6 +123,7 @@ export default function FollowUpPage() {
             outcomeDesc: desc,
             badgeClass: outcome === "Completed" ? "bg-success-subtle text-success" : "bg-warning-subtle text-warning",
             badgeIcon: outcome === "Completed" ? "bi bi-check2-circle" : "bi bi-telephone-outbound",
+            rawDueDate: rawDueDate,
             dueTime: dueDate,
             dueSubtext: dueSub,
             dateClass: itemTab === "overdue" ? "text-danger" : itemTab === "today" ? "text-warning" : "text-dark",
@@ -123,8 +147,8 @@ export default function FollowUpPage() {
   };
 
   useEffect(() => {
-    fetchFollowUps();
-  }, []);
+    fetchFollowUps(startDate, endDate);
+  }, [startDate, endDate]);
 
   const handleLogSubmit = async (e) => {
     e.preventDefault();
@@ -157,13 +181,18 @@ export default function FollowUpPage() {
   const overdueCount = allFollowUps.filter((i) => i.tab === "overdue").length;
   const todayCount = allFollowUps.filter((i) => i.tab === "today").length;
   const upcomingCount = allFollowUps.filter((i) => i.tab === "upcoming").length;
-  const allCount = allFollowUps.length;
-
-  // Filtered items by tab and search
+  const allCount = allFollowUps.length;  // Filtered items by tab and search
   const filteredList = allFollowUps.filter((item) => {
     if (activeTab === "overdue" && item.tab !== "overdue") return false;
     if (activeTab === "today" && item.tab !== "today") return false;
     if (activeTab === "upcoming" && item.tab !== "upcoming") return false;
+
+    if (startDate || endDate) {
+      const itemDate = item.rawDueDate || (item.dueTime && item.dueTime !== "-" ? item.dueTime.split(" ")[0] : null);
+      if (!itemDate) return false;
+      if (startDate && itemDate < startDate) return false;
+      if (endDate && itemDate > endDate) return false;
+    }
 
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
@@ -177,6 +206,16 @@ export default function FollowUpPage() {
     }
     return true;
   });
+
+  // Reset to first page when any filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, startDate, endDate, searchTerm]);
+
+  // Paginated records for table
+  const totalItems = filteredList.length;
+  const lastPage = Math.max(1, Math.ceil(totalItems / perPage));
+  const paginatedList = filteredList.slice((currentPage - 1) * perPage, currentPage * perPage);
 
   return (
     <AdminLayout>
@@ -288,7 +327,8 @@ export default function FollowUpPage() {
         <div className="card mb-4">
           <div className="card-body py-3">
             <div className="d-flex flex-wrap justify-content-between align-items-center gap-3">
-              <div className="d-flex align-items-center gap-3 flex-wrap">
+              {/* Tab Pills */}
+              <div className="d-flex align-items-center gap-2 flex-wrap">
                 {[
                   { id: "all", label: "All Follow-ups", count: allCount },
                   { id: "overdue", label: "Overdue", count: overdueCount },
@@ -300,23 +340,24 @@ export default function FollowUpPage() {
                     <button
                       key={tab.id}
                       type="button"
-                      className={`btn btn-sm px-3 py-2 rounded-pill fw-medium ${
+                      className={`btn btn-sm px-3 py-1.5 rounded-pill fw-medium ${
                         isActive ? "btn-primary shadow-sm" : "btn-outline-custom"
                       }`}
                       style={{
                         borderColor: isActive ? "var(--primary)" : "#e2e8f0",
-                        gap: "8px",
+                        gap: "6px",
+                        fontSize: "0.82rem",
                       }}
                       onClick={() => setActiveTab(tab.id)}
                     >
                       <span>{tab.label}</span>
                       <span
-                        className={`badge px-2 py-1 rounded-pill ${
+                        className={`badge px-2 py-0.5 rounded-pill ${
                           isActive
                             ? "bg-white text-dark fw-bold"
                             : "bg-light text-secondary border"
                         }`}
-                        style={{ fontSize: "0.75rem" }}
+                        style={{ fontSize: "0.72rem" }}
                       >
                         {tab.count}
                       </span>
@@ -325,17 +366,78 @@ export default function FollowUpPage() {
                 })}
               </div>
 
-              <div className="input-group" style={{ maxWidth: "320px" }}>
-                <span className="input-group-text">
-                  <i className="bi bi-search"></i>
-                </span>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="Search follow-ups..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+              {/* Right Filter Controls: Date Range (Start & End) + Search */}
+              <div className="d-flex align-items-center gap-2 flex-wrap">
+                {/* Start Date */}
+                <div className="input-group input-group-sm" style={{ width: "165px" }}>
+                  <span className="input-group-text bg-light text-muted px-2" title="Start Date">
+                    <i className="bi bi-calendar-event me-1"></i>
+                    <span style={{ fontSize: "11px", fontWeight: "600" }}>From</span>
+                  </span>
+                  <input
+                    type="date"
+                    className="form-control form-control-sm px-1"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    title="Filter from start date"
+                  />
+                </div>
+
+                {/* End Date */}
+                <div className="input-group input-group-sm" style={{ width: "160px" }}>
+                  <span className="input-group-text bg-light text-muted px-2" title="End Date">
+                    <i className="bi bi-calendar-check me-1"></i>
+                    <span style={{ fontSize: "11px", fontWeight: "600" }}>To</span>
+                  </span>
+                  <input
+                    type="date"
+                    className="form-control form-control-sm px-1"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    title="Filter to end date"
+                  />
+                </div>
+
+                {/* Clear Date Filter Button */}
+                {(startDate || endDate) && (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary px-2 d-flex align-items-center gap-1"
+                    style={{ fontSize: "0.8rem", height: "31px" }}
+                    onClick={() => {
+                      setStartDate("");
+                      setEndDate("");
+                    }}
+                    title="Clear Date Filters"
+                  >
+                    <i className="bi bi-x-circle"></i>
+                    <span>Reset</span>
+                  </button>
+                )}
+
+                {/* Search Box */}
+                <div className="input-group input-group-sm" style={{ width: "190px" }}>
+                  <span className="input-group-text">
+                    <i className="bi bi-search"></i>
+                  </span>
+                  <input
+                    type="text"
+                    className="form-control form-control-sm"
+                    placeholder="Search follow-ups..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-secondary"
+                      onClick={() => setSearchTerm("")}
+                      title="Clear Search"
+                    >
+                      <i className="bi bi-x"></i>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -352,33 +454,116 @@ export default function FollowUpPage() {
             <table className="table table-custom align-middle mb-0">
               <thead>
                 <tr>
+                  <th style={{ width: "65px" }} className="text-center">Action</th>
                   <th>Customer & Contact</th>
                   <th>Vehicle Interested</th>
                   <th>Last Call Outcome</th>
                   <th>Follow-up Due Date</th>
-                  <th>Assigned Rep</th>
-                  <th>Urgency</th>
-                  <th className="text-end">Quick Action</th>
+                  <th>Assigned Rep & Urgency</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="7" className="text-center py-5">
+                    <td colSpan="6" className="text-center py-5">
                       <div className="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
                       <span className="text-muted small">Loading follow-ups...</span>
                     </td>
                   </tr>
                 ) : filteredList.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="text-center py-5 text-muted">
+                    <td colSpan="6" className="text-center py-5 text-muted">
                       <i className="bi bi-inbox fs-3 d-block mb-2 text-secondary"></i>
                       No follow-up records found for this filter.
                     </td>
                   </tr>
                 ) : (
-                  filteredList.map((item) => (
+                  paginatedList.map((item) => (
                     <tr key={item.id}>
+                      {/* 1. Action First Column with 3-Dots Dropdown Menu */}
+                      <td className="text-center" onClick={(e) => e.stopPropagation()}>
+                        <div className="dropdown position-relative d-inline-block">
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-light border rounded-circle shadow-none p-0 d-inline-flex align-items-center justify-content-center"
+                            style={{ width: "32px", height: "32px", cursor: "pointer" }}
+                            title="Quick Actions"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveActionMenuId(activeActionMenuId === item.id ? null : item.id);
+                            }}
+                          >
+                            <i className="bi bi-three-dots-vertical fs-6 text-dark"></i>
+                          </button>
+
+                          {activeActionMenuId === item.id && (
+                            <div
+                              className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute start-0 text-start"
+                              style={{
+                                minWidth: "195px",
+                                zIndex: 1050,
+                                top: "100%",
+                                backgroundColor: "#FFFFFF",
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {/* Call Now / Log Call */}
+                              {can("followup.call_now") && (
+                                <button
+                                  type="button"
+                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-primary"
+                                  style={{ backgroundColor: "rgba(13, 110, 253, 0.08)" }}
+                                  onClick={() => {
+                                    setActiveActionMenuId(null);
+                                    setSelectedLead(item.customer);
+                                    setCallLog({
+                                      lead_id: item.lead_id || item.id,
+                                      customer: item.customer,
+                                      phone: item.phone,
+                                      vehicle: item.vehicle,
+                                      outcome: item.outcome || "Interested / Call Back",
+                                      nextDate: item.dueTime && /^\d{4}-\d{2}-\d{2}$/.test(item.dueTime) ? item.dueTime : "",
+                                      type: "Phone Call",
+                                      nextTime: "10:00 AM",
+                                      notes: "",
+                                    });
+                                    setShowLogModal(true);
+                                  }}
+                                >
+                                  <i className="bi bi-telephone-fill text-primary"></i>
+                                  <span>Call Now / Log</span>
+                                </button>
+                              )}
+
+                              {/* Send Quotation */}
+                              {can("followup.send_quotation") && (
+                                <Link
+                                  href={item.lead_id ? `/admin/quotation/create?lead_id=${item.lead_id}` : `/admin/quotation`}
+                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-dark text-decoration-none"
+                                  onClick={() => setActiveActionMenuId(null)}
+                                >
+                                  <i className="bi bi-file-earmark-spreadsheet text-success"></i>
+                                  <span>Send Quotation</span>
+                                </Link>
+                              )}
+
+                              {/* View Lead 360 Profile */}
+                              {item.lead_id && (
+                                <Link
+                                  href={`/admin/leads/${item.lead_id}`}
+                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-dark text-decoration-none"
+                                  onClick={() => setActiveActionMenuId(null)}
+                                >
+                                  <i className="bi bi-person-lines-fill text-info"></i>
+                                  <span>View Lead Profile</span>
+                                </Link>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* 2. Customer & Contact */}
                       <td>
                         <div className="d-flex align-items-center gap-2">
                           <img
@@ -394,6 +579,8 @@ export default function FollowUpPage() {
                           </div>
                         </div>
                       </td>
+
+                      {/* 3. Vehicle Interested */}
                       <td>
                         <span className="text-dark fw-semibold small">{item.vehicle}</span>
                         {item.variant ? (
@@ -402,6 +589,8 @@ export default function FollowUpPage() {
                           </div>
                         ) : null}
                       </td>
+
+                      {/* 4. Last Call Outcome */}
                       <td>
                         <span className={`badge ${item.badgeClass} small`}>
                           <i className={`${item.badgeIcon || "bi bi-telephone-outbound"} me-1`}></i>
@@ -411,50 +600,23 @@ export default function FollowUpPage() {
                           {item.outcomeDesc}
                         </div>
                       </td>
+
+                      {/* 5. Follow-up Due Date */}
                       <td>
                         <div className={`${item.dateClass} fw-bold small`}>{item.dueTime}</div>
                         <span className="text-muted" style={{ fontSize: "0.72rem" }}>
                           {item.dueSubtext}
                         </span>
                       </td>
+
+                      {/* 6. Assigned Rep & Urgency (Combined to eliminate horizontal scrolling) */}
                       <td>
-                        <span className="text-dark small">{item.rep}</span>
-                      </td>
-                      <td>
-                        <span className={`badge ${item.urgencyClass} px-2 py-1 rounded-pill small`}>
-                          {item.urgencyIcon && <i className={`${item.urgencyIcon} me-1`}></i>}
-                          {item.urgency}
-                        </span>
-                      </td>
-                      <td className="text-end">
-                        <div className="d-flex justify-content-end gap-1">
-                          {can("followup.call_now") && (
-                            <button
-                              className="btn btn-xs btn-primary"
-                              onClick={() => {
-                                setSelectedLead(item.customer);
-                                setCallLog({
-                                  lead_id: item.lead_id || item.id,
-                                  customer: item.customer,
-                                  phone: item.phone,
-                                  vehicle: item.vehicle,
-                                  outcome: item.outcome || "Interested / Call Back",
-                                  nextDate: item.dueTime && /^\d{4}-\d{2}-\d{2}$/.test(item.dueTime) ? item.dueTime : "",
-                                  type: "Phone Call",
-                                  nextTime: "10:00 AM",
-                                  notes: "",
-                                });
-                                setShowLogModal(true);
-                              }}
-                            >
-                              <i className="bi bi-telephone-fill me-1"></i> Call Now
-                            </button>
-                          )}
-                          {can("followup.send_quotation") && (
-                            <Link href="/admin/quotation" className="btn btn-xs btn-outline-custom">
-                              <i className="bi bi-file-earmark-spreadsheet"></i>
-                            </Link>
-                          )}
+                        <div className="d-flex flex-column align-items-start gap-1">
+                          <span className="text-dark fw-semibold small">{item.rep}</span>
+                          <span className={`badge ${item.urgencyClass} px-2 py-1 rounded-pill small`} style={{ fontSize: "11px" }}>
+                            {item.urgencyIcon && <i className={`${item.urgencyIcon} me-1`}></i>}
+                            {item.urgency}
+                          </span>
                         </div>
                       </td>
                     </tr>
@@ -463,6 +625,23 @@ export default function FollowUpPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {!loading && filteredList.length > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              lastPage={lastPage}
+              total={totalItems}
+              perPage={perPage}
+              onPageChange={(page) => setCurrentPage(page)}
+              onPerPageChange={(newPerPage) => {
+                setPerPage(newPerPage);
+                setCurrentPage(1);
+              }}
+              perPageOptions={[10, 20, 50, 100]}
+              itemName="follow-ups"
+            />
+          )}
         </div>
 
         {/* Log Call Modal */}
@@ -513,7 +692,6 @@ export default function FollowUpPage() {
                         onChange={(e) => setCallLog({ ...callLog, outcome: e.target.value })}
                       >
                         <option value="Interested / Call Back">Interested / Call Back</option>
-                        <option value="Test Drive Requested">Test Drive Requested</option>
                         <option value="Quotation Requested">Quotation Requested</option>
                         <option value="Ready for Booking">Ready for Booking</option>
                         <option value="Not Answering / Busy">Not Answering / Busy</option>

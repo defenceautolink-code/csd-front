@@ -10,6 +10,7 @@ import { hasPermission, hasRole } from "@/utils/auth";
 import LeadImportModal from "./LeadImportModal";
 import ConvertDealModal from "./ConvertDealModal";
 import { getConvertedLeadIds } from "@/services/dealApi";
+import Pagination from "@/components/common/Pagination";
 
 export default function LeadsPage() {
   const pathname = usePathname();
@@ -59,6 +60,8 @@ export default function LeadsPage() {
   const [priorityFilter, setPriorityFilter] = useState("");
   const [segmentFilter, setSegmentFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
 
   // Modal States
   const [showAddModal, setShowAddModal] = useState(false);
@@ -469,6 +472,16 @@ export default function LeadsPage() {
 
     return matchesSearch && matchesPriority && matchesSegment && matchesStatus;
   });
+
+  // Reset to first page when any filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, priorityFilter, segmentFilter, statusFilter]);
+
+  // Paginated leads for table
+  const totalItems = filteredLeads.length;
+  const lastPage = Math.max(1, Math.ceil(totalItems / perPage));
+  const paginatedLeads = filteredLeads.slice((currentPage - 1) * perPage, currentPage * perPage);
 
   // Selection calculations
   const isAllSelected =
@@ -1385,7 +1398,7 @@ export default function LeadsPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredLeads.map((lead, index) => {
+                  paginatedLeads.map((lead, index) => {
                     const isSelected = selectedLeadIds.includes(lead.id);
                     return (
                       <tr key={lead.id} className={isSelected ? "selected-row" : ""}>
@@ -1399,7 +1412,7 @@ export default function LeadsPage() {
                           />
                         </td>
                         <td>
-                          <span className="text-muted small">{index + 1}</span>
+                          <span className="text-muted small">{(currentPage - 1) * perPage + index + 1}</span>
                         </td>
 
                         {/* 1. Actions First Column */}
@@ -1678,6 +1691,23 @@ export default function LeadsPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {!isLoading && filteredLeads.length > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              lastPage={lastPage}
+              total={totalItems}
+              perPage={perPage}
+              onPageChange={(page) => setCurrentPage(page)}
+              onPerPageChange={(newPerPage) => {
+                setPerPage(newPerPage);
+                setCurrentPage(1);
+              }}
+              perPageOptions={[10, 20, 50, 100]}
+              itemName="leads"
+            />
+          )}
         </div>
 
         {/* ------------------------------------------------------------------
