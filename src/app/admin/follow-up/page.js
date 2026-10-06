@@ -190,7 +190,7 @@ export default function FollowUpPage() {
               </li>
               <li className="breadcrumb-item active">Follow-Ups</li>
             </ul>
-            <h1 className="page-title mt-1">Follow-Ups & Call Notes Hub</h1>
+            <h1 className="page-title mt-1">Follow-Ups & Call Notes Hub123</h1>
           </div>
 
           <div className="page-header-actions d-flex align-items-center gap-2">
