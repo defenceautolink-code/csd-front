@@ -54,11 +54,13 @@ export default function DealsPage() {
         params.delivery_from_date = from;
         params.delivery_start_date = from;
         params.from_date = from;
+        params.start_date = from;
       }
       if (to) {
         params.delivery_to_date = to;
         params.delivery_end_date = to;
         params.to_date = to;
+        params.end_date = to;
       }
       const res = await dealApi.getDeals(params);
       if (res && res.data) {

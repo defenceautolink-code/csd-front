@@ -5,6 +5,7 @@ import Link from "next/link";
 import axios from "axios";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
+import Pagination from "@/components/common/Pagination";
 
 export default function LeadSourcePage() {
   const { showToast } = useToast();
@@ -16,6 +17,11 @@ export default function LeadSourcePage() {
   const [leadSources, setLeadSources] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
+  const [serverPagination, setServerPagination] = useState(null);
 
   // Modal States
   const [showAddModal, setShowAddModal] = useState(false);
@@ -33,9 +39,22 @@ export default function LeadSourcePage() {
   const fetchLeadSources = async () => {
     setIsLoading(true);
     try {
-      const response = await axios.get(`${API_URL}/lead-sources`);
+      const params = {
+        page: currentPage,
+        per_page: perPage,
+      };
+      if (searchTerm.trim()) params.search = searchTerm.trim();
+
+      const response = await axios.get(`${API_URL}/lead-sources`, { params });
       if (response.data && response.data.status) {
-        setLeadSources(response.data.data);
+        setLeadSources(response.data.data || []);
+        if (response.data.pagination) {
+          setServerPagination(response.data.pagination);
+        } else if (response.data.meta) {
+          setServerPagination(response.data.meta);
+        } else {
+          setServerPagination(null);
+        }
       }
     } catch (error) {
       console.log("Error fetching lead sources:", error);
@@ -45,10 +64,10 @@ export default function LeadSourcePage() {
     }
   };
 
-  // Run on page load
+  // Run on page load & pagination changes
   useEffect(() => {
     fetchLeadSources();
-  }, []);
+  }, [currentPage, perPage, searchTerm]);
 
   // 3. Create (Store) Lead Source
   const handleAddSubmit = async (e) => {
@@ -127,10 +146,30 @@ export default function LeadSourcePage() {
     }
   };
 
+  // Handle server-side vs client-side pagination fallback
+  const isServerPaginated = Boolean(serverPagination);
+
   // Search filter
-  const filteredSources = leadSources.filter((item) =>
-    item.title?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredSources = isServerPaginated
+    ? leadSources
+    : leadSources.filter((item) =>
+        item.title?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+
+  const totalSources = isServerPaginated
+    ? (serverPagination.total ?? leadSources.length)
+    : filteredSources.length;
+
+  const lastPage = isServerPaginated
+    ? (serverPagination.last_page ?? Math.max(1, Math.ceil(totalSources / perPage)))
+    : Math.max(1, Math.ceil(totalSources / perPage));
+
+  const paginatedSources = isServerPaginated
+    ? leadSources
+    : filteredSources.slice(
+        (currentPage - 1) * perPage,
+        currentPage * perPage
+      );
 
   return (
     <AdminLayout>
@@ -181,7 +220,7 @@ export default function LeadSourcePage() {
                   <i className="bi bi-diagram-3-fill"></i>
                 </div>
               </div>
-              <div className="stat-card-value">{leadSources.length} Sources</div>
+              <div className="stat-card-value">{totalSources} Sources</div>
               <span className="text-primary small fw-semibold">Live Database Records</span>
             </div>
           </div>
@@ -234,7 +273,7 @@ export default function LeadSourcePage() {
             <div className="d-flex align-items-center gap-2">
               <h5 className="card-title mb-0">Lead Acquisition Sources</h5>
               <span className="badge bg-primary-subtle text-primary rounded-pill px-2">
-                {filteredSources.length} Sources
+                {totalSources} Sources
               </span>
             </div>
             <div style={{ maxWidth: "260px" }}>
@@ -243,7 +282,10 @@ export default function LeadSourcePage() {
                 className="form-control form-control-sm"
                 placeholder="Search channel title..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
               />
             </div>
           </div>
@@ -253,59 +295,35 @@ export default function LeadSourcePage() {
               <thead>
                 <tr>
                   <th style={{ width: "60px" }}>#</th>
+                  <th style={{ width: "90px" }} className="text-center">Actions</th>
                   <th>Source Title</th>
                   <th>Status</th>
-                  <th>Created Date</th>
-                  <th className="text-end">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan="5" className="text-center py-4 text-muted">
+                    <td colSpan="4" className="text-center py-4 text-muted">
                       <div className="spinner-border spinner-border-sm me-2" role="status"></div>
                       Loading lead sources from API...
                     </td>
                   </tr>
                 ) : filteredSources.length === 0 ? (
                   <tr>
-                    <td colSpan="5" className="text-center py-4 text-muted">
+                    <td colSpan="4" className="text-center py-4 text-muted">
                       No lead sources found. Click <strong>Add Lead Source</strong> to create one.
                     </td>
                   </tr>
                 ) : (
-                  filteredSources.map((source, index) => (
+                  paginatedSources.map((source, index) => (
                     <tr key={source.id}>
                       <td>
-                        <span className="text-muted small">{index + 1}</span>
-                      </td>
-                      <td>
-                        <h6 className="mb-0 text-dark fw-bold">{source.title}</h6>
-                      </td>
-                      <td>
-                        {source.status === "Active" ? (
-                          <span className="badge-custom badge-active">
-                            <span className="badge-dot-indicator"></span>Active
-                          </span>
-                        ) : (
-                          <span className="badge-custom badge-inactive">
-                            <span className="badge-dot-indicator"></span>Inactive
-                          </span>
-                        )}
-                      </td>
-                      <td>
                         <span className="text-muted small">
-                          {source.created_at
-                            ? new Date(source.created_at).toLocaleDateString("en-IN", {
-                                day: "2-digit",
-                                month: "short",
-                                year: "numeric",
-                              })
-                            : "N/A"}
+                          {(currentPage - 1) * perPage + index + 1}
                         </span>
                       </td>
-                      <td className="text-end">
-                        <div className="table-actions justify-content-end">
+                      <td className="text-center">
+                        <div className="table-actions justify-content-center">
                           <button
                             className="btn-action btn-edit"
                             title="Edit Source"
@@ -328,12 +346,45 @@ export default function LeadSourcePage() {
                           </button>
                         </div>
                       </td>
+                      <td>
+                        <h6 className="mb-0 text-dark fw-bold">{source.title}</h6>
+                      </td>
+                      <td>
+                        {source.status === "Active" ? (
+                          <span className="badge-custom badge-active">
+                            <span className="badge-dot-indicator"></span>Active
+                          </span>
+                        ) : (
+                          <span className="badge-custom badge-inactive">
+                            <span className="badge-dot-indicator"></span>Inactive
+                          </span>
+                        )}
+                      </td>
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {!isLoading && filteredSources.length > 0 && (
+            <div className="p-3 border-top bg-white">
+              <Pagination
+                currentPage={currentPage}
+                lastPage={lastPage}
+                total={totalSources}
+                perPage={perPage}
+                onPageChange={(page) => setCurrentPage(page)}
+                onPerPageChange={(newPerPage) => {
+                  setPerPage(newPerPage);
+                  setCurrentPage(1);
+                }}
+                perPageOptions={[10, 20, 50, 100]}
+                itemName="lead sources"
+              />
+            </div>
+          )}
         </div>
 
         {/* ------------------------------------------------------------------

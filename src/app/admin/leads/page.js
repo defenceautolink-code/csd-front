@@ -60,6 +60,8 @@ export default function LeadsPage() {
   const [priorityFilter, setPriorityFilter] = useState("");
   const [segmentFilter, setSegmentFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
 
@@ -128,10 +130,19 @@ export default function LeadsPage() {
   const [isTriggeringWishes, setIsTriggeringWishes] = useState(false);
 
   // 2. Fetch Leads & Master Dropdowns from Laravel backend
-  const fetchLeads = async () => {
+  const fetchLeads = async (from = startDate, to = endDate) => {
     setIsLoading(true);
     try {
-      const response = await axios.get(`${API_URL}/leads`);
+      const params = {};
+      if (from) {
+        params.start_date = from;
+        params.from_date = from;
+      }
+      if (to) {
+        params.end_date = to;
+        params.to_date = to;
+      }
+      const response = await axios.get(`${API_URL}/leads`, { params });
       if (response.data && response.data.status) {
         setLeads(response.data.data);
       }
@@ -161,11 +172,13 @@ export default function LeadsPage() {
     }
   };
 
-  // Run on page mount
+  // Run on page mount and when date filters change
   useEffect(() => {
-    // The fetch helpers update component state after the API response.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchLeads();
+    fetchLeads(startDate, endDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startDate, endDate]);
+
+  useEffect(() => {
     fetchMasterData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -470,13 +483,30 @@ export default function LeadsPage() {
     const matchesSegment = !segmentFilter || item.vehicle_segment === segmentFilter;
     const matchesStatus = !statusFilter || item.status_name === statusFilter;
 
-    return matchesSearch && matchesPriority && matchesSegment && matchesStatus;
+    // Filter by Created Date (created_at)
+    const matchesDate = (() => {
+      if (!startDate && !endDate) return true;
+      if (!item.created_at) return false;
+      try {
+        const itemDate = new Date(item.created_at).toISOString().split("T")[0];
+        if (startDate && itemDate < startDate) return false;
+        if (endDate && itemDate > endDate) return false;
+        return true;
+      } catch {
+        const itemDateStr = String(item.created_at).slice(0, 10);
+        if (startDate && itemDateStr < startDate) return false;
+        if (endDate && itemDateStr > endDate) return false;
+        return true;
+      }
+    })();
+
+    return matchesSearch && matchesPriority && matchesSegment && matchesStatus && matchesDate;
   });
 
   // Reset to first page when any filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, priorityFilter, segmentFilter, statusFilter]);
+  }, [searchTerm, priorityFilter, segmentFilter, statusFilter, startDate, endDate]);
 
   // Paginated leads for table
   const totalItems = filteredLeads.length;
@@ -1296,11 +1326,17 @@ export default function LeadsPage() {
         {/* Leads Table Card */}
         <div className="card">
           <div className="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <div className="d-flex align-items-center gap-2">
+            <div className="d-flex align-items-center gap-2 flex-wrap">
               <h5 className="card-title mb-0">Customer Prospects</h5>
               <span className="badge bg-primary-subtle text-white rounded-pill px-2">
                 {filteredLeads.length} Leads
               </span>
+              {(startDate || endDate) && (
+                <span className="badge bg-info-subtle text-info border border-info rounded-pill px-2 small">
+                  <i className="bi bi-calendar3 me-1"></i>
+                  Date Filter Active
+                </span>
+              )}
               {selectedLeadIds.length > 0 && (
                 <span className="badge bg-warning-subtle text-warning border border-warning rounded-pill px-2">
                   {selectedLeadIds.length} Selected
@@ -1308,12 +1344,12 @@ export default function LeadsPage() {
               )}
             </div>
 
-            <div className="d-flex flex-wrap gap-2" style={{ maxWidth: "600px" }}>
+            <div className="d-flex flex-wrap align-items-center gap-2">
               <select
                 className="form-select form-select-sm"
                 value={priorityFilter}
                 onChange={(e) => setPriorityFilter(e.target.value)}
-                style={{ width: "130px" }}
+                style={{ width: "125px" }}
               >
                 <option value="">All Priorities</option>
                 <option value="Hot">🔥 Hot</option>
@@ -1325,7 +1361,7 @@ export default function LeadsPage() {
                 className="form-select form-select-sm"
                 value={segmentFilter}
                 onChange={(e) => setSegmentFilter(e.target.value)}
-                style={{ width: "130px" }}
+                style={{ width: "125px" }}
               >
                 <option value="">All Segments</option>
                 <option value="4 Wheeler">4 Wheeler</option>
@@ -1346,14 +1382,75 @@ export default function LeadsPage() {
                 ))}
               </select>
 
-              <input
-                type="text"
-                className="form-control form-control-sm"
-                placeholder="Search name, phone, model..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                style={{ width: "180px" }}
-              />
+              {/* Search Bar */}
+              <div className="position-relative" style={{ width: "185px" }}>
+                <input
+                  type="text"
+                  className="form-control form-control-sm pe-4"
+                  placeholder="Search name, phone..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  title="Search leads by name, phone, email, model, city"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    className="btn btn-link p-0 position-absolute end-0 top-50 translate-middle-y me-2 text-muted text-decoration-none"
+                    onClick={() => setSearchTerm("")}
+                    style={{ fontSize: "12px", border: "none", background: "transparent" }}
+                    title="Clear search"
+                  >
+                    <i className="bi bi-x-circle-fill"></i>
+                  </button>
+                )}
+              </div>
+
+              {/* Created Date Filter: From */}
+              <div className="input-group input-group-sm" style={{ width: "155px" }}>
+                <span className="input-group-text bg-light text-muted px-2" title="Filter by Created Date From">
+                  <i className="bi bi-calendar-event me-1 text-primary"></i>
+                  <span style={{ fontSize: "11px", fontWeight: "600" }}>From</span>
+                </span>
+                <input
+                  type="date"
+                  className="form-control form-control-sm px-1"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  title="Filter by created date from"
+                />
+              </div>
+
+              {/* Created Date Filter: To */}
+              <div className="input-group input-group-sm" style={{ width: "150px" }}>
+                <span className="input-group-text bg-light text-muted px-2" title="Filter by Created Date To">
+                  <i className="bi bi-calendar-check me-1 text-primary"></i>
+                  <span style={{ fontSize: "11px", fontWeight: "600" }}>To</span>
+                </span>
+                <input
+                  type="date"
+                  className="form-control form-control-sm px-1"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  title="Filter by created date to"
+                />
+              </div>
+
+              {/* Clear Date Filter Button */}
+              {(startDate || endDate) && (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-danger px-2 d-flex align-items-center gap-1"
+                  style={{ fontSize: "0.8rem", height: "31px" }}
+                  onClick={() => {
+                    setStartDate("");
+                    setEndDate("");
+                  }}
+                  title="Clear Created Date Filter"
+                >
+                  <i className="bi bi-x-circle"></i>
+                  <span>Clear</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -1619,7 +1716,9 @@ export default function LeadsPage() {
                         {/* 3. Vehicle Requirement Column (with Source Badge inside) */}
                         <td>
                           <div>
-                            <div className="text-dark fw-semibold">{lead.model_variant}</div>
+                            <div className="text-dark fw-semibold">
+                              {lead.model_variant || (lead.variant ? `${lead.model?.name ? lead.model.name + " " : ""}${lead.variant.name}` : lead.model?.name || "General Inquiry")}
+                            </div>
                             <div className="d-flex align-items-center gap-1 mt-1 flex-wrap">
                               <span className="badge bg-secondary-subtle text-black small" style={{ fontSize: "11px" }}>
                                 {lead.brand?.name || lead.brand_name || lead.vehicle_segment}

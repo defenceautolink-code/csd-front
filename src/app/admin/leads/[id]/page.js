@@ -20,7 +20,19 @@ export default function LeadDetailPage() {
 
   const [lead, setLead] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("followups"); // "followups" | "quotations" | "deal" | "assignments"
+  // Collapsible sections state (All 3 open by default as requested)
+  const [openSections, setOpenSections] = useState({
+    followups: true,
+    quotations: true,
+    assignments: true,
+  });
+
+  const toggleSection = (sectionKey) => {
+    setOpenSections((prev) => ({
+      ...prev,
+      [sectionKey]: !prev[sectionKey],
+    }));
+  };
 
   // Follow-up state
   const [followUps, setFollowUps] = useState([]);
@@ -429,9 +441,13 @@ export default function LeadDetailPage() {
                   <div className="col-12">
                     <span className="text-muted small d-block">Vehicle Model / Desired Variant</span>
                     <div className="p-3 rounded-2 mt-1 bg-light border">
-                      <div className="text-dark fw-bold fs-5">{lead.model_variant || "Not specified"}</div>
-                      <div className="text-muted small mt-1">
-                        {lead.brand?.name ? `Brand: ${lead.brand.name}` : ""}
+                      <div className="text-dark fw-bold fs-5">
+                        {lead.model_variant || (lead.variant ? `${lead.model?.name ? lead.model.name + " " : ""}${lead.variant.name}` : lead.model?.name || "Not specified")}
+                      </div>
+                      <div className="text-muted small mt-1 d-flex gap-3 flex-wrap">
+                        {lead.brand?.name && <span><strong>Brand:</strong> {lead.brand.name}</span>}
+                        {lead.model?.name && <span><strong>Model:</strong> {lead.model.name}</span>}
+                        {lead.variant?.name && <span><strong>Variant:</strong> {lead.variant.name}</span>}
                       </div>
                     </div>
                   </div>
@@ -455,65 +471,53 @@ export default function LeadDetailPage() {
           </div>
         </div>
 
-        {/* Tabbed Activity & History Workspace */}
-        <div className="card shadow-sm border-0" style={{ background: "#ffffff" }}>
-          <div className="card-header bg-transparent border-bottom p-0">
-            <ul className="nav nav-tabs border-0 px-3 pt-2">
-              <li className="nav-item">
-                <button
-                  type="button"
-                  className={`nav-link fw-semibold px-3 py-2 border-0 ${
-                    activeTab === "followups" ? "active border-bottom border-primary border-3 text-primary" : "text-muted"
-                  }`}
-                  onClick={() => setActiveTab("followups")}
-                >
-                  <i className="bi bi-telephone-outbound-fill me-2"></i>
+        {/* ========================================================================= */}
+        {/* Collapsible Activity & History Sections (Reference UI as per Screenshot) */}
+        {/* ========================================================================= */}
+        <div className="d-flex flex-column gap-3 mb-4">
+          {/* 1. Follow-Up History Section */}
+          <div className="card shadow-sm border-0" style={{ borderRadius: "16px", overflow: "hidden", background: "#ffffff" }}>
+            <div
+              className="d-flex align-items-center justify-content-between px-4 py-3"
+              style={{
+                backgroundColor: "#F1F3ED",
+                borderBottom: openSections.followups ? "1px solid #DFE2D6" : "none",
+                cursor: "pointer",
+                userSelect: "none",
+              }}
+              onClick={() => toggleSection("followups")}
+            >
+              <div className="d-flex align-items-center gap-2">
+                <i className="bi bi-telephone-outbound-fill text-primary fs-5"></i>
+                <h6 className="mb-0 fw-bold text-dark fs-6">
                   Follow-Up History ({followUps.length})
-                </button>
-              </li>
-              <li className="nav-item">
+                </h6>
+              </div>
+
+              <div className="d-flex align-items-center gap-2" onClick={(e) => e.stopPropagation()}>
                 <button
                   type="button"
-                  className={`nav-link fw-semibold px-3 py-2 border-0 ${
-                    activeTab === "quotations" ? "active border-bottom border-primary border-3 text-primary" : "text-muted"
-                  }`}
-                  onClick={() => setActiveTab("quotations")}
+                  className="btn btn-sm btn-outline-success d-inline-flex align-items-center gap-1 py-1 px-2.5"
+                  style={{ fontSize: "0.8rem" }}
+                  onClick={() => setShowFollowUpModal(true)}
                 >
-                  <i className="bi bi-file-earmark-spreadsheet-fill me-2"></i>
-                  Quotations Sent ({quotations.length})
+                  <i className="bi bi-plus-lg"></i>
+                  <span>Log Call / Interaction</span>
                 </button>
-              </li>
-              <li className="nav-item">
                 <button
                   type="button"
-                  className={`nav-link fw-semibold px-3 py-2 border-0 ${
-                    activeTab === "assignments" ? "active border-bottom border-primary border-3 text-primary" : "text-muted"
-                  }`}
-                  onClick={() => setActiveTab("assignments")}
+                  className="btn btn-sm btn-light border-0 rounded-circle p-1 d-flex align-items-center justify-content-center"
+                  style={{ width: "32px", height: "32px", background: "rgba(0,0,0,0.05)" }}
+                  onClick={() => toggleSection("followups")}
+                  title={openSections.followups ? "Hide / Collapse" : "Show / Expand"}
                 >
-                  <i className="bi bi-clock-history me-2"></i>
-                  Assignment History ({assignments.length})
+                  <i className={`bi ${openSections.followups ? "bi-chevron-up" : "bi-chevron-down"} fw-bold text-dark`}></i>
                 </button>
-              </li>
-            </ul>
-          </div>
+              </div>
+            </div>
 
-          <div className="card-body p-4">
-            {/* 1. Follow-Up History Tab */}
-            {activeTab === "followups" && (
-              <div>
-                <div className="d-flex justify-content-between align-items-center mb-3">
-                  <h6 className="text-dark fw-bold mb-0">Call & Interaction Records</h6>
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline-success d-inline-flex align-items-center gap-1"
-                    onClick={() => setShowFollowUpModal(true)}
-                  >
-                    <i className="bi bi-plus-lg"></i>
-                    <span>Log Call / Interaction</span>
-                  </button>
-                </div>
-
+            {openSections.followups && (
+              <div className="card-body p-4">
                 {isLoadingFollowUps ? (
                   <div className="text-center py-4 text-muted">
                     <div className="spinner-border spinner-border-sm me-2"></div>
@@ -568,21 +572,50 @@ export default function LeadDetailPage() {
                 )}
               </div>
             )}
+          </div>
 
-            {/* 2. Quotations Tab */}
-            {activeTab === "quotations" && (
-              <div>
-                <div className="d-flex justify-content-between align-items-center mb-3">
-                  <h6 className="text-dark fw-bold mb-0">Generated Customer Quotations</h6>
-                  <Link
-                    href={`/admin/quotation/create?lead_id=${lead.id}`}
-                    className="btn btn-sm btn-primary d-inline-flex align-items-center gap-1"
-                  >
-                    <i className="bi bi-plus-lg"></i>
-                    <span>Generate New Quotation</span>
-                  </Link>
-                </div>
+          {/* 2. Quotations Sent Section */}
+          <div className="card shadow-sm border-0" style={{ borderRadius: "16px", overflow: "hidden", background: "#ffffff" }}>
+            <div
+              className="d-flex align-items-center justify-content-between px-4 py-3"
+              style={{
+                backgroundColor: "#F1F3ED",
+                borderBottom: openSections.quotations ? "1px solid #DFE2D6" : "none",
+                cursor: "pointer",
+                userSelect: "none",
+              }}
+              onClick={() => toggleSection("quotations")}
+            >
+              <div className="d-flex align-items-center gap-2">
+                <i className="bi bi-file-earmark-spreadsheet-fill text-primary fs-5"></i>
+                <h6 className="mb-0 fw-bold text-dark fs-6">
+                  Quotations Sent ({quotations.length})
+                </h6>
+              </div>
 
+              <div className="d-flex align-items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                <Link
+                  href={`/admin/quotation/create?lead_id=${lead.id}`}
+                  className="btn btn-sm btn-primary d-inline-flex align-items-center gap-1 py-1 px-2.5"
+                  style={{ fontSize: "0.8rem" }}
+                >
+                  <i className="bi bi-plus-lg"></i>
+                  <span>Generate New Quotation</span>
+                </Link>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-light border-0 rounded-circle p-1 d-flex align-items-center justify-content-center"
+                  style={{ width: "32px", height: "32px", background: "rgba(0,0,0,0.05)" }}
+                  onClick={() => toggleSection("quotations")}
+                  title={openSections.quotations ? "Hide / Collapse" : "Show / Expand"}
+                >
+                  <i className={`bi ${openSections.quotations ? "bi-chevron-up" : "bi-chevron-down"} fw-bold text-dark`}></i>
+                </button>
+              </div>
+            </div>
+
+            {openSections.quotations && (
+              <div className="card-body p-4">
                 {isLoadingQuotations ? (
                   <div className="text-center py-4 text-muted">
                     <div className="spinner-border spinner-border-sm me-2"></div>
@@ -604,36 +637,21 @@ export default function LeadDetailPage() {
                     <table className="table table-hover align-middle mb-0">
                       <thead className="table-light">
                         <tr>
+                          <th style={{ width: "50px" }}>#</th>
+                          <th style={{ width: "95px" }} className="text-center">Actions</th>
                           <th>Quotation #</th>
                           <th>Date</th>
                           <th>Vehicle / Variant</th>
                           <th>Total Amount</th>
                           <th>Status</th>
-                          <th className="text-end">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {quotations.map((q) => (
+                        {quotations.map((q, idx) => (
                           <tr key={q.id}>
-                            <td className="fw-bold text-primary">{q.quotation_number || `#Q-${q.id}`}</td>
-                            <td className="text-muted small">
-                              {q.quotation_date || (q.created_at ? new Date(q.created_at).toLocaleDateString("en-IN") : "-")}
-                            </td>
-                            <td>
-                              <span className="text-dark fw-medium">
-                                {q.variant_name || q.model_name || lead.model_variant || "-"}
-                              </span>
-                            </td>
-                            <td className="fw-bold text-success">
-                              ₹{Number(q.total_amount || q.final_price || 0).toLocaleString("en-IN")}
-                            </td>
-                            <td>
-                              <span className="badge bg-secondary-subtle text-dark border">
-                                {q.status || "Draft"}
-                              </span>
-                            </td>
-                            <td className="text-end">
-                              <div className="d-flex align-items-center justify-content-end gap-2">
+                            <td className="text-muted small">{idx + 1}</td>
+                            <td className="text-center">
+                              <div className="d-flex align-items-center justify-content-center gap-1">
                                 <button
                                   type="button"
                                   className="btn btn-sm btn-outline-secondary"
@@ -651,6 +669,23 @@ export default function LeadDetailPage() {
                                 </Link>
                               </div>
                             </td>
+                            <td className="fw-bold text-primary">{q.quotation_number || `#Q-${q.id}`}</td>
+                            <td className="text-muted small">
+                              {q.quotation_date || (q.created_at ? new Date(q.created_at).toLocaleDateString("en-IN") : "-")}
+                            </td>
+                            <td>
+                              <span className="text-dark fw-medium">
+                                {q.variant_name || q.model_name || lead.model_variant || "-"}
+                              </span>
+                            </td>
+                            <td className="fw-bold text-success">
+                              ₹{Number(q.total_amount || q.final_price || 0).toLocaleString("en-IN")}
+                            </td>
+                            <td>
+                              <span className="badge bg-secondary-subtle text-dark border">
+                                {q.status || "Draft"}
+                              </span>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -659,10 +694,42 @@ export default function LeadDetailPage() {
                 )}
               </div>
             )}
+          </div>
 
-            {/* 3. Assignment History Tab */}
-            {activeTab === "assignments" && (
-              <div>
+          {/* 3. Assignment History Section */}
+          <div className="card shadow-sm border-0" style={{ borderRadius: "16px", overflow: "hidden", background: "#ffffff" }}>
+            <div
+              className="d-flex align-items-center justify-content-between px-4 py-3"
+              style={{
+                backgroundColor: "#F1F3ED",
+                borderBottom: openSections.assignments ? "1px solid #DFE2D6" : "none",
+                cursor: "pointer",
+                userSelect: "none",
+              }}
+              onClick={() => toggleSection("assignments")}
+            >
+              <div className="d-flex align-items-center gap-2">
+                <i className="bi bi-clock-history text-primary fs-5"></i>
+                <h6 className="mb-0 fw-bold text-dark fs-6">
+                  Assignment History ({assignments.length})
+                </h6>
+              </div>
+
+              <div className="d-flex align-items-center gap-2">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-light border-0 rounded-circle p-1 d-flex align-items-center justify-content-center"
+                  style={{ width: "32px", height: "32px", background: "rgba(0,0,0,0.05)" }}
+                  onClick={() => toggleSection("assignments")}
+                  title={openSections.assignments ? "Hide / Collapse" : "Show / Expand"}
+                >
+                  <i className={`bi ${openSections.assignments ? "bi-chevron-up" : "bi-chevron-down"} fw-bold text-dark`}></i>
+                </button>
+              </div>
+            </div>
+
+            {openSections.assignments && (
+              <div className="card-body p-4">
                 <h6 className="text-dark fw-bold mb-3">Executive Re-assignment Timeline</h6>
                 {isLoadingAssignments ? (
                   <div className="text-center py-4 text-muted">

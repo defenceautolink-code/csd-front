@@ -99,6 +99,14 @@ export default function FollowUpPage() {
           const isHot = item.lead?.priority === "Hot";
           const avatarNum = ((idx % 4) + 1);
 
+          const rawFollowUpDate = item.follow_up_date || (item.created_at ? item.created_at.slice(0, 10) : "");
+          const followUpDateFormatted = rawFollowUpDate
+            ? new Date(rawFollowUpDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+            : "-";
+          const nextDueDateFormatted = item.next_follow_up_date
+            ? new Date(item.next_follow_up_date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+            : null;
+
           // Calculate correct tab category
           const isCompleted = (item.status || "").toLowerCase() === "completed";
           const targetDate = item.next_follow_up_date;
@@ -126,6 +134,14 @@ export default function FollowUpPage() {
             rawDueDate: rawDueDate,
             dueTime: dueDate,
             dueSubtext: dueSub,
+            rawFollowUpDate: rawFollowUpDate,
+            followUpDateFormatted: followUpDateFormatted,
+            nextDueDateFormatted: nextDueDateFormatted,
+            follow_up_date: item.follow_up_date || "",
+            follow_up_time: item.follow_up_time || "",
+            next_follow_up_date: item.next_follow_up_date || "",
+            next_follow_up_time: item.next_follow_up_time || "",
+            created_at: item.created_at || "",
             dateClass: itemTab === "overdue" ? "text-danger" : itemTab === "today" ? "text-warning" : "text-dark",
             rep: rep,
             urgency: isHot ? "High Urgency" : "Medium",
@@ -148,6 +164,13 @@ export default function FollowUpPage() {
 
   useEffect(() => {
     fetchFollowUps(startDate, endDate);
+  }, [startDate, endDate]);
+
+  // When date filter is selected, auto switch tab to all to view all matched follow-ups
+  useEffect(() => {
+    if (startDate || endDate) {
+      setActiveTab("all");
+    }
   }, [startDate, endDate]);
 
   const handleLogSubmit = async (e) => {
@@ -187,11 +210,13 @@ export default function FollowUpPage() {
     if (activeTab === "today" && item.tab !== "today") return false;
     if (activeTab === "upcoming" && item.tab !== "upcoming") return false;
 
+    // Filter by Follow-up Create / Logged Date
     if (startDate || endDate) {
-      const itemDate = item.rawDueDate || (item.dueTime && item.dueTime !== "-" ? item.dueTime.split(" ")[0] : null);
+      const itemDate = item.rawFollowUpDate || item.follow_up_date || (item.created_at ? item.created_at.slice(0, 10) : null);
       if (!itemDate) return false;
-      if (startDate && itemDate < startDate) return false;
-      if (endDate && itemDate > endDate) return false;
+      const cleanDate = itemDate.slice(0, 10);
+      if (startDate && cleanDate < startDate) return false;
+      if (endDate && cleanDate > endDate) return false;
     }
 
     if (searchTerm) {
@@ -340,9 +365,8 @@ export default function FollowUpPage() {
                     <button
                       key={tab.id}
                       type="button"
-                      className={`btn btn-sm px-3 py-1.5 rounded-pill fw-medium ${
-                        isActive ? "btn-primary shadow-sm" : "btn-outline-custom"
-                      }`}
+                      className={`btn btn-sm px-3 py-1.5 rounded-pill fw-medium ${isActive ? "btn-primary shadow-sm" : "btn-outline-custom"
+                        }`}
                       style={{
                         borderColor: isActive ? "var(--primary)" : "#e2e8f0",
                         gap: "6px",
@@ -352,11 +376,10 @@ export default function FollowUpPage() {
                     >
                       <span>{tab.label}</span>
                       <span
-                        className={`badge px-2 py-0.5 rounded-pill ${
-                          isActive
+                        className={`badge px-2 py-0.5 rounded-pill ${isActive
                             ? "bg-white text-dark fw-bold"
                             : "bg-light text-secondary border"
-                        }`}
+                          }`}
                         style={{ fontSize: "0.72rem" }}
                       >
                         {tab.count}
@@ -458,7 +481,7 @@ export default function FollowUpPage() {
                   <th>Customer & Contact</th>
                   <th>Vehicle Interested</th>
                   <th>Last Call Outcome</th>
-                  <th>Follow-up Due Date</th>
+                  <th>Follow-up Date</th>
                   <th>Assigned Rep & Urgency</th>
                 </tr>
               </thead>
@@ -601,12 +624,24 @@ export default function FollowUpPage() {
                         </div>
                       </td>
 
-                      {/* 5. Follow-up Due Date */}
+                      {/* 5. Follow-up / Created Date and Scheduled Next Due */}
                       <td>
-                        <div className={`${item.dateClass} fw-bold small`}>{item.dueTime}</div>
-                        <span className="text-muted" style={{ fontSize: "0.72rem" }}>
-                          {item.dueSubtext}
-                        </span>
+                        <div className="text-dark fw-bold small d-flex align-items-center gap-1">
+                          <i className="bi bi-calendar-check text-primary"></i>
+                          <span>{item.followUpDateFormatted}</span>
+                        </div>
+                        {item.follow_up_time && (
+                          <div className="text-muted" style={{ fontSize: "0.72rem" }}>
+                            <i className="bi bi-clock me-1"></i>
+                            {item.follow_up_time}
+                          </div>
+                        )}
+                        {item.nextDueDateFormatted && (
+                          <div className="text-warning-emphasis small mt-1" style={{ fontSize: "0.72rem" }}>
+                            <i className="bi bi-alarm-fill text-warning me-1"></i>
+                            Next: <strong>{item.nextDueDateFormatted}</strong> {item.next_follow_up_time || ""}
+                          </div>
+                        )}
                       </td>
 
                       {/* 6. Assigned Rep & Urgency (Combined to eliminate horizontal scrolling) */}
