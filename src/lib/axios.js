@@ -10,7 +10,7 @@ const api = axios.create({
   },
 });
 
-// Request Interceptor: Attach Bearer Token automatically
+// Request Interceptor: Attach Bearer Token automatically & handle FormData
 api.interceptors.request.use(
   (config) => {
     if (typeof window !== "undefined") {
@@ -19,6 +19,22 @@ api.interceptors.request.use(
         config.headers.Authorization = `Bearer ${token}`;
       }
     }
+
+    // Auto-handle FormData: remove Content-Type so browser sets multipart/form-data with proper boundary
+    const isFormData =
+      (typeof FormData !== "undefined" && config.data instanceof FormData) ||
+      (config.data && typeof config.data.append === "function");
+
+    if (isFormData && config.headers) {
+      if (typeof config.headers.delete === "function") {
+        config.headers.delete("Content-Type");
+        config.headers.delete("content-type");
+      } else {
+        delete config.headers["Content-Type"];
+        delete config.headers["content-type"];
+      }
+    }
+
     return config;
   },
   (error) => Promise.reject(error)

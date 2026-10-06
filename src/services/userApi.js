@@ -15,20 +15,16 @@ export const userApi = {
   },
 
   createUser: async (formData) => {
-    const headers =
-      formData instanceof FormData
-        ? { "Content-Type": "multipart/form-data" }
-        : {};
-    const response = await api.post("/users", formData, { headers });
+    const response = await api.post("/users", formData);
     return response.data;
   },
 
   updateUser: async (id, formData) => {
-    const headers =
-      formData instanceof FormData
-        ? { "Content-Type": "multipart/form-data" }
-        : {};
-    const response = await api.post(`/users/${id}`, formData, { headers });
+    if (formData instanceof FormData) {
+      const response = await api.post(`/users/${id}`, formData);
+      return response.data;
+    }
+    const response = await api.put(`/users/${id}`, formData);
     return response.data;
   },
 

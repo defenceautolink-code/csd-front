@@ -6,6 +6,7 @@ import axios from "axios";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
 import { hasPermission } from "@/utils/auth";
+import Pagination from "@/components/common/Pagination";
 
 export default function BrandPage() {
   const { showToast } = useToast();
@@ -23,9 +24,12 @@ export default function BrandPage() {
 
   // 1. Component States
   const [brands, setBrands] = useState([]);
+  const [serverPagination, setServerPagination] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
 
   // Modal States
   const [showAddModal, setShowAddModal] = useState(false);
@@ -45,9 +49,23 @@ export default function BrandPage() {
   const fetchBrands = async () => {
     setIsLoading(true);
     try {
-      const response = await axios.get(`${API_URL}/brands`);
+      const params = {
+        page: currentPage,
+        per_page: perPage,
+      };
+      if (searchTerm) params.search = searchTerm;
+      if (typeFilter) params.vehicle_type = typeFilter;
+
+      const response = await axios.get(`${API_URL}/brands`, { params });
       if (response.data && response.data.status) {
-        setBrands(response.data.data);
+        setBrands(response.data.data || []);
+        if (response.data.pagination) {
+          setServerPagination(response.data.pagination);
+        } else if (response.data.meta) {
+          setServerPagination(response.data.meta);
+        } else {
+          setServerPagination(null);
+        }
       }
     } catch (error) {
       console.log("Error fetching brands:", error);
@@ -57,12 +75,11 @@ export default function BrandPage() {
     }
   };
 
-  // Run on page load
+  // Run on page load and param change
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchBrands();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [currentPage, perPage, searchTerm, typeFilter]);
 
   // Helper for vehicle type checkbox toggling
   const handleTypeToggle = (type) => {
@@ -117,7 +134,7 @@ export default function BrandPage() {
       }
 
       const response = await axios.post(`${API_URL}/brands`, data, {
-        headers: { "Content-Type": "multipart/form-data" },
+        headers: { Accept: "application/json" },
       });
 
       if (response.data && response.data.status) {
@@ -161,7 +178,7 @@ export default function BrandPage() {
       }
 
       const response = await axios.post(`${API_URL}/brands/${editBrand.id}`, data, {
-        headers: { "Content-Type": "multipart/form-data" },
+        headers: { Accept: "application/json" },
       });
 
       if (response.data && response.data.status) {
@@ -196,16 +213,36 @@ export default function BrandPage() {
     }
   };
 
-  // Search and category filter
-  const filteredBrands = brands.filter((item) => {
-    const matchesSearch = item.name?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesType =
-      !typeFilter ||
-      (Array.isArray(item.vehicle_type)
-        ? item.vehicle_type.includes(typeFilter)
-        : String(item.vehicle_type).includes(typeFilter));
-    return matchesSearch && matchesType;
-  });
+  // Handle server-side vs client-side pagination fallback
+  const isServerPaginated = Boolean(serverPagination);
+
+  // Search and category filter (fallback when backend returns full list)
+  const filteredBrands = isServerPaginated
+    ? brands
+    : brands.filter((item) => {
+        const matchesSearch = item.name?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesType =
+          !typeFilter ||
+          (Array.isArray(item.vehicle_type)
+            ? item.vehicle_type.includes(typeFilter)
+            : String(item.vehicle_type).includes(typeFilter));
+        return matchesSearch && matchesType;
+      });
+
+  const totalBrands = isServerPaginated
+    ? (serverPagination.total ?? brands.length)
+    : filteredBrands.length;
+
+  const lastPage = isServerPaginated
+    ? (serverPagination.last_page ?? Math.max(1, Math.ceil(totalBrands / perPage)))
+    : Math.max(1, Math.ceil(totalBrands / perPage));
+
+  const paginatedBrands = isServerPaginated
+    ? brands
+    : filteredBrands.slice(
+        (currentPage - 1) * perPage,
+        currentPage * perPage
+      );
 
   return (
     <AdminLayout>
@@ -359,29 +396,28 @@ export default function BrandPage() {
               <thead>
                 <tr>
                   <th style={{ width: "60px" }}>#</th>
+                  <th style={{ width: "90px" }} className="text-center">Actions</th>
                   <th>Brand Name</th>
                   <th>Vehicle Types</th>
                   <th>Status</th>
-                  <th>Created Date</th>
-                  <th className="text-end">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan="6" className="text-center py-4 text-muted">
+                    <td colSpan="5" className="text-center py-4 text-muted">
                       <div className="spinner-border spinner-border-sm me-2" role="status"></div>
                       Loading brands from API...
                     </td>
                   </tr>
                 ) : filteredBrands.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="text-center py-4 text-muted">
+                    <td colSpan="5" className="text-center py-4 text-muted">
                       No brands found. Click <strong>Add Brand</strong> to register one.
                     </td>
                   </tr>
                 ) : (
-                  filteredBrands.map((brand, index) => {
+                  paginatedBrands.map((brand, index) => {
                     const types = Array.isArray(brand.vehicle_type)
                       ? brand.vehicle_type
                       : [brand.vehicle_type || "4 Wheeler"];
@@ -389,7 +425,36 @@ export default function BrandPage() {
                     return (
                       <tr key={brand.id}>
                         <td>
-                          <span className="text-muted small">{index + 1}</span>
+                          <span className="text-muted small">{(currentPage - 1) * perPage + index + 1}</span>
+                        </td>
+                        <td className="text-center">
+                          <div className="table-actions justify-content-center">
+                            {can("brand.edit") && <button
+                              className="btn-action btn-edit"
+                              title="Edit Brand"
+                              onClick={() =>
+                                setEditBrand({
+                                  id: brand.id,
+                                  name: brand.name,
+                                  vehicle_type: Array.isArray(brand.vehicle_type)
+                                    ? brand.vehicle_type
+                                    : [brand.vehicle_type || "4 Wheeler"],
+                                  logo: brand.logo,
+                                  status: brand.status || "Active",
+                                  newLogo: null,
+                                })
+                              }
+                            >
+                              <i className="bi bi-pencil"></i>
+                            </button>}
+                            {can("brand.delete") && <button
+                              className="btn-action btn-delete"
+                              title="Delete Brand"
+                              onClick={() => setDeleteTarget(brand)}
+                            >
+                              <i className="bi bi-trash"></i>
+                            </button>}
+                          </div>
                         </td>
                         <td>
                           <div className="d-flex align-items-center gap-2">
@@ -446,46 +511,6 @@ export default function BrandPage() {
                             </span>
                           )}
                         </td>
-                        <td>
-                          <span className="text-muted small">
-                            {brand.created_at
-                              ? new Date(brand.created_at).toLocaleDateString("en-IN", {
-                                day: "2-digit",
-                                month: "short",
-                                year: "numeric",
-                              })
-                              : "N/A"}
-                          </span>
-                        </td>
-                        <td className="text-end">
-                          <div className="table-actions justify-content-end">
-                            {can("brand.edit") && <button
-                              className="btn-action btn-edit"
-                              title="Edit Brand"
-                              onClick={() =>
-                                setEditBrand({
-                                  id: brand.id,
-                                  name: brand.name,
-                                  vehicle_type: Array.isArray(brand.vehicle_type)
-                                    ? brand.vehicle_type
-                                    : [brand.vehicle_type || "4 Wheeler"],
-                                  logo: brand.logo,
-                                  status: brand.status || "Active",
-                                  newLogo: null,
-                                })
-                              }
-                            >
-                              <i className="bi bi-pencil"></i>
-                            </button>}
-                            {can("brand.delete") && <button
-                              className="btn-action btn-delete"
-                              title="Delete Brand"
-                              onClick={() => setDeleteTarget(brand)}
-                            >
-                              <i className="bi bi-trash"></i>
-                            </button>}
-                          </div>
-                        </td>
                       </tr>
                     );
                   })
@@ -493,6 +518,23 @@ export default function BrandPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {!isLoading && filteredBrands.length > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              lastPage={lastPage}
+              total={totalBrands}
+              perPage={perPage}
+              onPageChange={(page) => setCurrentPage(page)}
+              onPerPageChange={(newPerPage) => {
+                setPerPage(newPerPage);
+                setCurrentPage(1);
+              }}
+              perPageOptions={[10, 20, 50, 100]}
+              itemName="brands"
+            />
+          )}
         </div>
 
         {/* ------------------------------------------------------------------

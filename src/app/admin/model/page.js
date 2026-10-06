@@ -6,6 +6,7 @@ import axios from "axios";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
 import { hasPermission } from "@/utils/auth";
+import Pagination from "@/components/common/Pagination";
 
 export default function ModelPage() {
   const { showToast } = useToast();
@@ -23,10 +24,13 @@ export default function ModelPage() {
   // 1. Component States
   const [models, setModels] = useState([]);
   const [brands, setBrands] = useState([]);
+  const [serverPagination, setServerPagination] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [brandFilter, setBrandFilter] = useState("");
   const [segmentFilter, setSegmentFilter] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
 
   // Modal States
   const [showAddModal, setShowAddModal] = useState(false);
@@ -46,9 +50,24 @@ export default function ModelPage() {
   const fetchModels = async () => {
     setIsLoading(true);
     try {
-      const response = await axios.get(`${API_URL}/models`);
+      const params = {
+        page: currentPage,
+        per_page: perPage,
+      };
+      if (searchTerm) params.search = searchTerm;
+      if (brandFilter) params.brand_id = brandFilter;
+      if (segmentFilter) params.vehicle_segment = segmentFilter;
+
+      const response = await axios.get(`${API_URL}/models`, { params });
       if (response.data && response.data.status) {
-        setModels(response.data.data);
+        setModels(response.data.data || []);
+        if (response.data.pagination) {
+          setServerPagination(response.data.pagination);
+        } else if (response.data.meta) {
+          setServerPagination(response.data.meta);
+        } else {
+          setServerPagination(null);
+        }
       }
     } catch (error) {
       console.log("Error fetching models:", error);
@@ -70,9 +89,13 @@ export default function ModelPage() {
     }
   };
 
-  // Run on page load
+  // Run on page load and param change
   useEffect(() => {
     fetchModels();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, perPage, searchTerm, brandFilter, segmentFilter]);
+
+  useEffect(() => {
     fetchBrands();
   }, []);
 
@@ -170,13 +193,33 @@ export default function ModelPage() {
     }
   };
 
-  // Filter models by search, brand, and segment
-  const filteredModels = models.filter((item) => {
-    const matchesSearch = item.name?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesBrand = !brandFilter || String(item.brand_id) === String(brandFilter);
-    const matchesSegment = !segmentFilter || item.vehicle_segment === segmentFilter;
-    return matchesSearch && matchesBrand && matchesSegment;
-  });
+  // Handle server-side vs client-side pagination fallback
+  const isServerPaginated = Boolean(serverPagination);
+
+  // Filter models by search, brand, and segment (fallback when backend returns full list)
+  const filteredModels = isServerPaginated
+    ? models
+    : models.filter((item) => {
+        const matchesSearch = item.name?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesBrand = !brandFilter || String(item.brand_id) === String(brandFilter);
+        const matchesSegment = !segmentFilter || item.vehicle_segment === segmentFilter;
+        return matchesSearch && matchesBrand && matchesSegment;
+      });
+
+  const totalModels = isServerPaginated
+    ? (serverPagination.total ?? models.length)
+    : filteredModels.length;
+
+  const lastPage = isServerPaginated
+    ? (serverPagination.last_page ?? Math.max(1, Math.ceil(totalModels / perPage)))
+    : Math.max(1, Math.ceil(totalModels / perPage));
+
+  const paginatedModels = isServerPaginated
+    ? models
+    : filteredModels.slice(
+        (currentPage - 1) * perPage,
+        currentPage * perPage
+      );
 
   return (
     <AdminLayout>
@@ -332,33 +375,58 @@ export default function ModelPage() {
               <thead>
                 <tr>
                   <th style={{ width: "60px" }}>#</th>
+                  <th style={{ width: "90px" }} className="text-center">Actions</th>
                   <th>Model Name</th>
                   <th>Brand</th>
                   <th>Segment</th>
                   <th>Status</th>
-                  <th>Created Date</th>
-                  <th className="text-end">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan="7" className="text-center py-4 text-muted">
+                    <td colSpan="6" className="text-center py-4 text-muted">
                       <div className="spinner-border spinner-border-sm me-2" role="status"></div>
                       Loading vehicle models from API...
                     </td>
                   </tr>
                 ) : filteredModels.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="text-center py-4 text-muted">
+                    <td colSpan="6" className="text-center py-4 text-muted">
                       No models found. Click <strong>Add Model</strong> to create one.
                     </td>
                   </tr>
                 ) : (
-                  filteredModels.map((item, index) => (
+                  paginatedModels.map((item, index) => (
                     <tr key={item.id}>
                       <td>
-                        <span className="text-muted small">{index + 1}</span>
+                        <span className="text-muted small">{(currentPage - 1) * perPage + index + 1}</span>
+                      </td>
+                      <td className="text-center">
+                        <div className="table-actions justify-content-center">
+                          {can("model.edit") && <button
+                            className="btn-action btn-edit"
+                            title="Edit Model"
+                            onClick={() =>
+                              setEditModel({
+                                id: item.id,
+                                name: item.name,
+                                brand_id: item.brand_id,
+                                vehicle_segment: item.vehicle_segment || "4 Wheeler",
+                                status: item.status || "Active",
+                              })
+                            }
+                          >
+                            <i className="bi bi-pencil"></i>
+                          </button>}
+                          {can("model.delete") && <button
+                            className="btn-action btn-delete"
+                            title="Delete Model"
+                            onClick={() => setDeleteTarget(item)}
+                          >
+                            <i className="bi bi-trash"></i>
+                          </button>}
+                        </div>
                       </td>
                       <td>
                         <div className="d-flex align-items-center gap-2">
@@ -397,49 +465,29 @@ export default function ModelPage() {
                           </span>
                         )}
                       </td>
-                      <td>
-                        <span className="text-muted small">
-                          {item.created_at
-                            ? new Date(item.created_at).toLocaleDateString("en-IN", {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric",
-                            })
-                            : "N/A"}
-                        </span>
-                      </td>
-                      <td className="text-end">
-                        <div className="table-actions justify-content-end">
-                          {can("model.edit") && <button
-                            className="btn-action btn-edit"
-                            title="Edit Model"
-                            onClick={() =>
-                              setEditModel({
-                                id: item.id,
-                                name: item.name,
-                                brand_id: item.brand_id,
-                                vehicle_segment: item.vehicle_segment || "4 Wheeler",
-                                status: item.status || "Active",
-                              })
-                            }
-                          >
-                            <i className="bi bi-pencil"></i>
-                          </button>}
-                          {can("model.delete") && <button
-                            className="btn-action btn-delete"
-                            title="Delete Model"
-                            onClick={() => setDeleteTarget(item)}
-                          >
-                            <i className="bi bi-trash"></i>
-                          </button>}
-                        </div>
-                      </td>
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {!isLoading && filteredModels.length > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              lastPage={lastPage}
+              total={totalModels}
+              perPage={perPage}
+              onPageChange={(page) => setCurrentPage(page)}
+              onPerPageChange={(newPerPage) => {
+                setPerPage(newPerPage);
+                setCurrentPage(1);
+              }}
+              perPageOptions={[10, 20, 50, 100]}
+              itemName="models"
+            />
+          )}
         </div>
 
         {/* ------------------------------------------------------------------

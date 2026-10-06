@@ -6,6 +6,7 @@ import axios from "axios";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
 import { hasPermission } from "@/utils/auth";
+import Pagination from "@/components/common/Pagination";
 
 export default function VariantPage() {
   const { showToast } = useToast();
@@ -24,10 +25,13 @@ export default function VariantPage() {
   const [variants, setVariants] = useState([]);
   const [brands, setBrands] = useState([]);
   const [models, setModels] = useState([]);
+  const [serverPagination, setServerPagination] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [brandFilter, setBrandFilter] = useState("");
   const [modelFilter, setModelFilter] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
 
   // Modal States
   const [showAddModal, setShowAddModal] = useState(false);
@@ -48,9 +52,24 @@ export default function VariantPage() {
   const fetchVariants = async () => {
     setIsLoading(true);
     try {
-      const response = await axios.get(`${API_URL}/variants`);
+      const params = {
+        page: currentPage,
+        per_page: perPage,
+      };
+      if (searchTerm) params.search = searchTerm;
+      if (brandFilter) params.brand_id = brandFilter;
+      if (modelFilter) params.model_id = modelFilter;
+
+      const response = await axios.get(`${API_URL}/variants`, { params });
       if (response.data && response.data.status) {
-        setVariants(response.data.data);
+        setVariants(response.data.data || []);
+        if (response.data.pagination) {
+          setServerPagination(response.data.pagination);
+        } else if (response.data.meta) {
+          setServerPagination(response.data.meta);
+        } else {
+          setServerPagination(null);
+        }
       }
     } catch (error) {
       console.log("Error fetching variants:", error);
@@ -84,9 +103,13 @@ export default function VariantPage() {
     }
   };
 
-  // Run on page load
+  // Run on page load and param change
   useEffect(() => {
     fetchVariants();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, perPage, searchTerm, brandFilter, modelFilter]);
+
+  useEffect(() => {
     fetchBrands();
     fetchModels();
   }, []);
@@ -214,16 +237,36 @@ export default function VariantPage() {
     }
   };
 
-  // Filter list by search, brand, and model
-  const filteredVariants = variants.filter((item) => {
-    const matchesSearch =
-      item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.model?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.brand?.name?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesBrand = !brandFilter || String(item.brand_id) === String(brandFilter);
-    const matchesModel = !modelFilter || String(item.model_id) === String(modelFilter);
-    return matchesSearch && matchesBrand && matchesModel;
-  });
+  // Handle server-side vs client-side pagination fallback
+  const isServerPaginated = Boolean(serverPagination);
+
+  // Filter list by search, brand, and model (fallback when backend returns full list)
+  const filteredVariants = isServerPaginated
+    ? variants
+    : variants.filter((item) => {
+        const matchesSearch =
+          item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.model?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.brand?.name?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesBrand = !brandFilter || String(item.brand_id) === String(brandFilter);
+        const matchesModel = !modelFilter || String(item.model_id) === String(modelFilter);
+        return matchesSearch && matchesBrand && matchesModel;
+      });
+
+  const totalVariants = isServerPaginated
+    ? (serverPagination.total ?? variants.length)
+    : filteredVariants.length;
+
+  const lastPage = isServerPaginated
+    ? (serverPagination.last_page ?? Math.max(1, Math.ceil(totalVariants / perPage)))
+    : Math.max(1, Math.ceil(totalVariants / perPage));
+
+  const paginatedVariants = isServerPaginated
+    ? variants
+    : filteredVariants.slice(
+        (currentPage - 1) * perPage,
+        currentPage * perPage
+      );
 
   return (
     <AdminLayout>
@@ -389,34 +432,60 @@ export default function VariantPage() {
               <thead>
                 <tr>
                   <th style={{ width: "60px" }}>#</th>
+                  <th style={{ width: "90px" }} className="text-center">Actions</th>
                   <th>Variant Name</th>
                   <th>Model</th>
                   <th>Brand</th>
                   <th>Ex-Showroom Price</th>
                   <th>Status</th>
-                  <th>Created Date</th>
-                  <th className="text-end">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan="8" className="text-center py-4 text-muted">
+                    <td colSpan="7" className="text-center py-4 text-muted">
                       <div className="spinner-border spinner-border-sm me-2" role="status"></div>
                       Loading vehicle variants from API...
                     </td>
                   </tr>
                 ) : filteredVariants.length === 0 ? (
                   <tr>
-                    <td colSpan="8" className="text-center py-4 text-muted">
+                    <td colSpan="7" className="text-center py-4 text-muted">
                       No variants found. Click <strong>Add Vehicle Variant</strong> to create one.
                     </td>
                   </tr>
                 ) : (
-                  filteredVariants.map((item, index) => (
+                  paginatedVariants.map((item, index) => (
                     <tr key={item.id}>
                       <td>
-                        <span className="text-muted small">{index + 1}</span>
+                        <span className="text-muted small">{(currentPage - 1) * perPage + index + 1}</span>
+                      </td>
+                      <td className="text-center">
+                        <div className="table-actions justify-content-center">
+                          {can("variant.edit") && <button
+                            className="btn-action btn-edit"
+                            title="Edit Variant"
+                            onClick={() =>
+                              setEditVariant({
+                                id: item.id,
+                                brand_id: item.brand_id,
+                                model_id: item.model_id,
+                                name: item.name,
+                                price: item.price,
+                                status: item.status || "Active",
+                              })
+                            }
+                          >
+                            <i className="bi bi-pencil"></i>
+                          </button>}
+                          {can("variant.delete") && <button
+                            className="btn-action btn-delete"
+                            title="Delete Variant"
+                            onClick={() => setDeleteTarget(item)}
+                          >
+                            <i className="bi bi-trash"></i>
+                          </button>}
+                        </div>
                       </td>
                       <td>
                         <h6 className="mb-0 text-dark fw-bold">{item.name}</h6>
@@ -445,50 +514,29 @@ export default function VariantPage() {
                           </span>
                         )}
                       </td>
-                      <td>
-                        <span className="text-muted small">
-                          {item.created_at
-                            ? new Date(item.created_at).toLocaleDateString("en-IN", {
-                                day: "2-digit",
-                                month: "short",
-                                year: "numeric",
-                              })
-                            : "N/A"}
-                        </span>
-                      </td>
-                      <td className="text-end">
-                        <div className="table-actions justify-content-end">
-                          {can("variant.edit") && <button
-                            className="btn-action btn-edit"
-                            title="Edit Variant"
-                            onClick={() =>
-                              setEditVariant({
-                                id: item.id,
-                                brand_id: item.brand_id,
-                                model_id: item.model_id,
-                                name: item.name,
-                                price: item.price,
-                                status: item.status || "Active",
-                              })
-                            }
-                          >
-                            <i className="bi bi-pencil"></i>
-                          </button>}
-                          {can("variant.delete") && <button
-                            className="btn-action btn-delete"
-                            title="Delete Variant"
-                            onClick={() => setDeleteTarget(item)}
-                          >
-                            <i className="bi bi-trash"></i>
-                          </button>}
-                        </div>
-                      </td>
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {!isLoading && filteredVariants.length > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              lastPage={lastPage}
+              total={totalVariants}
+              perPage={perPage}
+              onPageChange={(page) => setCurrentPage(page)}
+              onPerPageChange={(newPerPage) => {
+                setPerPage(newPerPage);
+                setCurrentPage(1);
+              }}
+              perPageOptions={[10, 20, 50, 100]}
+              itemName="variants"
+            />
+          )}
         </div>
 
         {/* ------------------------------------------------------------------
