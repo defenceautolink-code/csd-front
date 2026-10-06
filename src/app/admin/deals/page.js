@@ -49,18 +49,17 @@ export default function DealsPage() {
   const fetchDeals = async (from = startDate, to = endDate) => {
     setIsLoading(true);
     try {
-      const params = {};
+      const params = {
+        per_page: 100,
+      };
+      // Send delivery date filter params specifically for backend when supported
       if (from) {
         params.delivery_from_date = from;
         params.delivery_start_date = from;
-        params.from_date = from;
-        params.start_date = from;
       }
       if (to) {
         params.delivery_to_date = to;
         params.delivery_end_date = to;
-        params.to_date = to;
-        params.end_date = to;
       }
       const res = await dealApi.getDeals(params);
       if (res && res.data) {
@@ -93,9 +92,11 @@ export default function DealsPage() {
 
       // Delivery Date Filter
       if (startDate || endDate) {
-        const delDate = deal.expected_delivery_date
-          ? deal.expected_delivery_date.split("T")[0]
-          : null;
+        let delDate = null;
+        if (deal.expected_delivery_date) {
+          const raw = String(deal.expected_delivery_date).trim();
+          delDate = raw.includes("T") ? raw.split("T")[0] : raw.split(" ")[0];
+        }
         if (!delDate) return false;
         if (startDate && delDate < startDate) return false;
         if (endDate && delDate > endDate) return false;
