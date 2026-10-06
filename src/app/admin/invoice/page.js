@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useRef, useSyncExternalStore } fro
 import Link from "next/link";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
+import Pagination from "@/components/common/Pagination";
 import api from "@/lib/axios";
 
 // Helper to generate Invoice Number in exact required format:
@@ -437,6 +438,30 @@ export default function GenerateInvoicePage() {
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  // Pagination states
+  const [tokensPage, setTokensPage] = useState(1);
+  const [tokensPerPage, setTokensPerPage] = useState(10);
+  const [invoicesPage, setInvoicesPage] = useState(1);
+  const [invoicesPerPage, setInvoicesPerPage] = useState(10);
+
+  // 3-Dots Action Dropdown Menu state
+  const [activeActionMenuId, setActiveActionMenuId] = useState(null);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleDocClick = () => setActiveActionMenuId(null);
+    document.addEventListener("click", handleDocClick);
+    return () => document.removeEventListener("click", handleDocClick);
+  }, []);
+
+  // Reset pagination to page 1 when any filter or tab changes
+  useEffect(() => {
+    setTokensPage(1);
+    setInvoicesPage(1);
+  }, [searchQuery, statusFilter, startDate, endDate, activeTab]);
 
   // Modals state
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
@@ -619,7 +644,7 @@ export default function GenerateInvoicePage() {
     };
   }, [allInvoicesList, enrichedTokens]);
 
-  // Filtered Tokens for Tab 1
+  // Filtered Tokens for Tab 1 (Search + Status + Date Range)
   const filteredTokens = useMemo(() => {
     return enrichedTokens.filter((tok) => {
       const q = searchQuery.toLowerCase().trim();
@@ -636,11 +661,28 @@ export default function GenerateInvoicePage() {
         (statusFilter === "paid" && tok.computedStatus === "Fully Paid") ||
         (statusFilter === "partial" && tok.computedStatus === "Partial");
 
-      return matchQuery && matchStatus;
-    });
-  }, [enrichedTokens, searchQuery, statusFilter]);
+      // Date Range Filter (checks bookingDate or any invoice date within token)
+      const matchDate = (() => {
+        if (!startDate && !endDate) return true;
+        const bDate = tok.bookingDate || "";
+        const anyInvMatch = (tok.invoices || []).some((inv) => {
+          if (startDate && inv.date < startDate) return false;
+          if (endDate && inv.date > endDate) return false;
+          return true;
+        });
+        if (bDate) {
+          if (startDate && bDate < startDate) return anyInvMatch;
+          if (endDate && bDate > endDate) return anyInvMatch;
+          return true;
+        }
+        return anyInvMatch;
+      })();
 
-  // Filtered All Invoices for Tab 2
+      return matchQuery && matchStatus && matchDate;
+    });
+  }, [enrichedTokens, searchQuery, statusFilter, startDate, endDate]);
+
+  // Filtered All Invoices for Tab 2 (Search + Date Range)
   const filteredAllInvoices = useMemo(() => {
     return allInvoicesList.filter((inv) => {
       const q = searchQuery.toLowerCase().trim();
@@ -652,9 +694,34 @@ export default function GenerateInvoicePage() {
         inv.installmentTitle.toLowerCase().includes(q) ||
         inv.vehicle.toLowerCase().includes(q);
 
-      return matchQuery;
+      // Date Range Filter
+      const matchDate = (() => {
+        if (!startDate && !endDate) return true;
+        const invDate = inv.date || "";
+        if (startDate && invDate < startDate) return false;
+        if (endDate && invDate > endDate) return false;
+        return true;
+      })();
+
+      return matchQuery && matchDate;
     });
-  }, [allInvoicesList, searchQuery]);
+  }, [allInvoicesList, searchQuery, startDate, endDate]);
+
+  // Paginated data for Tab 1 (Tokens)
+  const totalTokens = filteredTokens.length;
+  const lastTokensPage = Math.max(1, Math.ceil(totalTokens / tokensPerPage));
+  const paginatedTokens = filteredTokens.slice(
+    (tokensPage - 1) * tokensPerPage,
+    tokensPage * tokensPerPage
+  );
+
+  // Paginated data for Tab 2 (Invoices)
+  const totalInvoices = filteredAllInvoices.length;
+  const lastInvoicesPage = Math.max(1, Math.ceil(totalInvoices / invoicesPerPage));
+  const paginatedInvoices = filteredAllInvoices.slice(
+    (invoicesPage - 1) * invoicesPerPage,
+    invoicesPage * invoicesPerPage
+  );
 
   //  PIPELINE LEAD SELECTOR HANDLER
   
@@ -1455,6 +1522,56 @@ export default function GenerateInvoicePage() {
                 )}
               </div>
             </div>
+
+            {/* Date Range Filter Row - Positioned directly under Search Bar */}
+            <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 pt-2.5 mt-2 border-top">
+              <div className="d-flex flex-wrap align-items-center gap-2">
+                <span className="text-dark small fw-bold d-inline-flex align-items-center gap-1">
+                  <i className="bi bi-calendar-range text-primary"></i> Date Filter:
+                </span>
+                <div className="d-flex align-items-center gap-1">
+                  <span className="small text-muted">From:</span>
+                  <input
+                    type="date"
+                    className="form-control form-control-sm"
+                    style={{ width: "145px" }}
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                  />
+                </div>
+                <div className="d-flex align-items-center gap-1">
+                  <span className="small text-muted">To:</span>
+                  <input
+                    type="date"
+                    className="form-control form-control-sm"
+                    style={{ width: "145px" }}
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                  />
+                </div>
+                {(startDate || endDate) && (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1 py-1 px-2"
+                    onClick={() => {
+                      setStartDate("");
+                      setEndDate("");
+                    }}
+                    title="Clear Date Filter"
+                  >
+                    <i className="bi bi-x-circle"></i> Clear Dates
+                  </button>
+                )}
+              </div>
+              <div className="text-muted small">
+                Showing <strong>{activeTab === "tokens" ? filteredTokens.length : filteredAllInvoices.length}</strong> {activeTab === "tokens" ? "token ledgers" : "invoices"}
+                {(startDate || endDate) && (
+                  <span className="badge bg-primary-subtle text-primary ms-2">
+                    Filtered by Date
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1464,9 +1581,9 @@ export default function GenerateInvoicePage() {
         {activeTab === "tokens" && (
           <div
             className="card border-0 shadow-sm"
-            style={{ borderRadius: "12px", overflow: "hidden" }}
+            style={{ borderRadius: "12px" }}
           >
-            <div className="table-responsive">
+            <div className="table-responsive" style={{ minHeight: "360px" }}>
               <table className="table align-middle mb-0 table-hover">
                 <thead
                   style={{
@@ -1478,7 +1595,9 @@ export default function GenerateInvoicePage() {
                   }}
                 >
                   <tr>
-                    <th className="py-3 px-3">Token No & Date</th>
+                    <th className="py-3 px-3" style={{ width: "50px" }}>#</th>
+                    <th className="py-3 text-center" style={{ width: "80px" }}>Actions</th>
+                    <th className="py-3">Token No & Date</th>
                     <th className="py-3">Customer Details</th>
                     <th className="py-3">Booked Vehicle</th>
                     <th className="py-3 text-end">Total Deal</th>
@@ -1486,25 +1605,103 @@ export default function GenerateInvoicePage() {
                     <th className="py-3 text-end">Remaining Balance</th>
                     <th className="py-3 text-center">Invoices</th>
                     <th className="py-3 text-center">Status</th>
-                    <th className="py-3 text-end px-3">Actions</th>
                   </tr>
                 </thead>
                 <tbody style={{ fontSize: "0.9rem" }}>
                   {filteredTokens.length === 0 ? (
                     <tr>
-                      <td colSpan="9" className="text-center py-5 text-muted">
+                      <td colSpan="10" className="text-center py-5 text-muted">
                         <i className="bi bi-inbox fs-1 d-block mb-2 text-secondary opacity-50"></i>
                         No matching customer tokens found. Click{" "}
                         <strong>&quot;Generate New Invoice&quot;</strong> to add one!
                       </td>
                     </tr>
                   ) : (
-                    filteredTokens.map((tok) => {
+                    paginatedTokens.map((tok, index) => {
                       const isComplete = tok.computedStatus === "Fully Paid";
                       return (
                         <tr key={tok.tokenNo}>
+                          {/* 1. Sr. No */}
+                          <td className="px-3 text-muted small">
+                            {(tokensPage - 1) * tokensPerPage + index + 1}
+                          </td>
+
+                          {/* 2. Actions (3-Dots Dropdown Menu) */}
+                          <td className="text-center" onClick={(e) => e.stopPropagation()}>
+                            <div className="dropdown position-relative d-inline-block">
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-light border rounded-circle shadow-none p-0 d-inline-flex align-items-center justify-content-center"
+                                style={{ width: "32px", height: "32px", cursor: "pointer" }}
+                                title="Actions"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveActionMenuId(
+                                    activeActionMenuId === tok.tokenNo ? null : tok.tokenNo
+                                  );
+                                }}
+                              >
+                                <i className="bi bi-three-dots-vertical fs-6 text-dark"></i>
+                              </button>
+
+                              {activeActionMenuId === tok.tokenNo && (
+                                <div
+                                  className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute text-start"
+                                  style={{
+                                    minWidth: "200px",
+                                    zIndex: 1050,
+                                    top: "100%",
+                                    left: 0,
+                                    backgroundColor: "#FFFFFF",
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {/* View Invoices Ledger */}
+                                  <button
+                                    type="button"
+                                    className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small rounded-2 text-dark"
+                                    onClick={() => {
+                                      setActiveActionMenuId(null);
+                                      setSelectedTokenForMultiView(tok);
+                                    }}
+                                  >
+                                    <i className="bi bi-eye-fill text-primary"></i>
+                                    <span>View Invoices Ledger</span>
+                                  </button>
+
+                                  {/* Add Next Installment Bill */}
+                                  <button
+                                    type="button"
+                                    className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small rounded-2 fw-semibold text-success"
+                                    style={{ backgroundColor: "rgba(21, 128, 61, 0.06)" }}
+                                    onClick={() => {
+                                      setActiveActionMenuId(null);
+                                      handleOpenGenerateForToken(tok);
+                                    }}
+                                  >
+                                    <i className="bi bi-plus-circle-fill text-success"></i>
+                                    <span>Add Next Bill</span>
+                                  </button>
+
+                                  {/* Export Token Ledger CSV */}
+                                  <button
+                                    type="button"
+                                    className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small rounded-2 text-secondary"
+                                    onClick={() => {
+                                      setActiveActionMenuId(null);
+                                      handleExportTokenLedgerCSV(tok);
+                                    }}
+                                  >
+                                    <i className="bi bi-file-earmark-spreadsheet text-info"></i>
+                                    <span>Export Ledger (CSV)</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+
                           {/* Token & Date */}
-                          <td className="px-3">
+                          <td>
                             <div className="fw-bold text-dark font-monospace">
                               {tok.tokenNo}
                             </div>
@@ -1616,37 +1813,6 @@ export default function GenerateInvoicePage() {
                               {isComplete ? "Settled" : "Partial"}
                             </span>
                           </td>
-
-                          {/* Actions */}
-                          <td className="text-end px-3">
-                            <div className="d-flex align-items-center justify-content-end gap-1">
-                              {/* VIEW ALL INVOICES (Consolidated modal) */}
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1"
-                                onClick={() => setSelectedTokenForMultiView(tok)}
-                                title="View All Invoices for this Token"
-                              >
-                                <i className="bi bi-eye-fill"></i>
-                                <span>View Invoices</span>
-                              </button>
-
-                              {/* ADD NEXT BILL / INSTALLMENT */}
-                              <button
-                                type="button"
-                                className="btn btn-sm text-white d-inline-flex align-items-center gap-1"
-                                style={{
-                                  backgroundColor: "var(--primary, #58632A)",
-                                  borderColor: "var(--primary, #58632A)",
-                                }}
-                                onClick={() => handleOpenGenerateForToken(tok)}
-                                title="Add Next Installment Bill"
-                              >
-                                <i className="bi bi-plus-lg"></i>
-                                <span>Add Bill</span>
-                              </button>
-                            </div>
-                          </td>
                         </tr>
                       );
                     })
@@ -1654,6 +1820,25 @@ export default function GenerateInvoicePage() {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls for Tokens */}
+            {filteredTokens.length > 0 && (
+              <div className="p-3 border-top bg-white">
+                <Pagination
+                  currentPage={tokensPage}
+                  lastPage={lastTokensPage}
+                  total={totalTokens}
+                  perPage={tokensPerPage}
+                  onPageChange={(page) => setTokensPage(page)}
+                  onPerPageChange={(newPerPage) => {
+                    setTokensPerPage(newPerPage);
+                    setTokensPage(1);
+                  }}
+                  perPageOptions={[10, 20, 50, 100]}
+                  itemName="token ledgers"
+                />
+              </div>
+            )}
           </div>
         )}
 
@@ -1663,9 +1848,9 @@ export default function GenerateInvoicePage() {
         {activeTab === "all-invoices" && (
           <div
             className="card border-0 shadow-sm"
-            style={{ borderRadius: "12px", overflow: "hidden" }}
+            style={{ borderRadius: "12px" }}
           >
-            <div className="table-responsive">
+            <div className="table-responsive" style={{ minHeight: "360px" }}>
               <table className="table align-middle mb-0 table-hover">
                 <thead
                   style={{
@@ -1677,7 +1862,9 @@ export default function GenerateInvoicePage() {
                   }}
                 >
                   <tr>
-                    <th className="py-3 px-3">Invoice No</th>
+                    <th className="py-3 px-3" style={{ width: "50px" }}>#</th>
+                    <th className="py-3 text-center" style={{ width: "80px" }}>Actions</th>
+                    <th className="py-3">Invoice No</th>
                     <th className="py-3">Date & Time</th>
                     <th className="py-3">Token Ref</th>
                     <th className="py-3">Customer & Vehicle</th>
@@ -1685,22 +1872,88 @@ export default function GenerateInvoicePage() {
                     <th className="py-3 text-end">Amount Paid</th>
                     <th className="py-3">Payment Mode & Ref</th>
                     <th className="py-3 text-center">Status</th>
-                    <th className="py-3 text-end px-3">Actions</th>
                   </tr>
                 </thead>
                 <tbody style={{ fontSize: "0.9rem" }}>
                   {filteredAllInvoices.length === 0 ? (
                     <tr>
-                      <td colSpan="9" className="text-center py-5 text-muted">
+                      <td colSpan="10" className="text-center py-5 text-muted">
                         <i className="bi bi-receipt fs-1 d-block mb-2 text-secondary opacity-50"></i>
                         No invoices found.
                       </td>
                     </tr>
                   ) : (
-                    filteredAllInvoices.map((inv) => (
+                    paginatedInvoices.map((inv, index) => (
                       <tr key={inv.id || inv.invoiceNo}>
+                        {/* 1. Sr. No */}
+                        <td className="px-3 text-muted small">
+                          {(invoicesPage - 1) * invoicesPerPage + index + 1}
+                        </td>
+
+                        {/* 2. Actions (3-Dots Dropdown Menu) */}
+                        <td className="text-center" onClick={(e) => e.stopPropagation()}>
+                          <div className="dropdown position-relative d-inline-block">
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-light border rounded-circle shadow-none p-0 d-inline-flex align-items-center justify-content-center"
+                              style={{ width: "32px", height: "32px", cursor: "pointer" }}
+                              title="Actions"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveActionMenuId(
+                                  activeActionMenuId === inv.invoiceNo ? null : inv.invoiceNo
+                                );
+                              }}
+                            >
+                              <i className="bi bi-three-dots-vertical fs-6 text-dark"></i>
+                            </button>
+
+                            {activeActionMenuId === inv.invoiceNo && (
+                              <div
+                                className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute text-start"
+                                style={{
+                                  minWidth: "200px",
+                                  zIndex: 1050,
+                                  top: "100%",
+                                  left: 0,
+                                  backgroundColor: "#FFFFFF",
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {/* View / Print Voucher */}
+                                <button
+                                  type="button"
+                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small rounded-2 text-dark"
+                                  onClick={() => {
+                                    setActiveActionMenuId(null);
+                                    setSelectedInvoiceForSingleView(inv);
+                                  }}
+                                >
+                                  <i className="bi bi-file-earmark-text-fill text-primary"></i>
+                                  <span>View / Print Voucher</span>
+                                </button>
+
+                                {/* View Token Ledger */}
+                                {inv.parentToken && (
+                                  <button
+                                    type="button"
+                                    className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small rounded-2 text-dark"
+                                    onClick={() => {
+                                      setActiveActionMenuId(null);
+                                      setSelectedTokenForMultiView(inv.parentToken);
+                                    }}
+                                  >
+                                    <i className="bi bi-collection-fill text-secondary"></i>
+                                    <span>View Token Ledger</span>
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
                         {/* Invoice No */}
-                        <td className="px-3">
+                        <td>
                           <span
                             className="badge font-monospace px-2.5 py-1.5"
                             style={{
@@ -1766,28 +2019,31 @@ export default function GenerateInvoicePage() {
                             {inv.status || "Paid"}
                           </span>
                         </td>
-
-                        {/* Actions */}
-                        <td className="text-end px-3">
-                          <div className="d-flex align-items-center justify-content-end gap-1">
-                            {/* View Individual Invoice */}
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-outline-dark d-inline-flex align-items-center gap-1"
-                              onClick={() => setSelectedInvoiceForSingleView(inv)}
-                              title="View & Print Invoice Voucher"
-                            >
-                              <i className="bi bi-file-earmark-text-fill text-primary"></i>
-                              <span>View</span>
-                            </button>
-                          </div>
-                        </td>
                       </tr>
                     ))
                   )}
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls for Invoices */}
+            {filteredAllInvoices.length > 0 && (
+              <div className="p-3 border-top bg-white">
+                <Pagination
+                  currentPage={invoicesPage}
+                  lastPage={lastInvoicesPage}
+                  total={totalInvoices}
+                  perPage={invoicesPerPage}
+                  onPageChange={(page) => setInvoicesPage(page)}
+                  onPerPageChange={(newPerPage) => {
+                    setInvoicesPerPage(newPerPage);
+                    setInvoicesPage(1);
+                  }}
+                  perPageOptions={[10, 20, 50, 100]}
+                  itemName="invoices"
+                />
+              </div>
+            )}
           </div>
         )}
 
