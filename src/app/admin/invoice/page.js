@@ -25,18 +25,7 @@ export const formatCurrency = (amount) => {
 
 // Default Pipeline Leads from Dealership CRM Pipeline
 const DEFAULT_PIPELINE_LEADS = [
-  {
-    id: "lead-101",
-    customer_name: "Subedar Rajesh Sharma",
-    phone: "98765 43210",
-    email: "rajesh.sharma@gov.in",
-    city: "Ahmedabad, Gujarat",
-    brand_name: "Maruti Suzuki",
-    model_variant: "Grand Vitara Zeta 1.5L Smart Hybrid",
-    priority: "Hot",
-    status_name: "Token Deposited",
-    total_deal_amount: 1450000,
-  },
+
   {
     id: "lead-102",
     customer_name: "Major Vikramaditya Singh",
@@ -416,7 +405,7 @@ const INITIAL_DEMO_TOKENS = [
 export default function GenerateInvoicePage() {
   const { showToast } = useToast();
   const mounted = useSyncExternalStore(
-    () => () => {},
+    () => () => { },
     () => true,
     () => false
   );
@@ -452,7 +441,12 @@ export default function GenerateInvoicePage() {
 
   // Close dropdown on click outside
   useEffect(() => {
-    const handleDocClick = () => setActiveActionMenuId(null);
+    const handleDocClick = (e) => {
+      if (e.target && e.target.closest && e.target.closest(".action-menu-container")) {
+        return;
+      }
+      setActiveActionMenuId(null);
+    };
     document.addEventListener("click", handleDocClick);
     return () => document.removeEventListener("click", handleDocClick);
   }, []);
@@ -724,8 +718,8 @@ export default function GenerateInvoicePage() {
   );
 
   //  PIPELINE LEAD SELECTOR HANDLER
-  
-    const handleSelectPipelineCustomer = (leadId) => {
+
+  const handleSelectPipelineCustomer = (leadId) => {
     setSelectedPipelineLeadId(leadId);
     if (!leadId) {
       setLinkedExistingToken(null);
@@ -1422,16 +1416,15 @@ export default function GenerateInvoicePage() {
               <ul className="nav nav-pills" role="tablist">
                 <li className="nav-item">
                   <button
-                    className={`nav-link d-flex align-items-center gap-2 py-2 px-3 fw-semibold ${
-                      activeTab === "tokens" ? "active" : ""
-                    }`}
+                    className={`nav-link d-flex align-items-center gap-2 py-2 px-3 fw-semibold ${activeTab === "tokens" ? "active" : ""
+                      }`}
                     style={
                       activeTab === "tokens"
                         ? {
-                            backgroundColor: "var(--primary, #58632A)",
-                            color: "#fff",
-                            borderRadius: "8px",
-                          }
+                          backgroundColor: "var(--primary, #58632A)",
+                          color: "#fff",
+                          borderRadius: "8px",
+                        }
                         : { color: "#4B5563" }
                     }
                     onClick={() => setActiveTab("tokens")}
@@ -1439,9 +1432,8 @@ export default function GenerateInvoicePage() {
                     <i className="bi bi-collection-fill"></i>
                     <span>Customer Tokens (Multi-Bill Ledgers)</span>
                     <span
-                      className={`badge rounded-pill ${
-                        activeTab === "tokens" ? "bg-light text-dark" : "bg-secondary text-white"
-                      }`}
+                      className={`badge rounded-pill ${activeTab === "tokens" ? "bg-light text-dark" : "bg-secondary text-white"
+                        }`}
                     >
                       {enrichedTokens.length}
                     </span>
@@ -1449,16 +1441,15 @@ export default function GenerateInvoicePage() {
                 </li>
                 <li className="nav-item">
                   <button
-                    className={`nav-link d-flex align-items-center gap-2 py-2 px-3 fw-semibold ${
-                      activeTab === "all-invoices" ? "active" : ""
-                    }`}
+                    className={`nav-link d-flex align-items-center gap-2 py-2 px-3 fw-semibold ${activeTab === "all-invoices" ? "active" : ""
+                      }`}
                     style={
                       activeTab === "all-invoices"
                         ? {
-                            backgroundColor: "var(--primary, #58632A)",
-                            color: "#fff",
-                            borderRadius: "8px",
-                          }
+                          backgroundColor: "var(--primary, #58632A)",
+                          color: "#fff",
+                          borderRadius: "8px",
+                        }
                         : { color: "#4B5563" }
                     }
                     onClick={() => setActiveTab("all-invoices")}
@@ -1466,11 +1457,10 @@ export default function GenerateInvoicePage() {
                     <i className="bi bi-file-earmark-ruled-fill"></i>
                     <span>All Invoices Master Register</span>
                     <span
-                      className={`badge rounded-pill ${
-                        activeTab === "all-invoices"
-                          ? "bg-light text-dark"
-                          : "bg-secondary text-white"
-                      }`}
+                      className={`badge rounded-pill ${activeTab === "all-invoices"
+                        ? "bg-light text-dark"
+                        : "bg-secondary text-white"
+                        }`}
                     >
                       {allInvoicesList.length}
                     </span>
@@ -1628,7 +1618,7 @@ export default function GenerateInvoicePage() {
 
                           {/* 2. Actions (3-Dots Dropdown Menu) */}
                           <td className="text-center" onClick={(e) => e.stopPropagation()}>
-                            <div className="dropdown position-relative d-inline-block">
+                            <div className="dropdown position-relative d-inline-block action-menu-container">
                               <button
                                 type="button"
                                 className="btn btn-sm btn-light border rounded-circle shadow-none p-0 d-inline-flex align-items-center justify-content-center"
@@ -1755,9 +1745,8 @@ export default function GenerateInvoicePage() {
                               style={{ height: "4px" }}
                             >
                               <div
-                                className={`progress-bar ${
-                                  isComplete ? "bg-success" : "bg-warning"
-                                }`}
+                                className={`progress-bar ${isComplete ? "bg-success" : "bg-warning"
+                                  }`}
                                 role="progressbar"
                                 style={{
                                   width: `${tok.computedPercentPaid}%`,
@@ -1775,11 +1764,10 @@ export default function GenerateInvoicePage() {
                           {/* Remaining Balance */}
                           <td className="text-end">
                             <span
-                              className={`fw-bold ${
-                                tok.computedBalanceDue > 0
-                                  ? "text-danger"
-                                  : "text-muted"
-                              }`}
+                              className={`fw-bold ${tok.computedBalanceDue > 0
+                                ? "text-danger"
+                                : "text-muted"
+                                }`}
                             >
                               {formatCurrency(tok.computedBalanceDue)}
                             </span>
@@ -1803,11 +1791,10 @@ export default function GenerateInvoicePage() {
                           {/* Status */}
                           <td className="text-center">
                             <span
-                              className={`badge rounded-pill px-2.5 py-1 ${
-                                isComplete
-                                  ? "bg-success-subtle text-success"
-                                  : "bg-warning-subtle text-warning"
-                              }`}
+                              className={`badge rounded-pill px-2.5 py-1 ${isComplete
+                                ? "bg-success-subtle text-success"
+                                : "bg-warning-subtle text-warning"
+                                }`}
                               style={{ fontWeight: 600 }}
                             >
                               {isComplete ? "Settled" : "Partial"}
@@ -1892,7 +1879,7 @@ export default function GenerateInvoicePage() {
 
                         {/* 2. Actions (3-Dots Dropdown Menu) */}
                         <td className="text-center" onClick={(e) => e.stopPropagation()}>
-                          <div className="dropdown position-relative d-inline-block">
+                          <div className="dropdown position-relative d-inline-block action-menu-container">
                             <button
                               type="button"
                               className="btn btn-sm btn-light border rounded-circle shadow-none p-0 d-inline-flex align-items-center justify-content-center"
@@ -2736,11 +2723,10 @@ export default function GenerateInvoicePage() {
                         </div>
                         <div className="progress" style={{ height: "8px" }}>
                           <div
-                            className={`progress-bar ${
-                              selectedTokenForMultiView.computedBalanceDue <= 0
-                                ? "bg-success"
-                                : "bg-warning"
-                            }`}
+                            className={`progress-bar ${selectedTokenForMultiView.computedBalanceDue <= 0
+                              ? "bg-success"
+                              : "bg-warning"
+                              }`}
                             style={{
                               width: `${selectedTokenForMultiView.computedPercentPaid}%`,
                             }}
@@ -2748,11 +2734,10 @@ export default function GenerateInvoicePage() {
                         </div>
                         <div className="mt-2 text-center">
                           <span
-                            className={`badge ${
-                              selectedTokenForMultiView.computedBalanceDue <= 0
-                                ? "bg-success"
-                                : "bg-warning text-dark"
-                            }`}
+                            className={`badge ${selectedTokenForMultiView.computedBalanceDue <= 0
+                              ? "bg-success"
+                              : "bg-warning text-dark"
+                              }`}
                           >
                             {selectedTokenForMultiView.computedBalanceDue <= 0
                               ? "Account Fully Settled"
