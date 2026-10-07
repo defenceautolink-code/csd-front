@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useToast } from "./Toast";
-import { canAccessAdminPath, getRoleDashboardPath } from "@/utils/auth";
+import { canAccessAdminPath, getRoleDashboardPath, clearAuthSession } from "@/utils/auth";
 
 export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
   const pathname = usePathname();
@@ -44,10 +44,7 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
   const canNavigate = (path) => canAccessAdminPath(path, currentUser);
 
   const handleLogout = () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("auth_token");
-      localStorage.removeItem("user");
-    }
+    clearAuthSession();
     showToast("Signed out successfully", "info");
     router.push("/login");
   };
@@ -490,22 +487,32 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
               </li>
               <li className="nav-item">
                 <Link
-                  href="/admin/deals"
-                  className={`nav-link ${isLinkActive("/admin/deals") ? "active" : ""}`}
-                  onClick={onCloseMobile}
-                >
-                  <i className="bi bi-trophy-fill"></i>
-                  <span>Deals & Bookings</span>
-                </Link>
-              </li>
-              <li className="nav-item">
-                <Link
                   href="/admin/follow-up"
                   className={`nav-link ${isLinkActive("/admin/follow-up") ? "active" : ""}`}
                   onClick={onCloseMobile}
                 >
                   <i className="bi bi-telephone-outbound-fill"></i>
                   <span>Follow-Ups</span>
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link
+                  href="/admin/quotation"
+                  className={`nav-link ${isLinkActive("/admin/quotation") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-file-earmark-spreadsheet-fill"></i>
+                  <span>Send Quotation</span>
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link
+                  href="/admin/deals"
+                  className={`nav-link ${isLinkActive("/admin/deals") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-trophy-fill"></i>
+                  <span>Deals & Bookings</span>
                 </Link>
               </li>
               <li className="nav-item">
@@ -570,16 +577,6 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                 >
                   <i className="bi bi-currency-rupee"></i>
                   <span>Update Price</span>
-                </Link>
-              </li>
-              <li className="nav-item">
-                <Link
-                  href="/admin/quotation"
-                  className={`nav-link ${isLinkActive("/admin/quotation") ? "active" : ""}`}
-                  onClick={onCloseMobile}
-                >
-                  <i className="bi bi-file-earmark-spreadsheet-fill"></i>
-                  <span>Send Quotation</span>
                 </Link>
               </li>
               <li className="nav-item">

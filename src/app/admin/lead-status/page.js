@@ -5,6 +5,7 @@ import Link from "next/link";
 import axios from "axios";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
+import Pagination from "@/components/common/Pagination";
 
 export default function LeadStatusPage() {
   const { showToast } = useToast();
@@ -16,6 +17,11 @@ export default function LeadStatusPage() {
   const [leadStatuses, setLeadStatuses] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
+  const [serverPagination, setServerPagination] = useState(null);
 
   // Modal States
   const [showAddModal, setShowAddModal] = useState(false);
@@ -33,9 +39,22 @@ export default function LeadStatusPage() {
   const fetchLeadStatuses = async () => {
     setIsLoading(true);
     try {
-      const response = await axios.get(`${API_URL}/lead-statuses`);
+      const params = {
+        page: currentPage,
+        per_page: perPage,
+      };
+      if (searchTerm.trim()) params.search = searchTerm.trim();
+
+      const response = await axios.get(`${API_URL}/lead-statuses`, { params });
       if (response.data && response.data.status) {
-        setLeadStatuses(response.data.data);
+        setLeadStatuses(response.data.data || []);
+        if (response.data.pagination) {
+          setServerPagination(response.data.pagination);
+        } else if (response.data.meta) {
+          setServerPagination(response.data.meta);
+        } else {
+          setServerPagination(null);
+        }
       }
     } catch (error) {
       console.log("Error fetching lead statuses:", error);
@@ -45,10 +64,10 @@ export default function LeadStatusPage() {
     }
   };
 
-  // Run on page load
+  // Run on page load & pagination changes
   useEffect(() => {
     fetchLeadStatuses();
-  }, []);
+  }, [currentPage, perPage, searchTerm]);
 
   // 3. Create (Store) Lead Status
   const handleAddSubmit = async (e) => {
@@ -127,10 +146,30 @@ export default function LeadStatusPage() {
     }
   };
 
+  // Handle server-side vs client-side pagination fallback
+  const isServerPaginated = Boolean(serverPagination);
+
   // Search filter
-  const filteredStatuses = leadStatuses.filter((item) =>
-    item.name?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredStatuses = isServerPaginated
+    ? leadStatuses
+    : leadStatuses.filter((item) =>
+        item.name?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+
+  const totalStatuses = isServerPaginated
+    ? (serverPagination.total ?? leadStatuses.length)
+    : filteredStatuses.length;
+
+  const lastPage = isServerPaginated
+    ? (serverPagination.last_page ?? Math.max(1, Math.ceil(totalStatuses / perPage)))
+    : Math.max(1, Math.ceil(totalStatuses / perPage));
+
+  const paginatedStatuses = isServerPaginated
+    ? leadStatuses
+    : filteredStatuses.slice(
+        (currentPage - 1) * perPage,
+        currentPage * perPage
+      );
 
   return (
     <AdminLayout>
@@ -234,7 +273,7 @@ export default function LeadStatusPage() {
             <div className="d-flex align-items-center gap-2">
               <h5 className="card-title mb-0">Pipeline Stage Configurations</h5>
               <span className="badge bg-primary-subtle text-primary rounded-pill px-2">
-                {filteredStatuses.length} Statuses
+                {totalStatuses} Statuses
               </span>
             </div>
             <div style={{ maxWidth: "260px" }}>
@@ -243,7 +282,10 @@ export default function LeadStatusPage() {
                 className="form-control form-control-sm"
                 placeholder="Search status name..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
               />
             </div>
           </div>
@@ -253,59 +295,35 @@ export default function LeadStatusPage() {
               <thead>
                 <tr>
                   <th style={{ width: "60px" }}>#</th>
+                  <th style={{ width: "90px" }} className="text-center">Actions</th>
                   <th>Status Name</th>
                   <th>Status State</th>
-                  <th>Created Date</th>
-                  <th className="text-end">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan="5" className="text-center py-4 text-muted">
+                    <td colSpan="4" className="text-center py-4 text-muted">
                       <div className="spinner-border spinner-border-sm me-2" role="status"></div>
                       Loading lead statuses from API...
                     </td>
                   </tr>
                 ) : filteredStatuses.length === 0 ? (
                   <tr>
-                    <td colSpan="5" className="text-center py-4 text-muted">
+                    <td colSpan="4" className="text-center py-4 text-muted">
                       No lead statuses found. Click <strong>Add Lead Status</strong> to create one.
                     </td>
                   </tr>
                 ) : (
-                  filteredStatuses.map((item, index) => (
+                  paginatedStatuses.map((item, index) => (
                     <tr key={item.id}>
                       <td>
-                        <span className="text-muted small">{index + 1}</span>
-                      </td>
-                      <td>
-                        <h6 className="mb-0 text-dark fw-bold">{item.name}</h6>
-                      </td>
-                      <td>
-                        {item.status === "Active" ? (
-                          <span className="badge-custom badge-active">
-                            <span className="badge-dot-indicator"></span>Active
-                          </span>
-                        ) : (
-                          <span className="badge-custom badge-inactive">
-                            <span className="badge-dot-indicator"></span>Inactive
-                          </span>
-                        )}
-                      </td>
-                      <td>
                         <span className="text-muted small">
-                          {item.created_at
-                            ? new Date(item.created_at).toLocaleDateString("en-IN", {
-                                day: "2-digit",
-                                month: "short",
-                                year: "numeric",
-                              })
-                            : "N/A"}
+                          {(currentPage - 1) * perPage + index + 1}
                         </span>
                       </td>
-                      <td className="text-end">
-                        <div className="table-actions justify-content-end">
+                      <td className="text-center">
+                        <div className="table-actions justify-content-center">
                           <button
                             className="btn-action btn-edit"
                             title="Edit Status"
@@ -328,12 +346,45 @@ export default function LeadStatusPage() {
                           </button>
                         </div>
                       </td>
+                      <td>
+                        <h6 className="mb-0 text-dark fw-bold">{item.name}</h6>
+                      </td>
+                      <td>
+                        {item.status === "Active" ? (
+                          <span className="badge-custom badge-active">
+                            <span className="badge-dot-indicator"></span>Active
+                          </span>
+                        ) : (
+                          <span className="badge-custom badge-inactive">
+                            <span className="badge-dot-indicator"></span>Inactive
+                          </span>
+                        )}
+                      </td>
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {!isLoading && filteredStatuses.length > 0 && (
+            <div className="p-3 border-top bg-white">
+              <Pagination
+                currentPage={currentPage}
+                lastPage={lastPage}
+                total={totalStatuses}
+                perPage={perPage}
+                onPageChange={(page) => setCurrentPage(page)}
+                onPerPageChange={(newPerPage) => {
+                  setPerPage(newPerPage);
+                  setCurrentPage(1);
+                }}
+                perPageOptions={[10, 20, 50, 100]}
+                itemName="lead statuses"
+              />
+            </div>
+          )}
         </div>
 
         {/* ------------------------------------------------------------------

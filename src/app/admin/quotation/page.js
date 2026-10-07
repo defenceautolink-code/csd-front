@@ -9,6 +9,7 @@ import { salesExecutiveApi } from "@/lib/salesExecutiveApi";
 import api from "@/lib/axios";
 import { useToast } from "@/app/components/Toast";
 import { hasPermission } from "@/utils/auth";
+import Pagination from "@/components/common/Pagination";
 
 export default function QuotationMainPage() {
   const router = useRouter();
@@ -31,8 +32,15 @@ export default function QuotationMainPage() {
     return hasPermission(permission, currentUser);
   };
 
-  // Active View Tab: 'maker' (Default builder UI) vs 'records' (History table)
-  const [activeTab, setActiveTab] = useState("maker");
+  const formatDate = (date) => {
+    if (!date) return "-";
+    const [year, month, day] = date.split("T")[0].split("-");
+    if (!year || !month || !day) return date;
+    return `${day}-${month}-${year}`;
+  };
+
+  // Active View Tab: 'records' (Default archive table per SS 1) vs 'maker' (Builder UI)
+  const [activeTab, setActiveTab] = useState("records");
 
   // ----------------------------------------------------
   // MASTER DATA STATES (Brand -> Model -> Variant)
@@ -118,12 +126,14 @@ export default function QuotationMainPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   // ----------------------------------------------------
-  // RECORDS TAB STATES (Listing & Search)
+  // RECORDS TAB STATES (Listing, Date Range & Search)
   // ----------------------------------------------------
   const [quotations, setQuotations] = useState([]);
   const [pagination, setPagination] = useState({ current_page: 1, last_page: 1, per_page: 15, total: 0 });
   const [isLoadingQuotes, setIsLoadingQuotes] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -489,17 +499,49 @@ export default function QuotationMainPage() {
   // ----------------------------------------------------
   // 8. RECORDS LISTING LOAD
   // ----------------------------------------------------
-  const loadQuotationsList = async (page = 1) => {
+  const loadQuotationsList = async (
+    page = 1,
+    search = searchTerm,
+    status = statusFilter,
+    from = startDate,
+    to = endDate,
+    customPerPage = pagination.per_page || 15
+  ) => {
     setIsLoadingQuotes(true);
     try {
-      const params = { page, per_page: 15 };
-      if (searchTerm.trim()) params.search = searchTerm.trim();
-      if (statusFilter && statusFilter !== "all") params.status = statusFilter;
+      const params = { page, per_page: customPerPage };
+      if (search && search.trim()) params.search = search.trim();
+      if (status && status !== "all") params.status = status;
+      if (from) {
+        params.from_date = from;
+        params.start_date = from;
+      }
+      if (to) {
+        params.to_date = to;
+        params.end_date = to;
+      }
 
       const res = await quotationApi.getQuotations(params);
       if (res && res.status) {
-        setQuotations(res.data || []);
-        if (res.pagination) setPagination(res.pagination);
+        let list = res.data || [];
+        if (from || to) {
+          list = list.filter((q) => {
+            const qDate = q.quotation_date || q.created_at?.split("T")[0] || "";
+            if (!qDate) return true;
+            if (from && qDate < from) return false;
+            if (to && qDate > to) return false;
+            return true;
+          });
+        }
+        setQuotations(list);
+        if (res.pagination) {
+          setPagination({
+            ...res.pagination,
+            current_page: page,
+            per_page: customPerPage,
+            total: (from || to) ? list.length : res.pagination.total,
+          });
+        }
       }
     } catch (err) {
       console.error("Load quotes list error:", err);
@@ -510,9 +552,9 @@ export default function QuotationMainPage() {
 
   useEffect(() => {
     if (activeTab === "records") {
-      loadQuotationsList(1);
+      loadQuotationsList(1, searchTerm, statusFilter, startDate, endDate);
     }
-  }, [activeTab]);
+  }, [activeTab, startDate, endDate]);
 
   return (
     <AdminLayout>
@@ -1262,23 +1304,91 @@ export default function QuotationMainPage() {
         {activeTab === "records" && (
           <div className="card shadow-sm rounded-3 overflow-hidden">
             <div className="card-header d-flex justify-content-between align-items-center flex-wrap gap-2 p-3">
-              <h5 className="card-title text-dark mb-0">Saved Quotations Archive</h5>
-              <div className="d-flex gap-2">
-                <input
-                  type="text"
-                  className="form-control form-control-sm"
-                  placeholder="Search customer, number..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  style={{ width: "200px" }}
-                />
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  onClick={() => loadQuotationsList(1)}
-                >
-                  <i className="bi bi-search"></i>
-                </button>
+              <h5 className="card-title text-dark mb-0 fw-bold">Saved Quotations Archive</h5>
+              <div className="d-flex align-items-center gap-2 flex-wrap">
+                {/* Start Date */}
+                <div className="input-group input-group-sm" style={{ width: "165px" }}>
+                  <span className="input-group-text bg-light text-muted px-2" title="Start Date">
+                    <i className="bi bi-calendar-event me-1"></i>
+                    <span style={{ fontSize: "11px", fontWeight: "600" }}>From</span>
+                  </span>
+                  <input
+                    type="date"
+                    className="form-control form-control-sm px-1"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    title="Filter from date"
+                  />
+                </div>
+
+                {/* End Date */}
+                <div className="input-group input-group-sm" style={{ width: "160px" }}>
+                  <span className="input-group-text bg-light text-muted px-2" title="End Date">
+                    <i className="bi bi-calendar-check me-1"></i>
+                    <span style={{ fontSize: "11px", fontWeight: "600" }}>To</span>
+                  </span>
+                  <input
+                    type="date"
+                    className="form-control form-control-sm px-1"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    title="Filter to date"
+                  />
+                </div>
+
+                {/* Reset Dates */}
+                {(startDate || endDate) && (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary px-2 d-flex align-items-center gap-1"
+                    style={{ fontSize: "0.8rem", height: "31px" }}
+                    onClick={() => {
+                      setStartDate("");
+                      setEndDate("");
+                    }}
+                    title="Clear Date Filters"
+                  >
+                    <i className="bi bi-x-circle"></i>
+                    <span>Reset</span>
+                  </button>
+                )}
+
+                {/* Search Box */}
+                <div className="input-group input-group-sm" style={{ width: "220px" }}>
+                  <input
+                    type="text"
+                    className="form-control form-control-sm"
+                    placeholder="Search customer, number..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        loadQuotationsList(1, searchTerm, statusFilter, startDate, endDate);
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => loadQuotationsList(1, searchTerm, statusFilter, startDate, endDate)}
+                    title="Search"
+                  >
+                    <i className="bi bi-search"></i>
+                  </button>
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-secondary"
+                      onClick={() => {
+                        setSearchTerm("");
+                        loadQuotationsList(1, "", statusFilter, startDate, endDate);
+                      }}
+                      title="Clear Search"
+                    >
+                      <i className="bi bi-x"></i>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1286,13 +1396,13 @@ export default function QuotationMainPage() {
               <table className="table table-custom align-middle mb-0">
                 <thead className="border-bottom border-secondary border-opacity-25 text-secondary small text-uppercase">
                   <tr>
+                    <th className="py-3 px-3 text-center" style={{ width: "85px" }}>Actions</th>
                     <th className="py-3 px-3">Quotation #</th>
                     <th className="py-3 px-3">Customer</th>
                     <th className="py-3 px-3">Subject / Vehicle</th>
                     <th className="py-3 px-3">Date</th>
                     <th className="py-3 px-3 text-end">Grand Total</th>
                     <th className="py-3 px-3 text-center">Status</th>
-                    <th className="py-3 px-3 text-end">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1312,41 +1422,66 @@ export default function QuotationMainPage() {
                   ) : (
                     quotations.map((quote) => (
                       <tr key={quote.id} className="border-bottom border-secondary border-opacity-10">
+                        {/* 1. Actions First Column */}
+                        <td className="py-3 px-3 text-center">
+                          <div className="d-flex align-items-center justify-content-center gap-1">
+                            {can("quotation.view") && (
+                              <Link
+                                href={`/admin/quotation/${quote.id}`}
+                                className="btn btn-outline-custom btn-sm p-1 px-2"
+                                title="View Quotation"
+                              >
+                                <i className="bi bi-eye"></i>
+                              </Link>
+                            )}
+                            {can("quotation.print_pdf") && (
+                              <button
+                                type="button"
+                                className="btn btn-outline-custom btn-sm p-1 px-2 text-info"
+                                title="Download PDF"
+                                onClick={() => quotationApi.downloadPdf(quote.id, quote.quotation_number)}
+                              >
+                                <i className="bi bi-file-earmark-pdf-fill"></i>
+                              </button>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 2. Quotation # */}
                         <td className="py-3 px-3">
                           <Link href={`/admin/quotation/${quote.id}`} className="fw-bold text-primary text-decoration-none">
                             {quote.quotation_number}
                           </Link>
                         </td>
+
+                        {/* 3. Customer */}
                         <td className="py-3 px-3">
                           <div className="text-dark fw-semibold">{quote.customer_name}</div>
                           <span className="text-secondary small">{quote.customer_phone || quote.customer_email || "-"}</span>
                         </td>
+
+                        {/* 4. Subject / Vehicle */}
                         <td className="py-3 px-3">
                           <div className="text-dark small fw-medium text-truncate" style={{ maxWidth: "250px" }}>
                             {quote.subject}
                           </div>
                         </td>
-                        <td className="py-3 px-3 text-dark small">{quote.quotation_date}</td>
+
+                        {/* 5. Date */}
+                        <td className="py-3 px-3 text-dark small">
+                          {formatDate(quote.quotation_date)}
+                        </td>
+
+                        {/* 6. Grand Total */}
                         <td className="py-3 px-3 text-end text-success fw-bold">
                           ₹{Number(quote.grand_total).toLocaleString("en-IN")}
                         </td>
+
+                        {/* 7. Status */}
                         <td className="py-3 px-3 text-center">
                           <span className={`badge ${quote.status === "sent" ? "bg-info text-dark" : "bg-warning text-dark"}`}>
                             {quote.status || "draft"}
                           </span>
-                        </td>
-                        <td className="py-3 px-3 text-end">
-                          {can("quotation.view") && <Link href={`/admin/quotation/${quote.id}`} className="btn btn-outline-custom btn-sm p-1 px-2 me-1" title="View">
-                            <i className="bi bi-eye"></i>
-                          </Link>}
-                          {can("quotation.print_pdf") && <button
-                            type="button"
-                            className="btn btn-outline-custom btn-sm p-1 px-2 text-info"
-                            title="Download PDF"
-                            onClick={() => quotationApi.downloadPdf(quote.id, quote.quotation_number)}
-                          >
-                            <i className="bi bi-file-earmark-pdf-fill"></i>
-                          </button>}
                         </td>
                       </tr>
                     ))
@@ -1354,6 +1489,23 @@ export default function QuotationMainPage() {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            {!isLoadingQuotes && pagination.total > 0 && (
+              <Pagination
+                currentPage={pagination.current_page || 1}
+                lastPage={pagination.last_page || 1}
+                total={pagination.total || quotations.length}
+                perPage={pagination.per_page || 15}
+                onPageChange={(page) => loadQuotationsList(page, searchTerm, statusFilter, startDate, endDate)}
+                onPerPageChange={(newPerPage) => {
+                  setPagination((prev) => ({ ...prev, per_page: newPerPage }));
+                  loadQuotationsList(1, searchTerm, statusFilter, startDate, endDate, newPerPage);
+                }}
+                perPageOptions={[10, 15, 25, 50]}
+                itemName="quotations"
+              />
+            )}
           </div>
         )}
 

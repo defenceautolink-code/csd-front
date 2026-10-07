@@ -1,4 +1,43 @@
 /**
+ * In-memory client authentication cache for instant client-side route transitions
+ */
+let clientAuthCached = null;
+
+export function getClientAuthCache() {
+  return clientAuthCached;
+}
+
+export function setClientAuthCache(token, user) {
+  clientAuthCached = { token, user };
+}
+
+export function clearAuthSession() {
+  clientAuthCached = null;
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    document.cookie = "auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
+  } catch (error) {
+    console.error("Error clearing auth session:", error);
+  }
+}
+
+export function setAuthSession(token, user) {
+  if (typeof window === "undefined") return;
+  try {
+    const userObj = typeof user === "string" ? JSON.parse(user) : user;
+    localStorage.setItem("auth_token", token);
+    localStorage.setItem("user", JSON.stringify(userObj));
+    clientAuthCached = { token, user: userObj };
+    document.cookie = `auth_token=${encodeURIComponent(token)}; path=/; max-age=604800; SameSite=Lax`;
+  } catch (error) {
+    console.error("Error setting auth session:", error);
+  }
+}
+
+/**
  * Get the currently logged-in user object from localStorage
  * @returns {Object|null}
  */
@@ -154,7 +193,6 @@ const ROLE_PERMISSIONS = {
     "lead.status",
     "lead.priority",
     "lead.import",
-    "lead.export",
     "lead.followup",
     "lead.send_quotation",
     "lead.send_wishes",

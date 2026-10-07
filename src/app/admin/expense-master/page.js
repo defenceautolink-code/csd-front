@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
+import Pagination from "@/components/common/Pagination";
 import expenseApi from "@/services/expenseApi";
 
 export default function ExpenseMasterPage() {
@@ -11,8 +12,11 @@ export default function ExpenseMasterPage() {
 
   // State Management
   const [categories, setCategories] = useState([]);
+  const [serverPagination, setServerPagination] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
 
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -28,7 +32,13 @@ export default function ExpenseMasterPage() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const res = await expenseApi.getCategories();
+      const params = {
+        page: currentPage,
+        per_page: perPage,
+      };
+      if (searchTerm) params.search = searchTerm;
+
+      const res = await expenseApi.getCategories(params);
       if (res && res.data && Array.isArray(res.data)) {
         const mapped = res.data.map((c) => ({
           ...c,
@@ -39,6 +49,13 @@ export default function ExpenseMasterPage() {
           status: c.status === 1 || c.status === "Active" ? "Active" : "Inactive",
         }));
         setCategories(mapped);
+        if (res.pagination) {
+          setServerPagination(res.pagination);
+        } else if (res.meta) {
+          setServerPagination(res.meta);
+        } else {
+          setServerPagination(null);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -50,7 +67,8 @@ export default function ExpenseMasterPage() {
 
   useEffect(() => {
     loadData();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, perPage, searchTerm]);
 
   // 1. ADD EXPENSE CATEGORY (POST /expense-categories)
   const handleAddSubmit = async (e) => {
@@ -132,11 +150,35 @@ export default function ExpenseMasterPage() {
     }
   };
 
-  // Filtered by Search 
-  const filteredCategories = categories.filter((c) =>
-    (c.title || c.name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (c.description || "").toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Handle server-side vs client-side pagination fallback
+  const isServerPaginated = Boolean(serverPagination);
+
+  const filteredCategories = isServerPaginated
+    ? categories
+    : categories.filter((c) =>
+        (c.title || c.name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (c.description || "").toLowerCase().includes(searchTerm.toLowerCase())
+      );
+
+  const totalCategories = isServerPaginated
+    ? (serverPagination.total ?? categories.length)
+    : filteredCategories.length;
+
+  const lastPage = isServerPaginated
+    ? (serverPagination.last_page ?? Math.max(1, Math.ceil(totalCategories / perPage)))
+    : Math.max(1, Math.ceil(totalCategories / perPage));
+
+  const paginatedCategories = isServerPaginated
+    ? categories
+    : filteredCategories.slice(
+        (currentPage - 1) * perPage,
+        currentPage * perPage
+      );
+
+  // Reset page on search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   return (
     <AdminLayout>
@@ -160,7 +202,6 @@ export default function ExpenseMasterPage() {
           </div>
 
           <div className="page-header-actions d-flex align-items-center gap-2">
-
             <button
               className="btn btn-primary d-flex align-items-center gap-2"
               onClick={() => {
@@ -180,7 +221,7 @@ export default function ExpenseMasterPage() {
             <div className="d-flex align-items-center gap-2">
               <h5 className="card-title mb-0 fw-bold">Master Expense Titles</h5>
               <span className="badge bg-primary-subtle text-primary rounded-pill px-2">
-                {filteredCategories.length} Categories
+                {totalCategories} Categories
               </span>
             </div>
 
@@ -215,9 +256,9 @@ export default function ExpenseMasterPage() {
               <thead>
                 <tr>
                   <th style={{ width: "60px" }}>#</th>
+                  <th style={{ width: "90px" }} className="text-center">Actions</th>
                   <th style={{ width: "260px" }}>Expense Title</th>
                   <th>Description</th>
-                  <th className="text-end" style={{ width: "120px" }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -247,11 +288,40 @@ export default function ExpenseMasterPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredCategories.map((category, index) => {
+                  paginatedCategories.map((category, index) => {
                     return (
                       <tr key={category.id}>
                         <td>
-                          <span className="text-muted small fw-semibold">{index + 1}</span>
+                          <span className="text-muted small fw-semibold">
+                            {(currentPage - 1) * perPage + index + 1}
+                          </span>
+                        </td>
+                        <td className="text-center">
+                          <div className="table-actions justify-content-center">
+                            <button
+                              type="button"
+                              className="btn-action btn-edit"
+                              title="Edit Expense Title"
+                              onClick={() =>
+                                setEditItem({
+                                  id: category.id,
+                                  title: category.title,
+                                  description: category.description || "",
+                                  status: category.status,
+                                })
+                              }
+                            >
+                              <i className="bi bi-pencil"></i>
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-action btn-delete"
+                              title="Delete Expense Title"
+                              onClick={() => setDeleteTarget(category)}
+                            >
+                              <i className="bi bi-trash"></i>
+                            </button>
+                          </div>
                         </td>
                         <td>
                           <div className="d-flex align-items-center gap-2">
@@ -283,33 +353,6 @@ export default function ExpenseMasterPage() {
                             )}
                           </span>
                         </td>
-                        <td className="text-end">
-                          <div className="table-actions justify-content-end">
-                            <button
-                              type="button"
-                              className="btn-action btn-edit"
-                              title="Edit Expense Title"
-                              onClick={() =>
-                                setEditItem({
-                                  id: category.id,
-                                  title: category.title,
-                                  description: category.description || "",
-                                  status: category.status,
-                                })
-                              }
-                            >
-                              <i className="bi bi-pencil"></i>
-                            </button>
-                            <button
-                              type="button"
-                              className="btn-action btn-delete"
-                              title="Delete Expense Title"
-                              onClick={() => setDeleteTarget(category)}
-                            >
-                              <i className="bi bi-trash"></i>
-                            </button>
-                          </div>
-                        </td>
                       </tr>
                     );
                   })
@@ -317,6 +360,25 @@ export default function ExpenseMasterPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {!isLoading && filteredCategories.length > 0 && (
+            <div className="p-3 border-top bg-white">
+              <Pagination
+                currentPage={currentPage}
+                lastPage={lastPage}
+                total={totalCategories}
+                perPage={perPage}
+                onPageChange={(page) => setCurrentPage(page)}
+                onPerPageChange={(newPerPage) => {
+                  setPerPage(newPerPage);
+                  setCurrentPage(1);
+                }}
+                perPageOptions={[10, 20, 50, 100]}
+                itemName="expense categories"
+              />
+            </div>
+          )}
         </div>
 
         {/* ==============================================================

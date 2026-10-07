@@ -1,4 +1,5 @@
 import axios from "axios";
+import { clearAuthSession } from "@/utils/auth";
 
 // Create Axios Instance with default settings
 const api = axios.create({
@@ -9,7 +10,7 @@ const api = axios.create({
   },
 });
 
-// Request Interceptor: Attach Bearer Token automatically
+// Request Interceptor: Attach Bearer Token automatically & handle FormData
 api.interceptors.request.use(
   (config) => {
     if (typeof window !== "undefined") {
@@ -18,6 +19,22 @@ api.interceptors.request.use(
         config.headers.Authorization = `Bearer ${token}`;
       }
     }
+
+    // Auto-handle FormData: remove Content-Type so browser sets multipart/form-data with proper boundary
+    const isFormData =
+      (typeof FormData !== "undefined" && config.data instanceof FormData) ||
+      (config.data && typeof config.data.append === "function");
+
+    if (isFormData && config.headers) {
+      if (typeof config.headers.delete === "function") {
+        config.headers.delete("Content-Type");
+        config.headers.delete("content-type");
+      } else {
+        delete config.headers["Content-Type"];
+        delete config.headers["content-type"];
+      }
+    }
+
     return config;
   },
   (error) => Promise.reject(error)
@@ -36,8 +53,7 @@ api.interceptors.response.use(
       (msg.includes("user_id") || msg.includes("Integrity constraint violation: 1048"));
 
     if (error.response?.status === 401 && typeof window !== "undefined") {
-      localStorage.removeItem("auth_token");
-      localStorage.removeItem("user");
+      clearAuthSession();
       if (window.location.pathname !== "/login" && window.location.pathname !== "/") {
         window.location.href = "/login";
       }

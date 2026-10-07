@@ -35,14 +35,14 @@ export default function BlogDetailSection({ slug }) {
 
   return (
     <div className="blog-detail-wrapper">
-      {/* 1. SS 2 Header with Tricolor Gradient & #565732 40px Title */}
+      {/* Header with Tricolor Gradient & Title */}
       <section className="blog-detail-header">
         <div className="container">
           <h1 className="blog-detail-title">{blog.title}</h1>
         </div>
       </section>
 
-      {/* 2. SS 3 Main Card with 1308.4 * 736.54 Image & Description */}
+      {/* 2. Image & Description */}
       <section className="blog-detail-content-sec">
         <div className="container">
           <div className="blog-detail-card">
@@ -122,7 +122,7 @@ export default function BlogDetailSection({ slug }) {
           {/* Divider */}
           <hr className="blog-detail-divider" />
 
-          {/* 3. SS 4 Latest Posts Section (#565732 27px Title) */}
+          {/* 3. Latest Posts Section */}
           <div className="blog-detail-latest-sec">
             <h2 className="blog-latest-heading">Latest Posts</h2>
 
@@ -130,7 +130,7 @@ export default function BlogDetailSection({ slug }) {
               {otherPosts.map((post) => (
                 <div key={post.id} className="blog-latest-card">
                   <div className="blog-latest-img-wrap">
-                    <Link href={`/blog-detail/${post.slug}`}>
+                    <Link href={`/blogs/${post.slug}`}>
                       <img
                         src={post.image}
                         alt={post.title}
@@ -156,14 +156,14 @@ export default function BlogDetailSection({ slug }) {
 
                   <div className="blog-latest-body">
                     <h3 className="blog-latest-title">
-                      <Link href={`/blog-detail/${post.slug}`}>{post.title}</Link>
+                      <Link href={`/blogs/${post.slug}`}>{post.title}</Link>
                     </h3>
 
                     <p className="blog-latest-snippet">{post.snippet}</p>
 
                     <div className="blog-latest-action">
                       <Link
-                        href={`/blog-detail/${post.slug}`}
+                        href={`/blogs/${post.slug}`}
                         className="blog-readmore-btn"
                       >
                         Read more

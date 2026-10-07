@@ -5,13 +5,28 @@ import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 import { ToastProvider, useToast } from "./Toast";
-import { canAccessAdminPath, getRoleDashboardPath } from "@/utils/auth";
+import {
+  canAccessAdminPath,
+  getRoleDashboardPath,
+  clearAuthSession,
+  getClientAuthCache,
+  setClientAuthCache,
+} from "@/utils/auth";
 
 function AdminLayoutInner({ children }) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
   const [showQuickLeadModal, setShowQuickLeadModal] = useState(false);
   const { showToast } = useToast();
+
+  const [isAuthorized, setIsAuthorized] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const cached = getClientAuthCache();
+    if (cached && localStorage.getItem("auth_token") === cached.token) {
+      return canAccessAdminPath(window.location.pathname, cached.user);
+    }
+    return false;
+  });
 
   // Quick Lead Form State
   const [quickLeadName, setQuickLeadName] = useState("");
@@ -43,6 +58,8 @@ function AdminLayoutInner({ children }) {
 
       // If localStorage is cleared or auth_token/user is missing, redirect immediately to login
       if (!token || !userStr) {
+        clearAuthSession();
+        setIsAuthorized(false);
         router.replace("/login");
         return;
       }
@@ -50,11 +67,16 @@ function AdminLayoutInner({ children }) {
       try {
         const user = JSON.parse(userStr);
         if (!canAccessAdminPath(pathname, user)) {
+          setIsAuthorized(false);
           router.replace(getRoleDashboardPath(user?.role));
+          return;
         }
+
+        setClientAuthCache(token, user);
+        setIsAuthorized(true);
       } catch (err) {
-        localStorage.removeItem("auth_token");
-        localStorage.removeItem("user");
+        clearAuthSession();
+        setIsAuthorized(false);
         router.replace("/login");
       }
     };
@@ -108,6 +130,35 @@ function AdminLayoutInner({ children }) {
     setQuickLeadName("");
     setQuickLeadPhone("");
   };
+
+  // Block rendering of admin layout and children completely until verified
+  if (!isAuthorized) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: "#0d131f",
+          color: "#94a3b8",
+          gap: "14px",
+        }}
+      >
+        <div
+          className="spinner-border text-primary"
+          role="status"
+          style={{ width: "2.4rem", height: "2.4rem", borderWidth: "0.22em" }}
+        >
+          <span className="visually-hidden">Authenticating...</span>
+        </div>
+        <div style={{ fontSize: "0.85rem", letterSpacing: "0.5px" }}>
+          Authenticating session...
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="app-wrapper">

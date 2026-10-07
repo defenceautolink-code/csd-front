@@ -3,14 +3,17 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import axios from "axios";
+import { usePathname } from "next/navigation";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
-import { hasPermission } from "@/utils/auth";
+import { hasPermission, hasRole } from "@/utils/auth";
 import LeadImportModal from "./LeadImportModal";
 import ConvertDealModal from "./ConvertDealModal";
 import { getConvertedLeadIds } from "@/services/dealApi";
+import Pagination from "@/components/common/Pagination";
 
 export default function LeadsPage() {
+  const pathname = usePathname();
   const { showToast } = useToast();
   const [currentUser, setCurrentUser] = useState(null);
   useEffect(() => {
@@ -19,6 +22,9 @@ export default function LeadsPage() {
     if (user) setCurrentUser(JSON.parse(user));
   }, []);
   const can = (permission) => hasPermission(permission, currentUser);
+  const isSalesManager =
+    hasRole(["sales_manager", "manager"], currentUser) ||
+    (typeof pathname === "string" && pathname.startsWith("/sales-manager"));
 
   // API Base URL
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
@@ -54,6 +60,10 @@ export default function LeadsPage() {
   const [priorityFilter, setPriorityFilter] = useState("");
   const [segmentFilter, setSegmentFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
 
   // Modal States
   const [showAddModal, setShowAddModal] = useState(false);
@@ -69,6 +79,20 @@ export default function LeadsPage() {
   const [isSubmittingFollowUp, setIsSubmittingFollowUp] = useState(false);
   const [leadFollowUpHistory, setLeadFollowUpHistory] = useState([]);
   const [isLoadingFollowUps, setIsLoadingFollowUps] = useState(false);
+  const [leadQuotationsHistory, setLeadQuotationsHistory] = useState([]);
+  const [isLoadingLeadQuotations, setIsLoadingLeadQuotations] = useState(false);
+
+  // Cascading Brand -> Model -> Variant States for Add Lead Modal
+  const [addModels, setAddModels] = useState([]);
+  const [addVariants, setAddVariants] = useState([]);
+  const [isLoadingAddModels, setIsLoadingAddModels] = useState(false);
+  const [isLoadingAddVariants, setIsLoadingAddVariants] = useState(false);
+
+  // Cascading Brand -> Model -> Variant States for Edit Lead Modal
+  const [editModels, setEditModels] = useState([]);
+  const [editVariants, setEditVariants] = useState([]);
+  const [isLoadingEditModels, setIsLoadingEditModels] = useState(false);
+  const [isLoadingEditVariants, setIsLoadingEditVariants] = useState(false);
 
   const [followUpForm, setFollowUpForm] = useState({
     customer: "",
@@ -82,7 +106,7 @@ export default function LeadsPage() {
     notes: "",
   });
 
-  // Form State for Adding New Lead (matches user screenshot)
+  // Form State for Adding New Lead
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -93,6 +117,8 @@ export default function LeadsPage() {
     anniversary_date: "",
     vehicle_segment: "4 Wheeler", // "2 Wheeler" or "4 Wheeler"
     brand_id: "",
+    model_id: "",
+    variant_id: "",
     model_variant: "",
     priority: "Hot", // "Hot", "Warm", "Cold"
     purchase_timeline: "Immediate (Within 7 Days)",
@@ -104,10 +130,19 @@ export default function LeadsPage() {
   const [isTriggeringWishes, setIsTriggeringWishes] = useState(false);
 
   // 2. Fetch Leads & Master Dropdowns from Laravel backend
-  const fetchLeads = async () => {
+  const fetchLeads = async (from = startDate, to = endDate) => {
     setIsLoading(true);
     try {
-      const response = await axios.get(`${API_URL}/leads`);
+      const params = {};
+      if (from) {
+        params.start_date = from;
+        params.from_date = from;
+      }
+      if (to) {
+        params.end_date = to;
+        params.to_date = to;
+      }
+      const response = await axios.get(`${API_URL}/leads`, { params });
       if (response.data && response.data.status) {
         setLeads(response.data.data);
       }
@@ -137,14 +172,104 @@ export default function LeadsPage() {
     }
   };
 
-  // Run on page mount
+  // Run on page mount and when date filters change
   useEffect(() => {
-    // The fetch helpers update component state after the API response.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchLeads();
+    fetchLeads(startDate, endDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startDate, endDate]);
+
+  useEffect(() => {
     fetchMasterData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Cascading Brand -> Model -> Variant fetch functions for Add Modal
+  const fetchAddModels = async (brandId) => {
+    if (!brandId) {
+      setAddModels([]);
+      setAddVariants([]);
+      return;
+    }
+    setIsLoadingAddModels(true);
+    try {
+      const res = await axios.get(`${API_URL}/models?brand_id=${brandId}`).catch(() => null);
+      if (res && res.data && res.data.data) {
+        setAddModels(res.data.data);
+      } else {
+        setAddModels([]);
+      }
+    } catch (e) {
+      console.error(e);
+      setAddModels([]);
+    } finally {
+      setIsLoadingAddModels(false);
+    }
+  };
+
+  const fetchAddVariants = async (modelId) => {
+    if (!modelId) {
+      setAddVariants([]);
+      return;
+    }
+    setIsLoadingAddVariants(true);
+    try {
+      const res = await axios.get(`${API_URL}/variants?model_id=${modelId}`).catch(() => null);
+      if (res && res.data && res.data.data) {
+        setAddVariants(res.data.data);
+      } else {
+        setAddVariants([]);
+      }
+    } catch (e) {
+      console.error(e);
+      setAddVariants([]);
+    } finally {
+      setIsLoadingAddVariants(false);
+    }
+  };
+
+  // Cascading Brand -> Model -> Variant fetch functions for Edit Modal
+  const fetchEditModels = async (brandId) => {
+    if (!brandId) {
+      setEditModels([]);
+      setEditVariants([]);
+      return;
+    }
+    setIsLoadingEditModels(true);
+    try {
+      const res = await axios.get(`${API_URL}/models?brand_id=${brandId}`).catch(() => null);
+      if (res && res.data && res.data.data) {
+        setEditModels(res.data.data);
+      } else {
+        setEditModels([]);
+      }
+    } catch (e) {
+      console.error(e);
+      setEditModels([]);
+    } finally {
+      setIsLoadingEditModels(false);
+    }
+  };
+
+  const fetchEditVariants = async (modelId) => {
+    if (!modelId) {
+      setEditVariants([]);
+      return;
+    }
+    setIsLoadingEditVariants(true);
+    try {
+      const res = await axios.get(`${API_URL}/variants?model_id=${modelId}`).catch(() => null);
+      if (res && res.data && res.data.data) {
+        setEditVariants(res.data.data);
+      } else {
+        setEditVariants([]);
+      }
+    } catch (e) {
+      console.error(e);
+      setEditVariants([]);
+    } finally {
+      setIsLoadingEditVariants(false);
+    }
+  };
 
   // 3. Create (Store) Lead
   const handleAddSubmit = async (e) => {
@@ -157,10 +282,14 @@ export default function LeadsPage() {
       showToast("Please enter phone number.", "error");
       return;
     }
-    if (!formData.model_variant.trim()) {
-      showToast("Please enter desired variant/model.", "error");
+    if (!formData.model_variant && !formData.model_id) {
+      showToast("Please select or enter desired variant/model.", "error");
       return;
     }
+
+    const computedModelVariant = formData.model_variant || (
+      addModels.find((m) => String(m.id) === String(formData.model_id))?.name || "General Inquiry"
+    );
 
     setIsSubmitting(true);
     try {
@@ -174,7 +303,9 @@ export default function LeadsPage() {
         anniversary_date: formData.anniversary_date || null,
         vehicle_segment: formData.vehicle_segment,
         brand_id: formData.brand_id || null,
-        model_variant: formData.model_variant.trim(),
+        model_id: formData.model_id || null,
+        variant_id: formData.variant_id || null,
+        model_variant: computedModelVariant.trim(),
         priority: formData.priority,
         purchase_timeline: formData.purchase_timeline,
         budget: formData.budget ? parseFloat(formData.budget) : null,
@@ -196,13 +327,18 @@ export default function LeadsPage() {
           anniversary_date: "",
           vehicle_segment: "4 Wheeler",
           brand_id: "",
+          model_id: "",
+          variant_id: "",
           model_variant: "",
           priority: "Hot",
           purchase_timeline: "Immediate (Within 7 Days)",
+          budget: "",
           source_id: "",
           status_id: "",
           assigned_user_name: "David Miller (Sales Executive)",
         });
+        setAddModels([]);
+        setAddVariants([]);
         setShowAddModal(false);
         fetchLeads(); // Refresh list
       }
@@ -226,10 +362,14 @@ export default function LeadsPage() {
       showToast("Please enter phone number.", "error");
       return;
     }
-    if (!editLead.model_variant.trim()) {
+    if (!editLead.model_variant && !editLead.model_id) {
       showToast("Please enter desired variant/model.", "error");
       return;
     }
+
+    const computedModelVariant = editLead.model_variant || (
+      editModels.find((m) => String(m.id) === String(editLead.model_id))?.name || "General Inquiry"
+    );
 
     setIsSubmitting(true);
     try {
@@ -243,7 +383,9 @@ export default function LeadsPage() {
         anniversary_date: editLead.anniversary_date || null,
         vehicle_segment: editLead.vehicle_segment || "4 Wheeler",
         brand_id: editLead.brand_id || null,
-        model_variant: editLead.model_variant.trim(),
+        model_id: editLead.model_id || null,
+        variant_id: editLead.variant_id || null,
+        model_variant: computedModelVariant.trim(),
         priority: editLead.priority || "Hot",
         purchase_timeline: editLead.purchase_timeline,
         budget: editLead.budget || null,
@@ -309,6 +451,7 @@ export default function LeadsPage() {
 
   // Sync converted lead IDs and close action menu on outside click
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setConvertedLeadIds(getConvertedLeadIds());
     const handleConv = () => setConvertedLeadIds(getConvertedLeadIds());
     window.addEventListener("csd_leads_converted_updated", handleConv);
@@ -340,8 +483,35 @@ export default function LeadsPage() {
     const matchesSegment = !segmentFilter || item.vehicle_segment === segmentFilter;
     const matchesStatus = !statusFilter || item.status_name === statusFilter;
 
-    return matchesSearch && matchesPriority && matchesSegment && matchesStatus;
+    // Filter by Created Date (created_at)
+    const matchesDate = (() => {
+      if (!startDate && !endDate) return true;
+      if (!item.created_at) return false;
+      try {
+        const itemDate = new Date(item.created_at).toISOString().split("T")[0];
+        if (startDate && itemDate < startDate) return false;
+        if (endDate && itemDate > endDate) return false;
+        return true;
+      } catch {
+        const itemDateStr = String(item.created_at).slice(0, 10);
+        if (startDate && itemDateStr < startDate) return false;
+        if (endDate && itemDateStr > endDate) return false;
+        return true;
+      }
+    })();
+
+    return matchesSearch && matchesPriority && matchesSegment && matchesStatus && matchesDate;
   });
+
+  // Reset to first page when any filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, priorityFilter, segmentFilter, statusFilter, startDate, endDate]);
+
+  // Paginated leads for table
+  const totalItems = filteredLeads.length;
+  const lastPage = Math.max(1, Math.ceil(totalItems / perPage));
+  const paginatedLeads = filteredLeads.slice((currentPage - 1) * perPage, currentPage * perPage);
 
   // Selection calculations
   const isAllSelected =
@@ -635,12 +805,15 @@ export default function LeadsPage() {
     setViewLead(lead);
     setLeadAssignmentHistory([]);
     setLeadFollowUpHistory([]);
+    setLeadQuotationsHistory([]);
     setIsLoadingHistory(true);
     setIsLoadingFollowUps(true);
+    setIsLoadingLeadQuotations(true);
     try {
-      const [assignRes, followUpRes] = await Promise.all([
+      const [assignRes, followUpRes, quotRes] = await Promise.all([
         axios.get(`${API_URL}/leads/${lead.id}/assignments`).catch(() => ({ data: { data: [] } })),
         axios.get(`${API_URL}/leads/${lead.id}/follow-ups`).catch(() => ({ data: { data: [] } })),
+        axios.get(`${API_URL}/quotations?lead_id=${lead.id}`).catch(() => ({ data: { data: [] } })),
       ]);
       if (assignRes.data && assignRes.data.status) {
         setLeadAssignmentHistory(assignRes.data.data || []);
@@ -648,11 +821,15 @@ export default function LeadsPage() {
       if (followUpRes.data && followUpRes.data.status) {
         setLeadFollowUpHistory(followUpRes.data.data || []);
       }
+      if (quotRes.data) {
+        setLeadQuotationsHistory(Array.isArray(quotRes.data.data) ? quotRes.data.data : Array.isArray(quotRes.data) ? quotRes.data : []);
+      }
     } catch (err) {
       console.log("Error fetching lead history:", err);
     } finally {
       setIsLoadingHistory(false);
       setIsLoadingFollowUps(false);
+      setIsLoadingLeadQuotations(false);
     }
   };
 
@@ -754,6 +931,10 @@ export default function LeadsPage() {
   };
 
   const handleExportCSV = (exportSelectedOnly = false) => {
+    if (isSalesManager) {
+      showToast("You do not have permission to export leads.", "error");
+      return;
+    }
     const list = exportSelectedOnly
       ? leads.filter((l) => selectedLeadIds.includes(l.id))
       : filteredLeads;
@@ -875,7 +1056,7 @@ export default function LeadsPage() {
               <span>Send Quotation</span>
             </Link>}
 
-            {can("lead.export") && <button
+            {!isSalesManager && can("lead.export") && <button
               className="btn btn-outline-custom"
               onClick={() => handleExportCSV(false)}
               title="Download entire leads database as CSV"
@@ -884,7 +1065,7 @@ export default function LeadsPage() {
               <span>Export CSV</span>
             </button>}
 
-            {(can("lead.import") || can("lead.export") || can("lead.create")) && (
+            {(can("lead.import") || (!isSalesManager && can("lead.export")) || can("lead.create")) && (
               <button
                 className="btn btn-outline-custom d-flex align-items-center gap-1"
                 onClick={() => setShowImportModal(true)}
@@ -1112,7 +1293,7 @@ export default function LeadsPage() {
               </div>}
 
               {/* Export Selected to CSV */}
-              {can("lead.export_selected") && <button
+              {!isSalesManager && can("lead.export_selected") && <button
                 className="btn btn-sm btn-outline-custom text-white"
                 onClick={() => handleExportCSV(true)}
                 title="Download CSV for selected leads only"
@@ -1145,11 +1326,17 @@ export default function LeadsPage() {
         {/* Leads Table Card */}
         <div className="card">
           <div className="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <div className="d-flex align-items-center gap-2">
+            <div className="d-flex align-items-center gap-2 flex-wrap">
               <h5 className="card-title mb-0">Customer Prospects</h5>
               <span className="badge bg-primary-subtle text-white rounded-pill px-2">
                 {filteredLeads.length} Leads
               </span>
+              {(startDate || endDate) && (
+                <span className="badge bg-info-subtle text-info border border-info rounded-pill px-2 small">
+                  <i className="bi bi-calendar3 me-1"></i>
+                  Date Filter Active
+                </span>
+              )}
               {selectedLeadIds.length > 0 && (
                 <span className="badge bg-warning-subtle text-warning border border-warning rounded-pill px-2">
                   {selectedLeadIds.length} Selected
@@ -1157,12 +1344,12 @@ export default function LeadsPage() {
               )}
             </div>
 
-            <div className="d-flex flex-wrap gap-2" style={{ maxWidth: "600px" }}>
+            <div className="d-flex flex-wrap align-items-center gap-2">
               <select
                 className="form-select form-select-sm"
                 value={priorityFilter}
                 onChange={(e) => setPriorityFilter(e.target.value)}
-                style={{ width: "130px" }}
+                style={{ width: "125px" }}
               >
                 <option value="">All Priorities</option>
                 <option value="Hot">🔥 Hot</option>
@@ -1174,7 +1361,7 @@ export default function LeadsPage() {
                 className="form-select form-select-sm"
                 value={segmentFilter}
                 onChange={(e) => setSegmentFilter(e.target.value)}
-                style={{ width: "130px" }}
+                style={{ width: "125px" }}
               >
                 <option value="">All Segments</option>
                 <option value="4 Wheeler">4 Wheeler</option>
@@ -1195,19 +1382,80 @@ export default function LeadsPage() {
                 ))}
               </select>
 
-              <input
-                type="text"
-                className="form-control form-control-sm"
-                placeholder="Search name, phone, model..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                style={{ width: "180px" }}
-              />
+              {/* Search Bar */}
+              <div className="position-relative" style={{ width: "185px" }}>
+                <input
+                  type="text"
+                  className="form-control form-control-sm pe-4"
+                  placeholder="Search name, phone..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  title="Search leads by name, phone, email, model, city"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    className="btn btn-link p-0 position-absolute end-0 top-50 translate-middle-y me-2 text-muted text-decoration-none"
+                    onClick={() => setSearchTerm("")}
+                    style={{ fontSize: "12px", border: "none", background: "transparent" }}
+                    title="Clear search"
+                  >
+                    <i className="bi bi-x-circle-fill"></i>
+                  </button>
+                )}
+              </div>
+
+              {/* Created Date Filter: From */}
+              <div className="input-group input-group-sm" style={{ width: "155px" }}>
+                <span className="input-group-text bg-light text-muted px-2" title="Filter by Created Date From">
+                  <i className="bi bi-calendar-event me-1 text-primary"></i>
+                  <span style={{ fontSize: "11px", fontWeight: "600" }}>From</span>
+                </span>
+                <input
+                  type="date"
+                  className="form-control form-control-sm px-1"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  title="Filter by created date from"
+                />
+              </div>
+
+              {/* Created Date Filter: To */}
+              <div className="input-group input-group-sm" style={{ width: "150px" }}>
+                <span className="input-group-text bg-light text-muted px-2" title="Filter by Created Date To">
+                  <i className="bi bi-calendar-check me-1 text-primary"></i>
+                  <span style={{ fontSize: "11px", fontWeight: "600" }}>To</span>
+                </span>
+                <input
+                  type="date"
+                  className="form-control form-control-sm px-1"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  title="Filter by created date to"
+                />
+              </div>
+
+              {/* Clear Date Filter Button */}
+              {(startDate || endDate) && (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-danger px-2 d-flex align-items-center gap-1"
+                  style={{ fontSize: "0.8rem", height: "31px" }}
+                  onClick={() => {
+                    setStartDate("");
+                    setEndDate("");
+                  }}
+                  title="Clear Created Date Filter"
+                >
+                  <i className="bi bi-x-circle"></i>
+                  <span>Clear</span>
+                </button>
+              )}
             </div>
           </div>
 
           <div className="table-responsive">
-            <table className="table table-custom">
+            <table className="table table-custom align-middle">
               <thead>
                 <tr>
                   <th style={{ width: "42px" }} className="text-center">
@@ -1224,32 +1472,30 @@ export default function LeadsPage() {
                     />
                   </th>
                   <th style={{ width: "45px" }}>#</th>
+                  <th style={{ width: "70px" }} className="text-center">Actions</th>
                   <th>Customer</th>
                   <th>Vehicle Requirement</th>
-                  <th>Priority</th>
-                  <th>Source</th>
-                  <th>Status</th>
+                  <th>Priority & Status</th>
                   <th>Assign To</th>
                   <th>Assign By</th>
-                  <th className="text-end">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan="10" className="text-center py-4 text-muted">
+                    <td colSpan="8" className="text-center py-4 text-muted">
                       <div className="spinner-border spinner-border-sm me-2" role="status"></div>
                       Loading leads from API...
                     </td>
                   </tr>
                 ) : filteredLeads.length === 0 ? (
                   <tr>
-                    <td colSpan="10" className="text-center py-4 text-muted">
+                    <td colSpan="8" className="text-center py-4 text-muted">
                       No leads found. Click <strong>Add Customer Lead</strong> to register a new prospect.
                     </td>
                   </tr>
                 ) : (
-                  filteredLeads.map((lead, index) => {
+                  paginatedLeads.map((lead, index) => {
                     const isSelected = selectedLeadIds.includes(lead.id);
                     return (
                       <tr key={lead.id} className={isSelected ? "selected-row" : ""}>
@@ -1263,12 +1509,178 @@ export default function LeadsPage() {
                           />
                         </td>
                         <td>
-                          <span className="text-muted small">{index + 1}</span>
+                          <span className="text-muted small">{(currentPage - 1) * perPage + index + 1}</span>
                         </td>
+
+                        {/* 1. Actions First Column */}
+                        <td className="text-center" onClick={(e) => e.stopPropagation()}>
+                          <div className="dropdown position-relative d-inline-block">
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-light border rounded-circle shadow-none p-0 d-inline-flex align-items-center justify-content-center"
+                              style={{ width: "32px", height: "32px", cursor: "pointer" }}
+                              title="Lead Actions"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveActionMenuId(activeActionMenuId === lead.id ? null : lead.id);
+                              }}
+                            >
+                              <i className="bi bi-three-dots-vertical fs-6 text-dark"></i>
+                            </button>
+
+                            {activeActionMenuId === lead.id && (
+                              <div
+                                className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute start-0 text-start"
+                                style={{
+                                  minWidth: "215px",
+                                  zIndex: 1050,
+                                  top: "100%",
+                                  backgroundColor: "#FFFFFF",
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {/* View Full 360 Detail Page */}
+                                <Link
+                                  href={`/admin/leads/${lead.id}`}
+                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-primary"
+                                  style={{ backgroundColor: "rgba(13, 110, 253, 0.08)" }}
+                                  onClick={() => setActiveActionMenuId(null)}
+                                >
+                                  <i className="bi bi-person-lines-fill text-primary"></i>
+                                  <span>View 360 Profile</span>
+                                </Link>
+
+                                <div className="dropdown-divider my-1"></div>
+
+                                {/* Convert to Deal */}
+                                <button
+                                  type="button"
+                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-bold text-success"
+                                  style={{ backgroundColor: "rgba(21, 128, 61, 0.08)" }}
+                                  onClick={() => {
+                                    setActiveActionMenuId(null);
+                                    setConvertDealTarget(lead);
+                                  }}
+                                >
+                                  <i className="bi bi-trophy-fill text-success"></i>
+                                  <span>Convert to Deal</span>
+                                </button>
+
+                                <div className="dropdown-divider my-1"></div>
+
+                                {/* Log Follow-Up Call */}
+                                {(can("lead.followup") || can("followup.log_call") || !currentUser) && (
+                                  <button
+                                    type="button"
+                                    className="dropdown-item d-flex align-items-center gap-2 py-1 px-3 small text-dark"
+                                    onClick={() => {
+                                      setActiveActionMenuId(null);
+                                      handleOpenFollowUpModal(lead);
+                                    }}
+                                  >
+                                    <i className="bi bi-telephone-plus text-success"></i>
+                                    <span>Log Follow-Up</span>
+                                  </button>
+                                )}
+
+                                {/* Send Quotation */}
+                                {can("lead.send_quotation") && (
+                                  <Link
+                                    href={`/admin/quotation/create?lead_id=${lead.id}`}
+                                    className="dropdown-item d-flex align-items-center gap-2 py-1 px-3 small text-dark text-decoration-none"
+                                    onClick={() => setActiveActionMenuId(null)}
+                                  >
+                                    <i className="bi bi-file-earmark-spreadsheet text-primary"></i>
+                                    <span>Send Quotation</span>
+                                  </Link>
+                                )}
+
+                                {/* Quick View Modal */}
+                                {(can("lead.view_assigned") || can("lead.view_all")) && (
+                                  <button
+                                    type="button"
+                                    className="dropdown-item d-flex align-items-center gap-2 py-1 px-3 small text-dark"
+                                    onClick={() => {
+                                      setActiveActionMenuId(null);
+                                      handleOpenViewLead(lead);
+                                    }}
+                                  >
+                                    <i className="bi bi-eye text-info"></i>
+                                    <span>Quick View Modal</span>
+                                  </button>
+                                )}
+
+                                {/* Edit Lead */}
+                                {can("lead.edit") && (
+                                  <button
+                                    type="button"
+                                    className="dropdown-item d-flex align-items-center gap-2 py-1 px-3 small text-dark"
+                                    onClick={() => {
+                                      setActiveActionMenuId(null);
+                                      setEditLead({
+                                        id: lead.id,
+                                        name: lead.name,
+                                        email: lead.email || "",
+                                        phone: lead.phone,
+                                        city: lead.city || "",
+                                        state: lead.state || "",
+                                        birth_date: lead.birth_date ? lead.birth_date.split("T")[0] : "",
+                                        anniversary_date: lead.anniversary_date ? lead.anniversary_date.split("T")[0] : "",
+                                        vehicle_segment: lead.vehicle_segment || "4 Wheeler",
+                                        brand_id: lead.brand_id || "",
+                                        model_id: lead.model_id || "",
+                                        variant_id: lead.variant_id || "",
+                                        model_variant: lead.model_variant || "",
+                                        priority: lead.priority || "Hot",
+                                        purchase_timeline: lead.purchase_timeline || "Immediate (Within 7 Days)",
+                                        budget: lead.budget || "",
+                                        source_id: lead.source_id || "",
+                                        status_id: lead.status_id || "",
+                                        assigned_user_name: lead.assigned_user_name || "David Miller (Sales Executive)",
+                                      });
+                                      if (lead.brand_id) fetchEditModels(lead.brand_id);
+                                      if (lead.model_id) fetchEditVariants(lead.model_id);
+                                    }}
+                                  >
+                                    <i className="bi bi-pencil text-warning"></i>
+                                    <span>Edit Lead</span>
+                                  </button>
+                                )}
+
+                                <div className="dropdown-divider my-1"></div>
+
+                                {/* Delete Lead */}
+                                {can("lead.delete") && (
+                                  <button
+                                    type="button"
+                                    className="dropdown-item d-flex align-items-center gap-2 py-1 px-3 small text-danger"
+                                    onClick={() => {
+                                      setActiveActionMenuId(null);
+                                      setDeleteTarget(lead);
+                                    }}
+                                  >
+                                    <i className="bi bi-trash"></i>
+                                    <span>Delete Lead</span>
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 2. Customer Column with Clickable Name and Lead Created Date */}
                         <td>
                           <div>
                             <div className="d-flex align-items-center gap-2 flex-wrap">
-                              <h6 className="mb-0 text-dark fw-bold">{lead.name}</h6>
+                              <Link
+                                href={`/admin/leads/${lead.id}`}
+                                className="text-decoration-none"
+                                title="Click to view complete 360 lead profile"
+                              >
+                                <h6 className="mb-0 text-primary fw-bold" style={{ cursor: "pointer" }}>
+                                  {lead.name}
+                                </h6>
+                              </Link>
                               {lead.is_birthday_today && (
                                 <span className="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-0" style={{ fontSize: "10px" }}>
                                   🎂 Birthday Today
@@ -1292,83 +1704,67 @@ export default function LeadsPage() {
                                 </span>
                               )}
                             </div>
+                            {lead.created_at && (
+                              <div className="text-muted small mt-1" style={{ fontSize: "11px" }}>
+                                <i className="bi bi-calendar3 me-1 text-secondary"></i>
+                                Created: {new Date(lead.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                              </div>
+                            )}
                           </div>
                         </td>
+
+                        {/* 3. Vehicle Requirement Column (with Source Badge inside) */}
                         <td>
                           <div>
-                            <div className="text-dark fw-semibold">{lead.model_variant}</div>
-                            <span className="badge bg-secondary-subtle text-black small" style={{ fontSize: "11px" }}>
-                              {lead.brand?.name || lead.brand_name || lead.vehicle_segment}
-                            </span>
+                            <div className="text-dark fw-semibold">
+                              {lead.model_variant || (lead.variant ? `${lead.model?.name ? lead.model.name + " " : ""}${lead.variant.name}` : lead.model?.name || "General Inquiry")}
+                            </div>
+                            <div className="d-flex align-items-center gap-1 mt-1 flex-wrap">
+                              <span className="badge bg-secondary-subtle text-black small" style={{ fontSize: "11px" }}>
+                                {lead.brand?.name || lead.brand_name || lead.vehicle_segment}
+                              </span>
+                              {/* Source Badge inside Vehicle Requirement */}
+                              <span className="badge bg-dark border text-light" style={{ fontSize: "10px" }} title="Lead Source">
+                                <i className="bi bi-broadcast me-1 text-warning"></i>
+                                {lead.source?.title || lead.source_name || "Direct"}
+                              </span>
+                            </div>
                           </div>
                         </td>
+
+                        {/* 4. Priority & Status Combined Column (Static clean badges, no inline changing) */}
                         <td>
-                          {can("lead.priority") ? (
-                            <select
-                              className={`form-select form-select-sm fw-semibold ${
-                                lead.priority === "Hot"
-                                  ? "text-danger bg-danger-subtle border-danger-subtle"
-                                  : lead.priority === "Warm"
-                                    ? "text-warning bg-warning-subtle border-warning-subtle"
-                                    : "text-info bg-info-subtle border-info-subtle"
-                              }`}
-                              style={{ width: "105px", fontSize: "12px", padding: "2px 8px", cursor: "pointer" }}
-                              value={lead.priority || "Hot"}
-                              onChange={(e) => handleSinglePriorityUpdate(lead.id, e.target.value)}
-                              title="Update Lead Priority"
-                            >
-                              <option value="Hot">🔥 Hot</option>
-                              <option value="Warm">☀️ Warm</option>
-                              <option value="Cold">❄️ Cold</option>
-                            </select>
-                          ) : (
+                          <div className="d-flex flex-column gap-1 align-items-start">
                             <span
                               className={`badge ${
                                 lead.priority === "Hot"
-                                  ? "bg-danger-subtle text-danger"
+                                  ? "bg-danger-subtle text-danger border border-danger-subtle"
                                   : lead.priority === "Warm"
-                                    ? "bg-warning-subtle text-warning"
-                                    : "bg-info-subtle text-info"
+                                    ? "bg-warning-subtle text-warning border border-warning-subtle"
+                                    : "bg-info-subtle text-info border border-info-subtle"
                               }`}
+                              style={{ fontSize: "11px", padding: "3px 8px" }}
                             >
                               {lead.priority === "Hot" ? "🔥 Hot" : lead.priority === "Warm" ? "☀️ Warm" : "❄️ Cold"}
                             </span>
-                          )}
-                        </td>
-                        <td>
-                          <span className="badge bg-dark border text-light">{lead.source?.title || lead.source_name || "Direct"}</span>
-                        </td>
-                        <td>
-                          {can("lead.status") ? (
-                            <select
-                              className="form-select form-select-sm fw-semibold text-dark bg-light border-secondary-subtle"
-                              style={{ minWidth: "120px", maxWidth: "155px", fontSize: "12px", padding: "2px 8px", cursor: "pointer" }}
-                              value={lead.status_id || ""}
-                              onChange={(e) => {
-                                const selectedSt = statuses.find((st) => String(st.id) === String(e.target.value));
-                                handleSingleStatusUpdate(lead.id, e.target.value, selectedSt ? selectedSt.name : "");
-                              }}
-                              title="Update Lead Status"
+                            <span
+                              className="badge bg-success-subtle text-success border border-success-subtle fw-semibold"
+                              style={{ fontSize: "11px", padding: "3px 8px" }}
                             >
-                              <option value="" disabled>{lead.status?.name || lead.status_name || "New"}</option>
-                              {statuses.map((st) => (
-                                <option key={st.id} value={st.id}>
-                                  {st.name}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <span className="badge-custom badge-active">
-                              <span className="badge-dot-indicator"></span>
+                              <i className="bi bi-check-circle-fill me-1" style={{ fontSize: "9px" }}></i>
                               {lead.status?.name || lead.status_name || "New"}
                             </span>
-                          )}
+                          </div>
                         </td>
+
+                        {/* 5. Assign To */}
                         <td>
                           <span className="text-dark small fw-medium">
                             {lead.assigned_to_display || lead.assigned_user?.name || lead.assigned_user_name || "-"}
                           </span>
                         </td>
+
+                        {/* 6. Assign By */}
                         <td>
                           <span
                             className={`badge ${lead.assigned_by_display && lead.assigned_by_display !== "-"
@@ -1387,140 +1783,6 @@ export default function LeadsPage() {
                             )}
                           </span>
                         </td>
-                        <td className="text-end" onClick={(e) => e.stopPropagation()}>
-                          <div className="dropdown position-relative d-inline-block">
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-light border rounded-circle shadow-none p-0 d-inline-flex align-items-center justify-content-center"
-                              style={{ width: "32px", height: "32px", cursor: "pointer" }}
-                              title="Lead Actions"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveActionMenuId(activeActionMenuId === lead.id ? null : lead.id);
-                              }}
-                            >
-                              <i className="bi bi-three-dots-vertical fs-6 text-dark"></i>
-                            </button>
-
-                            {activeActionMenuId === lead.id && (
-                              <div
-                                className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute end-0 text-start"
-                                style={{
-                                  minWidth: "195px",
-                                  zIndex: 1050,
-                                  top: "100%",
-                                  backgroundColor: "#FFFFFF",
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {/* 1. Convert to Deal */}
-                                <button
-                                  type="button"
-                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-bold text-success"
-                                  style={{ backgroundColor: "rgba(21, 128, 61, 0.1)" }}
-                                  onClick={() => {
-                                    setActiveActionMenuId(null);
-                                    setConvertDealTarget(lead);
-                                  }}
-                                >
-                                  <i className="bi bi-trophy-fill text-success"></i>
-                                  <span>Convert to Deal</span>
-                                </button>
-
-                                <div className="dropdown-divider my-1"></div>
-
-                                {/* 2. Log Follow-Up Call */}
-                                {(can("lead.followup") || can("followup.log_call") || !currentUser) && (
-                                  <button
-                                    type="button"
-                                    className="dropdown-item d-flex align-items-center gap-2 py-1 px-3 small text-dark"
-                                    onClick={() => {
-                                      setActiveActionMenuId(null);
-                                      handleOpenFollowUpModal(lead);
-                                    }}
-                                  >
-                                    <i className="bi bi-telephone-plus text-primary"></i>
-                                    <span>Log Follow-Up</span>
-                                  </button>
-                                )}
-
-                                {/* 3. Send Quotation */}
-                                {can("lead.send_quotation") && (
-                                  <Link
-                                    href={`/admin/quotation/create?lead_id=${lead.id}`}
-                                    className="dropdown-item d-flex align-items-center gap-2 py-1 px-3 small text-dark text-decoration-none"
-                                    onClick={() => setActiveActionMenuId(null)}
-                                  >
-                                    <i className="bi bi-file-earmark-spreadsheet text-info"></i>
-                                    <span>Send Quotation</span>
-                                  </Link>
-                                )}
-
-                                {/* 4. View Details */}
-                                {(can("lead.view_assigned") || can("lead.view_all")) && (
-                                  <button
-                                    type="button"
-                                    className="dropdown-item d-flex align-items-center gap-2 py-1 px-3 small text-dark"
-                                    onClick={() => {
-                                      setActiveActionMenuId(null);
-                                      handleOpenViewLead(lead);
-                                    }}
-                                  >
-                                    <i className="bi bi-eye text-secondary"></i>
-                                    <span>View Details</span>
-                                  </button>
-                                )}
-
-                                {/* 5. Edit Lead */}
-                                {can("lead.edit") && (
-                                  <button
-                                    type="button"
-                                    className="dropdown-item d-flex align-items-center gap-2 py-1 px-3 small text-dark"
-                                    onClick={() => {
-                                      setActiveActionMenuId(null);
-                                      setEditLead({
-                                        id: lead.id,
-                                        name: lead.name,
-                                        email: lead.email || "",
-                                        phone: lead.phone,
-                                        city: lead.city || "",
-                                        state: lead.state || "",
-                                        vehicle_segment: lead.vehicle_segment || "4 Wheeler",
-                                        brand_id: lead.brand_id || "",
-                                        model_variant: lead.model_variant,
-                                        priority: lead.priority || "Hot",
-                                        purchase_timeline: lead.purchase_timeline || "Immediate (Within 7 Days)",
-                                        source_id: lead.source_id || "",
-                                        status_id: lead.status_id || "",
-                                        assigned_user_name: lead.assigned_user_name || "David Miller (Sales Executive)",
-                                      });
-                                    }}
-                                  >
-                                    <i className="bi bi-pencil text-warning"></i>
-                                    <span>Edit Lead</span>
-                                  </button>
-                                )}
-
-                                <div className="dropdown-divider my-1"></div>
-
-                                {/* 6. Delete Lead */}
-                                {can("lead.delete") && (
-                                  <button
-                                    type="button"
-                                    className="dropdown-item d-flex align-items-center gap-2 py-1 px-3 small text-danger"
-                                    onClick={() => {
-                                      setActiveActionMenuId(null);
-                                      setDeleteTarget(lead);
-                                    }}
-                                  >
-                                    <i className="bi bi-trash text-danger"></i>
-                                    <span>Delete Lead</span>
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </td>
                       </tr>
                     );
                   })
@@ -1528,6 +1790,23 @@ export default function LeadsPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {!isLoading && filteredLeads.length > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              lastPage={lastPage}
+              total={totalItems}
+              perPage={perPage}
+              onPageChange={(page) => setCurrentPage(page)}
+              onPerPageChange={(newPerPage) => {
+                setPerPage(newPerPage);
+                setCurrentPage(1);
+              }}
+              perPageOptions={[10, 20, 50, 100]}
+              itemName="leads"
+            />
+          )}
         </div>
 
         {/* ------------------------------------------------------------------
@@ -1692,12 +1971,18 @@ export default function LeadsPage() {
                   </div>
 
                   <div className="row g-3 mb-3">
-                    <div className="col-md-6">
-                      <label className="form-label text-dark fw-bold small">Brand Name</label>
+                    <div className="col-md-4">
+                      <label className="form-label text-dark fw-bold small">
+                        Brand Name <span className="text-danger">*</span>
+                      </label>
                       <select
                         className="form-select"
                         value={formData.brand_id}
-                        onChange={(e) => setFormData({ ...formData, brand_id: e.target.value })}
+                        onChange={(e) => {
+                          const bId = e.target.value;
+                          setFormData({ ...formData, brand_id: bId, model_id: "", variant_id: "", model_variant: "" });
+                          fetchAddModels(bId);
+                        }}
                       >
                         <option value="">Select Brand</option>
                         {brands.map((b) => (
@@ -1708,14 +1993,70 @@ export default function LeadsPage() {
                       </select>
                     </div>
 
-                    <div className="col-md-6">
+                    <div className="col-md-4">
                       <label className="form-label text-dark fw-bold small">
-                        Variant / Model <span className="text-danger">*</span>
+                        Model {isLoadingAddModels && <span className="spinner-border spinner-border-sm ms-1"></span>}
+                      </label>
+                      <select
+                        className="form-select"
+                        value={formData.model_id}
+                        disabled={!formData.brand_id || isLoadingAddModels}
+                        onChange={(e) => {
+                          const mId = e.target.value;
+                          const selectedM = addModels.find((m) => String(m.id) === String(mId));
+                          const modelName = selectedM ? selectedM.name : "";
+                          setFormData({ ...formData, model_id: mId, variant_id: "", model_variant: modelName });
+                          fetchAddVariants(mId);
+                        }}
+                      >
+                        <option value="">{formData.brand_id ? "Select Model" : "Select Brand First"}</option>
+                        {addModels.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="col-md-4">
+                      <label className="form-label text-dark fw-bold small">
+                        Variant {isLoadingAddVariants && <span className="spinner-border spinner-border-sm ms-1"></span>}
+                      </label>
+                      <select
+                        className="form-select"
+                        value={formData.variant_id}
+                        disabled={!formData.model_id || isLoadingAddVariants}
+                        onChange={(e) => {
+                          const vId = e.target.value;
+                          const selectedV = addVariants.find((v) => String(v.id) === String(vId));
+                          const selectedM = addModels.find((m) => String(m.id) === String(formData.model_id));
+                          const modelName = selectedM ? selectedM.name : "";
+                          const variantName = selectedV ? selectedV.name : "";
+                          setFormData({
+                            ...formData,
+                            variant_id: vId,
+                            model_variant: variantName ? `${modelName} ${variantName}`.trim() : modelName,
+                          });
+                        }}
+                      >
+                        <option value="">{formData.model_id ? "Select Variant" : "Select Model First"}</option>
+                        {addVariants.map((v) => (
+                          <option key={v.id} value={v.id}>
+                            {v.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Custom model/variant input if needed */}
+                    <div className="col-12 mt-1">
+                      <label className="form-label text-muted small">
+                        Vehicle Variant / Model Name (Auto-filled or Custom) <span className="text-danger">*</span>
                       </label>
                       <input
                         type="text"
-                        className="form-control"
-                        placeholder="e.g. Brezza ZDI, Classic 350, Apache RR310"
+                        className="form-control form-control-sm"
+                        placeholder="e.g. Brezza ZDI, Safari Dark Edition"
                         required
                         value={formData.model_variant}
                         onChange={(e) => setFormData({ ...formData, model_variant: e.target.value })}
@@ -2002,12 +2343,16 @@ export default function LeadsPage() {
                   </h6>
 
                   <div className="row g-3 mb-3">
-                    <div className="col-md-6">
+                    <div className="col-md-4">
                       <label className="form-label text-dark fw-bold small">Brand Name</label>
                       <select
                         className="form-select"
-                        value={editLead.brand_id}
-                        onChange={(e) => setEditLead({ ...editLead, brand_id: e.target.value })}
+                        value={editLead.brand_id || ""}
+                        onChange={(e) => {
+                          const bId = e.target.value;
+                          setEditLead({ ...editLead, brand_id: bId, model_id: "", variant_id: "", model_variant: "" });
+                          fetchEditModels(bId);
+                        }}
                       >
                         <option value="">Select Brand</option>
                         {brands.map((b) => (
@@ -2018,13 +2363,68 @@ export default function LeadsPage() {
                       </select>
                     </div>
 
-                    <div className="col-md-6">
+                    <div className="col-md-4">
                       <label className="form-label text-dark fw-bold small">
-                        Variant / Model <span className="text-danger">*</span>
+                        Model {isLoadingEditModels && <span className="spinner-border spinner-border-sm ms-1"></span>}
+                      </label>
+                      <select
+                        className="form-select"
+                        value={editLead.model_id || ""}
+                        disabled={!editLead.brand_id || isLoadingEditModels}
+                        onChange={(e) => {
+                          const mId = e.target.value;
+                          const selectedM = editModels.find((m) => String(m.id) === String(mId));
+                          const modelName = selectedM ? selectedM.name : "";
+                          setEditLead({ ...editLead, model_id: mId, variant_id: "", model_variant: modelName });
+                          fetchEditVariants(mId);
+                        }}
+                      >
+                        <option value="">{editLead.brand_id ? "Select Model" : "Select Brand First"}</option>
+                        {editModels.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="col-md-4">
+                      <label className="form-label text-dark fw-bold small">
+                        Variant {isLoadingEditVariants && <span className="spinner-border spinner-border-sm ms-1"></span>}
+                      </label>
+                      <select
+                        className="form-select"
+                        value={editLead.variant_id || ""}
+                        disabled={!editLead.model_id || isLoadingEditVariants}
+                        onChange={(e) => {
+                          const vId = e.target.value;
+                          const selectedV = editVariants.find((v) => String(v.id) === String(vId));
+                          const selectedM = editModels.find((m) => String(m.id) === String(editLead.model_id));
+                          const modelName = selectedM ? selectedM.name : "";
+                          const variantName = selectedV ? selectedV.name : "";
+                          setEditLead({
+                            ...editLead,
+                            variant_id: vId,
+                            model_variant: variantName ? `${modelName} ${variantName}`.trim() : modelName,
+                          });
+                        }}
+                      >
+                        <option value="">{editLead.model_id ? "Select Variant" : "Select Model First"}</option>
+                        {editVariants.map((v) => (
+                          <option key={v.id} value={v.id}>
+                            {v.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="col-12 mt-1">
+                      <label className="form-label text-muted small">
+                        Variant / Model Text Name <span className="text-danger">*</span>
                       </label>
                       <input
                         type="text"
-                        className="form-control"
+                        className="form-control form-control-sm"
                         required
                         value={editLead.model_variant}
                         onChange={(e) => setEditLead({ ...editLead, model_variant: e.target.value })}
@@ -2343,16 +2743,72 @@ export default function LeadsPage() {
                     </div>
                   )}
                 </div>
+
+                {/* Quotations History Section */}
+                <div className="mt-4 pt-3 border-top border-secondary">
+                  <div className="d-flex align-items-center justify-content-between mb-2">
+                    <h6 className="text-dark fw-bold mb-0 small">
+                      <i className="bi bi-file-earmark-spreadsheet-fill text-info me-1"></i> Customer Quotations Sent
+                    </h6>
+                    <span className="badge bg-info-subtle text-info small">
+                      {leadQuotationsHistory.length} {leadQuotationsHistory.length === 1 ? "Quote" : "Quotes"}
+                    </span>
+                  </div>
+
+                  {isLoadingLeadQuotations ? (
+                    <div className="text-center py-3 text-muted small">
+                      <div className="spinner-border spinner-border-sm me-2" role="status"></div>
+                      Loading quotations...
+                    </div>
+                  ) : leadQuotationsHistory.length === 0 ? (
+                    <div className="text-muted small py-2 px-3 rounded-2 bg-dark border">
+                      No quotation generated yet for this lead.
+                    </div>
+                  ) : (
+                    <div className="d-flex flex-column gap-2" style={{ maxHeight: "180px", overflowY: "auto" }}>
+                      {leadQuotationsHistory.map((q) => (
+                        <div
+                          key={q.id}
+                          className="p-2 rounded-2"
+                          style={{ background: "#161819", border: "1px solid #33383B" }}
+                        >
+                          <div className="d-flex align-items-center justify-content-between">
+                            <span className="text-white fw-bold small">
+                              {q.quotation_number || `#Q-${q.id}`}
+                            </span>
+                            <span className="text-success fw-bold" style={{ fontSize: "12px" }}>
+                              ₹{Number(q.total_amount || q.final_price || 0).toLocaleString("en-IN")}
+                            </span>
+                          </div>
+                          <div className="d-flex align-items-center justify-content-between mt-1 text-muted" style={{ fontSize: "11px" }}>
+                            <span>Status: <strong className="text-secondary">{q.status || "Draft"}</strong></span>
+                            <span>{q.quotation_date || (q.created_at ? new Date(q.created_at).toLocaleDateString("en-IN") : "-")}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="modal-footer-custom d-flex justify-content-between align-items-center">
-                <button
-                  type="button"
-                  className="btn btn-outline-custom"
-                  onClick={() => setViewLead(null)}
-                >
-                  Close
-                </button>
+              <div className="modal-footer-custom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div className="d-flex gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-outline-custom"
+                    onClick={() => setViewLead(null)}
+                  >
+                    Close
+                  </button>
+                  <Link
+                    href={`/admin/leads/${viewLead.id}`}
+                    className="btn btn-outline-primary d-inline-flex align-items-center gap-1"
+                    onClick={() => setViewLead(null)}
+                  >
+                    <i className="bi bi-person-lines-fill me-1"></i>
+                    <span>Full 360 Profile</span>
+                  </Link>
+                </div>
                 <div className="d-flex gap-2">
                   <button
                     type="button"

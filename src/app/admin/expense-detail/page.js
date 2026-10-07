@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
+import Pagination from "@/components/common/Pagination";
 import expenseApi from "@/services/expenseApi";
 
 export default function ExpenseDetailPage() {
@@ -16,10 +17,17 @@ export default function ExpenseDetailPage() {
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Pagination & Server Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
+  const [serverPagination, setServerPagination] = useState(null);
+
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState("");
   const [paymentTypeFilter, setPaymentTypeFilter] = useState("All"); // All | Online | Offline
   const [categoryFilter, setCategoryFilter] = useState("All");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
   // Modals State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -27,6 +35,21 @@ export default function ExpenseDetailPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [viewItem, setViewItem] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 3-Dots Action Dropdown Menu state
+  const [activeActionMenuId, setActiveActionMenuId] = useState(null);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleDocClick = (e) => {
+      if (e.target && e.target.closest && e.target.closest(".action-menu-container")) {
+        return;
+      }
+      setActiveActionMenuId(null);
+    };
+    document.addEventListener("click", handleDocClick);
+    return () => document.removeEventListener("click", handleDocClick);
+  }, []);
 
   // Form State
   const initialFormState = {
@@ -83,9 +106,24 @@ export default function ExpenseDetailPage() {
   const loadData = async () => {
     setIsLoading(true);
     try {
+      const expenseParams = {
+        page: currentPage,
+        per_page: perPage,
+      };
+      if (startDate) expenseParams.from_date = startDate;
+      if (endDate) expenseParams.to_date = endDate;
+      if (searchTerm.trim()) expenseParams.search = searchTerm.trim();
+      if (paymentTypeFilter !== "All") {
+        expenseParams.payment_method = paymentTypeFilter === "Offline" ? "Cash" : "Bank Transfer";
+      }
+      if (categoryFilter !== "All") {
+        const cat = categoryMasters.find((c) => c.title === categoryFilter || c.name === categoryFilter);
+        if (cat) expenseParams.category_id = cat.id;
+      }
+
       const [catsRes, expensesRes, statsRes] = await Promise.all([
         expenseApi.getCategories().catch(() => ({ data: [] })),
-        expenseApi.getExpenses().catch(() => ({ data: [] })),
+        expenseApi.getExpenses(expenseParams).catch(() => ({ data: [] })),
         expenseApi.getExpenseStats().catch(() => null),
       ]);
 
@@ -102,6 +140,13 @@ export default function ExpenseDetailPage() {
 
       if (expensesRes && Array.isArray(expensesRes.data)) {
         setExpenseList(expensesRes.data.map(normalizeExpense));
+        if (expensesRes.pagination) {
+          setServerPagination(expensesRes.pagination);
+        } else if (expensesRes.meta) {
+          setServerPagination(expensesRes.meta);
+        } else {
+          setServerPagination(null);
+        }
       }
 
       if (statsRes && statsRes.data) {
@@ -117,7 +162,13 @@ export default function ExpenseDetailPage() {
 
   useEffect(() => {
     loadData();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, perPage, startDate, endDate, paymentTypeFilter, categoryFilter, searchTerm]);
+
+  // Reset to page 1 on any filter change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [startDate, endDate, paymentTypeFilter, categoryFilter, searchTerm]);
 
   // Open Add Modal with pre-filled default Pay By & default Title
   const handleOpenAdd = () => {
@@ -287,16 +338,25 @@ export default function ExpenseDetailPage() {
     }
   };
 
+  // Handle server-side vs client-side pagination fallback
+  const isServerPaginated = Boolean(serverPagination);
+
   // Filtered List
   const filteredExpenses = useMemo(() => {
+    if (isServerPaginated) return expenseList;
+
     return expenseList.filter((item) => {
+      // Date Filter
+      if (startDate && item.date < startDate) return false;
+      if (endDate && item.date > endDate) return false;
+
       // Payment Type Filter
       if (paymentTypeFilter !== "All" && item.payment_type !== paymentTypeFilter) {
         return false;
       }
 
       // Category Filter
-      if (categoryFilter !== "All" && item.title !== categoryFilter) {
+      if (categoryFilter !== "All" && item.title !== categoryFilter && item.category_name !== categoryFilter) {
         return false;
       }
 
@@ -313,7 +373,22 @@ export default function ExpenseDetailPage() {
 
       return true;
     });
-  }, [expenseList, paymentTypeFilter, categoryFilter, searchTerm]);
+  }, [expenseList, isServerPaginated, startDate, endDate, paymentTypeFilter, categoryFilter, searchTerm]);
+
+  const totalExpenses = isServerPaginated
+    ? (serverPagination.total ?? expenseList.length)
+    : filteredExpenses.length;
+
+  const lastPage = isServerPaginated
+    ? (serverPagination.last_page ?? Math.max(1, Math.ceil(totalExpenses / perPage)))
+    : Math.max(1, Math.ceil(totalExpenses / perPage));
+
+  const paginatedExpenses = isServerPaginated
+    ? expenseList
+    : filteredExpenses.slice(
+        (currentPage - 1) * perPage,
+        currentPage * perPage
+      );
 
   // Aggregate Metrics
   const metrics = useMemo(() => {
@@ -501,16 +576,16 @@ export default function ExpenseDetailPage() {
         {/* Expenses Table Card */}
         <div className="card shadow-sm border-0">
           <div className="card-header bg-white py-3">
-            <div className="d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div className="d-flex flex-wrap justify-content-between align-items-center gap-3 w-100">
               <div className="d-flex align-items-center gap-2">
                 <h5 className="card-title mb-0 fw-bold">Expense Records</h5>
                 <span className="badge bg-primary-subtle text-primary rounded-pill px-2">
-                  {filteredExpenses.length} Records
+                  {totalExpenses} Records
                 </span>
               </div>
 
               {/* Filters & Search */}
-              <div className="d-flex flex-wrap align-items-center gap-2">
+              <div className="d-flex flex-wrap align-items-center gap-2 ms-auto">
                 {/* Payment Type Pill Filter */}
                 <div className="btn-group btn-group-sm" role="group">
                   <button
@@ -528,7 +603,7 @@ export default function ExpenseDetailPage() {
                     type="button"
                     className={`btn ${
                       paymentTypeFilter === "Online"
-                        ? "btn-success text-white"
+                        ? "btn-primary"
                         : "btn-outline-secondary"
                     }`}
                     onClick={() => setPaymentTypeFilter("Online")}
@@ -539,19 +614,19 @@ export default function ExpenseDetailPage() {
                     type="button"
                     className={`btn ${
                       paymentTypeFilter === "Offline"
-                        ? "btn-warning text-dark fw-semibold"
+                        ? "btn-primary"
                         : "btn-outline-secondary"
                     }`}
                     onClick={() => setPaymentTypeFilter("Offline")}
                   >
-                    <i className="bi bi-wallet me-1"></i> Offline
+                    <i className="bi bi-wallet2 me-1"></i> Offline
                   </button>
                 </div>
 
                 {/* Category Dropdown Filter */}
                 <select
                   className="form-select form-select-sm"
-                  style={{ width: "180px" }}
+                  style={{ width: "160px" }}
                   value={categoryFilter}
                   onChange={(e) => setCategoryFilter(e.target.value)}
                 >
@@ -563,8 +638,55 @@ export default function ExpenseDetailPage() {
                   ))}
                 </select>
 
+                {/* Date Filter: From */}
+                <div className="input-group input-group-sm" style={{ width: "160px" }}>
+                  <span className="input-group-text bg-light text-muted px-2" title="From Date">
+                    <i className="bi bi-calendar-event me-1"></i>
+                    <span style={{ fontSize: "11px", fontWeight: "600" }}>From</span>
+                  </span>
+                  <input
+                    type="date"
+                    className="form-control form-control-sm px-1"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    title="Expense date from"
+                  />
+                </div>
+
+                {/* Date Filter: To */}
+                <div className="input-group input-group-sm" style={{ width: "155px" }}>
+                  <span className="input-group-text bg-light text-muted px-2" title="To Date">
+                    <i className="bi bi-calendar-check me-1"></i>
+                    <span style={{ fontSize: "11px", fontWeight: "600" }}>To</span>
+                  </span>
+                  <input
+                    type="date"
+                    className="form-control form-control-sm px-1"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    title="Expense date to"
+                  />
+                </div>
+
+                {/* Clear Date Filter Button */}
+                {(startDate || endDate) && (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary px-2 d-flex align-items-center gap-1"
+                    style={{ fontSize: "0.8rem", height: "31px" }}
+                    onClick={() => {
+                      setStartDate("");
+                      setEndDate("");
+                    }}
+                    title="Clear Date Filter"
+                  >
+                    <i className="bi bi-x-circle"></i>
+                    <span>Reset</span>
+                  </button>
+                )}
+
                 {/* Search Bar */}
-                <div style={{ width: "230px" }}>
+                <div style={{ width: "200px" }}>
                   <div className="input-group input-group-sm">
                     <span className="input-group-text bg-light border-end-0">
                       <i className="bi bi-search text-muted"></i>
@@ -591,18 +713,18 @@ export default function ExpenseDetailPage() {
             </div>
           </div>
 
-          <div className="table-responsive">
-            <table className="table table-custom mb-0">
+          <div className="table-responsive" style={{ minHeight: "220px" }}>
+            <table className="table table-custom mb-0" style={{ width: "100%" }}>
               <thead>
                 <tr>
-                  <th style={{ width: "50px" }}>#</th>
-                  <th>Invoice & Date</th>
+                  <th style={{ width: "45px" }}>#</th>
+                  <th style={{ width: "65px" }} className="text-center">Actions</th>
+                  <th style={{ width: "135px" }}>Invoice & Date</th>
                   <th>Expense Title</th>
-                  <th>Party Name</th>
-                  <th>Amount</th>
-                  <th>Payment Type</th>
-                  <th>Paid By</th>
-                  <th className="text-end" style={{ width: "130px" }}>Actions</th>
+                  <th style={{ minWidth: "160px" }}>Party Name</th>
+                  <th style={{ width: "105px" }}>Amount</th>
+                  <th style={{ width: "125px" }}>Payment Type</th>
+                  <th style={{ width: "115px" }}>Paid By</th>
                 </tr>
               </thead>
               <tbody>
@@ -629,16 +751,88 @@ export default function ExpenseDetailPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredExpenses.map((item, index) => (
+                  paginatedExpenses.map((item, index) => (
                     <tr key={item.id}>
                       <td>
-                        <span className="text-muted small fw-semibold">{index + 1}</span>
+                        <span className="text-muted small fw-semibold">
+                          {(currentPage - 1) * perPage + index + 1}
+                        </span>
+                      </td>
+
+                      {/* 2. Actions (3-Dots Dropdown Menu) */}
+                      <td className="text-center" onClick={(e) => e.stopPropagation()}>
+                        <div className="dropdown position-relative d-inline-block action-menu-container">
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-light border rounded-circle shadow-none p-0 d-inline-flex align-items-center justify-content-center"
+                            style={{ width: "30px", height: "30px", cursor: "pointer" }}
+                            title="Actions"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveActionMenuId(
+                                activeActionMenuId === item.id ? null : item.id
+                              );
+                            }}
+                          >
+                            <i className="bi bi-three-dots-vertical fs-6 text-dark"></i>
+                          </button>
+
+                          {activeActionMenuId === item.id && (
+                            <div
+                              className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute text-start"
+                              style={{
+                                minWidth: "165px",
+                                zIndex: 1060,
+                                top: "100%",
+                                left: 0,
+                                backgroundColor: "#FFFFFF",
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                type="button"
+                                className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small rounded-2 text-dark"
+                                onClick={() => {
+                                  setActiveActionMenuId(null);
+                                  setViewItem(item);
+                                }}
+                              >
+                                <i className="bi bi-eye text-primary"></i>
+                                <span>View Receipt</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small rounded-2 text-dark"
+                                onClick={() => {
+                                  setActiveActionMenuId(null);
+                                  handleOpenEdit(item);
+                                }}
+                              >
+                                <i className="bi bi-pencil text-warning"></i>
+                                <span>Edit Expense</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small rounded-2 text-danger"
+                                onClick={() => {
+                                  setActiveActionMenuId(null);
+                                  setDeleteTarget(item);
+                                }}
+                              >
+                                <i className="bi bi-trash text-danger"></i>
+                                <span>Delete Expense</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </td>
 
                       {/* Invoice No & Date */}
-                      <td>
+                      <td style={{ whiteSpace: "nowrap" }}>
                         <div className="d-flex flex-column">
-                          <span className="fw-bold text-dark font-monospace">
+                          <span className="fw-bold text-dark font-monospace" style={{ fontSize: "0.84rem" }}>
                             {item.invoice_no}
                           </span>
                           <span className="text-muted small">
@@ -654,28 +848,28 @@ export default function ExpenseDetailPage() {
                         </div>
                       </td>
 
-                      {/* Expense Title (from Master) */}
-                      <td>
-                        <span className="badge bg-light text-dark border px-2 py-1 fw-semibold">
+                      {/* Expense Title */}
+                      <td style={{ whiteSpace: "normal", maxWidth: "180px" }}>
+                        <span className="badge bg-light text-dark border px-2 py-1 fw-semibold text-wrap text-start">
                           <i className="bi bi-tag text-primary me-1"></i>
                           {item.title}
                         </span>
                       </td>
 
-                      {/* Party Name */}
-                      <td>
-                        <span className="fw-bold text-dark">{item.party_name}</span>
+                      {/* Party Name - Auto wraps long text to prevent horizontal overflow */}
+                      <td style={{ whiteSpace: "normal", maxWidth: "220px", wordBreak: "break-word" }}>
+                        <span className="fw-bold text-dark small">{item.party_name}</span>
                       </td>
 
                       {/* Amount */}
-                      <td>
+                      <td style={{ whiteSpace: "nowrap" }}>
                         <span className="fw-bold text-dark fs-6">
                           ₹{Number(item.amount).toLocaleString("en-IN")}
                         </span>
                       </td>
 
-                      {/* Payment Type & Details */}
-                      <td>
+                      {/* Payment Type */}
+                      <td style={{ whiteSpace: "nowrap" }}>
                         {item.payment_type === "Online" ? (
                           <div>
                             <span className="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
@@ -683,7 +877,8 @@ export default function ExpenseDetailPage() {
                             </span>
                             {item.reference_no && (
                               <div
-                                className="small text-muted font-monospace mt-1"
+                                className="small text-muted font-monospace mt-0.5 text-truncate"
+                                style={{ maxWidth: "120px" }}
                                 title={`Ref: ${item.reference_no}`}
                               >
                                 Ref: {item.reference_no}
@@ -698,41 +893,12 @@ export default function ExpenseDetailPage() {
                       </td>
 
                       {/* Paid By */}
-                      <td>
+                      <td style={{ whiteSpace: "nowrap" }}>
                         <div className="d-flex align-items-center gap-1">
                           <i className="bi bi-person-circle text-muted"></i>
-                          <span className="small text-dark fw-semibold">{item.pay_by}</span>
-                        </div>
-                      </td>
-
-                      {/* Actions */}
-                      <td className="text-end">
-                        <div className="table-actions justify-content-end">
-                          <button
-                            type="button"
-                            className="btn-action"
-                            style={{ color: "#000080" }}
-                            title="View Receipt Details"
-                            onClick={() => setViewItem(item)}
-                          >
-                            <i className="bi bi-eye"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-action btn-edit"
-                            title="Edit Expense"
-                            onClick={() => handleOpenEdit(item)}
-                          >
-                            <i className="bi bi-pencil"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-action btn-delete"
-                            title="Delete Expense"
-                            onClick={() => setDeleteTarget(item)}
-                          >
-                            <i className="bi bi-trash"></i>
-                          </button>
+                          <span className="small text-dark fw-semibold text-truncate" style={{ maxWidth: "105px" }} title={item.pay_by}>
+                            {item.pay_by}
+                          </span>
                         </div>
                       </td>
                     </tr>
@@ -741,6 +907,25 @@ export default function ExpenseDetailPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {!isLoading && filteredExpenses.length > 0 && (
+            <div className="p-3 border-top bg-white">
+              <Pagination
+                currentPage={currentPage}
+                lastPage={lastPage}
+                total={totalExpenses}
+                perPage={perPage}
+                onPageChange={(page) => setCurrentPage(page)}
+                onPerPageChange={(newPerPage) => {
+                  setPerPage(newPerPage);
+                  setCurrentPage(1);
+                }}
+                perPageOptions={[10, 20, 50, 100]}
+                itemName="expense records"
+              />
+            </div>
+          )}
         </div>
 
         {/* ==============================================================

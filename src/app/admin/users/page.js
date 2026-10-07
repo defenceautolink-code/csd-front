@@ -2,10 +2,11 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import axios from "axios";
+import api from "@/lib/axios";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
 import { hasPermission } from "@/utils/auth";
+import Pagination from "@/components/common/Pagination";
 
 // Role Enum options matching Laravel UserRole Enum
 const ROLE_OPTIONS = [
@@ -32,16 +33,19 @@ export default function UsersPage() {
   }, []);
   const can = (permission) => hasPermission(permission, currentUser);
 
-  // API Base URL
+  // API Base URL for storage
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
   const BASE_STORAGE_URL = API_URL.replace(/\/api\/?$/, "");
 
   // 1. Component States
   const [users, setUsers] = useState([]);
+  const [serverPagination, setServerPagination] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
 
   // Modal States
   const [showAddModal, setShowAddModal] = useState(false);
@@ -61,26 +65,88 @@ export default function UsersPage() {
     status: "Active",
   });
 
+  // Helper to extract clear error message from Laravel response
+  const getErrorMessage = (error, defaultMsg) => {
+    if (error.response?.data?.errors) {
+      const allErrors = Object.values(error.response.data.errors).flat();
+      if (allErrors.length > 0) return allErrors.join(" ");
+    }
+    return error.response?.data?.message || defaultMsg;
+  };
+
   // 2. Fetch all users from Laravel backend
   const fetchUsers = async () => {
     setIsLoading(true);
     try {
-      const response = await axios.get(`${API_URL}/users`);
+      const params = {
+        page: currentPage,
+        per_page: perPage,
+      };
+      if (searchTerm) params.search = searchTerm;
+      if (roleFilter) params.role = roleFilter;
+      if (statusFilter) params.status = statusFilter;
+
+      const response = await api.get("/users", { params });
       if (response.data && response.data.status) {
-        setUsers(response.data.data);
+        setUsers(response.data.data || []);
+        if (response.data.pagination) {
+          setServerPagination(response.data.pagination);
+        } else if (response.data.meta) {
+          setServerPagination(response.data.meta);
+        } else {
+          setServerPagination(null);
+        }
       }
     } catch (error) {
-      console.log("Error fetching users:", error);
-      showToast("Unable to fetch users from API.", "error");
+      console.error("Error fetching users:", error);
+      showToast(getErrorMessage(error, "Unable to fetch users from API."), "error");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Run on page load
+  // Run on page load and parameter change
   useEffect(() => {
     fetchUsers();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, perPage, searchTerm, roleFilter, statusFilter]);
+
+  // Photo file validation handler (enforces Laravel's max 2MB and image mime rules)
+  const handlePhotoSelect = (e, isEdit = false) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Backend rule: max 2048 KB
+    if (file.size > 2 * 1024 * 1024) {
+      showToast("Profile photo must be less than 2MB.", "error");
+      e.target.value = "";
+      if (isEdit) {
+        setEditUser((prev) => ({ ...prev, newPhoto: null }));
+      } else {
+        setFormData((prev) => ({ ...prev, profile_photo: null }));
+      }
+      return;
+    }
+
+    // Supported mime types
+    const validTypes = ["image/jpeg", "image/png", "image/jpg", "image/webp"];
+    if (!validTypes.includes(file.type)) {
+      showToast("Please select a valid image file (JPG, PNG, or WebP).", "error");
+      e.target.value = "";
+      if (isEdit) {
+        setEditUser((prev) => ({ ...prev, newPhoto: null }));
+      } else {
+        setFormData((prev) => ({ ...prev, profile_photo: null }));
+      }
+      return;
+    }
+
+    if (isEdit) {
+      setEditUser((prev) => ({ ...prev, newPhoto: file }));
+    } else {
+      setFormData((prev) => ({ ...prev, profile_photo: file }));
+    }
+  };
 
   // 3. Create (Store) User
   const handleAddSubmit = async (e) => {
@@ -108,21 +174,30 @@ export default function UsersPage() {
 
     setIsSubmitting(true);
     try {
-      const data = new FormData();
-      data.append("name", formData.name.trim());
-      data.append("email", formData.email.trim());
-      data.append("password", formData.password);
-      data.append("phone", formData.phone.trim());
-      data.append("role", formData.role);
-      data.append("status", formData.status);
-
+      let response;
       if (formData.profile_photo) {
+        // Interceptor in axios.js automatically removes Content-Type so browser sets boundary
+        const data = new FormData();
+        data.append("name", formData.name.trim());
+        data.append("email", formData.email.trim());
+        data.append("password", formData.password);
+        data.append("phone", formData.phone.trim());
+        data.append("role", formData.role);
+        data.append("status", formData.status);
         data.append("profile_photo", formData.profile_photo);
-      }
 
-      const response = await axios.post(`${API_URL}/users`, data, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+        response = await api.post("/users", data);
+      } else {
+        // Direct JSON payload
+        response = await api.post("/users", {
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          password: formData.password,
+          phone: formData.phone.trim(),
+          role: formData.role,
+          status: formData.status,
+        });
+      }
 
       if (response.data && response.data.status) {
         showToast(`User "${formData.name}" created with role "${formData.role}"!`, "success");
@@ -139,9 +214,8 @@ export default function UsersPage() {
         fetchUsers(); // Refresh list
       }
     } catch (error) {
-      console.log("Create Error:", error);
-      const msg = error.response?.data?.message || "Failed to create user.";
-      showToast(msg, "error");
+      console.error("Create Error:", error?.response?.data || error);
+      showToast(getErrorMessage(error, "Failed to create user."), "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -169,24 +243,37 @@ export default function UsersPage() {
 
     setIsSubmitting(true);
     try {
-      const data = new FormData();
-      data.append("_method", "PUT"); // Laravel multipart spoofing
-      data.append("name", editUser.name.trim());
-      data.append("email", editUser.email.trim());
-      data.append("phone", editUser.phone.trim());
-      data.append("role", editUser.role);
-      data.append("status", editUser.status);
-
-      if (editUser.password) {
-        data.append("password", editUser.password);
-      }
+      let response;
       if (editUser.newPhoto) {
+        // FormData with Laravel PUT spoofing; interceptor strips Content-Type for boundary
+        const data = new FormData();
+        data.append("_method", "PUT");
+        data.append("name", editUser.name.trim());
+        data.append("email", editUser.email.trim());
+        data.append("phone", editUser.phone.trim());
+        data.append("role", editUser.role);
+        data.append("status", editUser.status);
+        if (editUser.password) {
+          data.append("password", editUser.password);
+        }
         data.append("profile_photo", editUser.newPhoto);
-      }
 
-      const response = await axios.post(`${API_URL}/users/${editUser.id}`, data, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+        response = await api.post(`/users/${editUser.id}`, data);
+      } else {
+        // Direct JSON PUT
+        const payload = {
+          name: editUser.name.trim(),
+          email: editUser.email.trim(),
+          phone: editUser.phone.trim(),
+          role: editUser.role,
+          status: editUser.status,
+        };
+        if (editUser.password) {
+          payload.password = editUser.password;
+        }
+
+        response = await api.put(`/users/${editUser.id}`, payload);
+      }
 
       if (response.data && response.data.status) {
         showToast(`User profile for "${editUser.name}" updated!`, "success");
@@ -194,9 +281,8 @@ export default function UsersPage() {
         fetchUsers(); // Refresh list
       }
     } catch (error) {
-      console.log("Update Error:", error);
-      const msg = error.response?.data?.message || "Failed to update user.";
-      showToast(msg, "error");
+      console.error("Update Error:", error?.response?.data || error);
+      showToast(getErrorMessage(error, "Failed to update user."), "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -207,29 +293,48 @@ export default function UsersPage() {
     if (!deleteTarget) return;
 
     try {
-      const response = await axios.delete(`${API_URL}/users/${deleteTarget.id}`);
+      const response = await api.delete(`/users/${deleteTarget.id}`);
       if (response.data && response.data.status) {
         showToast(`User account for "${deleteTarget.name}" deleted!`, "success");
         setDeleteTarget(null);
         fetchUsers(); // Refresh list
       }
     } catch (error) {
-      console.log("Delete Error:", error);
-      const msg = error.response?.data?.message || "Failed to delete user.";
-      showToast(msg, "error");
+      console.error("Delete Error:", error);
+      showToast(getErrorMessage(error, "Failed to delete user."), "error");
     }
   };
 
-  // Filter users by search, role, and status
-  const filteredUsers = users.filter((item) => {
-    const matchesSearch =
-      item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.phone?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesRole = !roleFilter || item.role === roleFilter;
-    const matchesStatus = !statusFilter || item.status === statusFilter;
-    return matchesSearch && matchesRole && matchesStatus;
-  });
+  // Handle server-side vs client-side pagination fallback
+  const isServerPaginated = Boolean(serverPagination);
+
+  // Filter users (used if backend returns flat list without server pagination)
+  const filteredUsers = isServerPaginated
+    ? users
+    : users.filter((item) => {
+        const matchesSearch =
+          item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.phone?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesRole = !roleFilter || item.role === roleFilter;
+        const matchesStatus = !statusFilter || item.status === statusFilter;
+        return matchesSearch && matchesRole && matchesStatus;
+      });
+
+  const totalUsers = isServerPaginated
+    ? (serverPagination.total ?? users.length)
+    : filteredUsers.length;
+
+  const lastPage = isServerPaginated
+    ? (serverPagination.last_page ?? Math.max(1, Math.ceil(totalUsers / perPage)))
+    : Math.max(1, Math.ceil(totalUsers / perPage));
+
+  const paginatedUsers = isServerPaginated
+    ? users
+    : filteredUsers.slice(
+        (currentPage - 1) * perPage,
+        currentPage * perPage
+      );
 
   return (
     <AdminLayout>
@@ -381,33 +486,64 @@ export default function UsersPage() {
               <thead>
                 <tr>
                   <th style={{ width: "60px" }}>#</th>
+                  <th style={{ width: "90px" }} className="text-center">Actions</th>
                   <th>User Details</th>
                   <th>Contact No</th>
                   <th>Role (Enum)</th>
                   <th>Status</th>
-                  <th>Created Date</th>
-                  <th className="text-end">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan="7" className="text-center py-4 text-muted">
+                    <td colSpan="6" className="text-center py-4 text-muted">
                       <div className="spinner-border spinner-border-sm me-2" role="status"></div>
                       Loading users from API...
                     </td>
                   </tr>
                 ) : filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="text-center py-4 text-muted">
+                    <td colSpan="6" className="text-center py-4 text-muted">
                       No users found. Click <strong>Add New User</strong> to create one.
                     </td>
                   </tr>
                 ) : (
-                  filteredUsers.map((user, index) => (
+                  paginatedUsers.map((user, index) => (
                     <tr key={user.id}>
                       <td>
-                        <span className="text-muted small">{index + 1}</span>
+                        <span className="text-muted small">{(currentPage - 1) * perPage + index + 1}</span>
+                      </td>
+                      <td className="text-center">
+                        <div className="table-actions justify-content-center">
+                          {can("user.edit") && <button
+                            className="btn-action btn-edit"
+                            title="Edit User"
+                            onClick={() =>
+                              setEditUser({
+                                id: user.id,
+                                name: user.name,
+                                email: user.email,
+                                phone: user.phone || "",
+                                role: user.role || "Sales Executive",
+                                status: user.status || "Active",
+                                password: "",
+                                profile_photo: user.profile_photo,
+                                newPhoto: null,
+                              })
+                            }
+                          >
+                            <i className="bi bi-pencil"></i>
+                          </button>}
+                          {can("user.delete") && user.role !== "Super Admin" && (
+                            <button
+                              className="btn-action btn-delete"
+                              title="Delete User"
+                              onClick={() => setDeleteTarget(user)}
+                            >
+                              <i className="bi bi-trash"></i>
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td>
                         <div className="d-flex align-items-center gap-2">
@@ -415,8 +551,8 @@ export default function UsersPage() {
                             <img
                               src={
                                 user.profile_photo.startsWith("http")
-                                  ? user.profile_photo
-                                  : `${BASE_STORAGE_URL}${user.profile_photo.startsWith("/") ? "" : "/"}${user.profile_photo}`
+                                    ? user.profile_photo
+                                    : `${BASE_STORAGE_URL}${user.profile_photo.startsWith("/") ? "" : "/"}${user.profile_photo}`
                               }
                               alt={user.name}
                               style={{
@@ -484,55 +620,29 @@ export default function UsersPage() {
                           </span>
                         )}
                       </td>
-                      <td>
-                        <span className="text-muted small">
-                          {user.created_at
-                            ? new Date(user.created_at).toLocaleDateString("en-IN", {
-                                day: "2-digit",
-                                month: "short",
-                                year: "numeric",
-                              })
-                            : "N/A"}
-                        </span>
-                      </td>
-                      <td className="text-end">
-                        <div className="table-actions justify-content-end">
-                          {can("user.edit") && <button
-                            className="btn-action btn-edit"
-                            title="Edit User"
-                            onClick={() =>
-                              setEditUser({
-                                id: user.id,
-                                name: user.name,
-                                email: user.email,
-                                phone: user.phone || "",
-                                role: user.role || "Sales Executive",
-                                status: user.status || "Active",
-                                password: "",
-                                profile_photo: user.profile_photo,
-                                newPhoto: null,
-                              })
-                            }
-                          >
-                            <i className="bi bi-pencil"></i>
-                          </button>}
-                          {can("user.delete") && user.role !== "Super Admin" && (
-                            <button
-                              className="btn-action btn-delete"
-                              title="Delete User"
-                              onClick={() => setDeleteTarget(user)}
-                            >
-                              <i className="bi bi-trash"></i>
-                            </button>
-                          )}
-                        </div>
-                      </td>
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {!isLoading && filteredUsers.length > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              lastPage={lastPage}
+              total={totalUsers}
+              perPage={perPage}
+              onPageChange={(page) => setCurrentPage(page)}
+              onPerPageChange={(newPerPage) => {
+                setPerPage(newPerPage);
+                setCurrentPage(1);
+              }}
+              perPageOptions={[10, 20, 50, 100]}
+              itemName="users"
+            />
+          )}
         </div>
 
         {/* ------------------------------------------------------------------
@@ -618,16 +728,16 @@ export default function UsersPage() {
                   {/* Profile Photo */}
                   <div className="mb-3">
                     <label className="form-label text-dark fw-bold small mb-1">
-                      Profile Photo <span className="text-danger">*</span>
+                      Profile Photo <span className="text-muted fw-normal">(Optional, max 2MB)</span>
                     </label>
                     <input
                       type="file"
                       className="form-control"
-                      accept="image/png, image/jpeg"
-                      onChange={(e) => setFormData({ ...formData, profile_photo: e.target.files[0] })}
+                      accept="image/png, image/jpeg, image/jpg, image/webp"
+                      onChange={(e) => handlePhotoSelect(e, false)}
                     />
                     <small className="text-muted d-block mt-1" style={{ fontSize: "12px" }}>
-                      Upload user profile image (PNG, JPG).
+                      Supports PNG, JPG, or WebP up to 2MB.
                     </small>
                   </div>
 
@@ -757,15 +867,17 @@ export default function UsersPage() {
 
                   {/* Profile Photo */}
                   <div className="mb-3">
-                    <label className="form-label text-dark fw-bold small mb-1">Profile Photo</label>
+                    <label className="form-label text-dark fw-bold small mb-1">
+                      Profile Photo <span className="text-muted fw-normal">(Optional, max 2MB)</span>
+                    </label>
                     <input
                       type="file"
                       className="form-control"
-                      accept="image/png, image/jpeg"
-                      onChange={(e) => setEditUser({ ...editUser, newPhoto: e.target.files[0] })}
+                      accept="image/png, image/jpeg, image/jpg, image/webp"
+                      onChange={(e) => handlePhotoSelect(e, true)}
                     />
                     <small className="text-muted d-block mt-1" style={{ fontSize: "12px" }}>
-                      Upload new PNG or JPG to change photo.
+                      Upload new PNG, JPG, or WebP up to 2MB to change photo.
                     </small>
                   </div>
 
