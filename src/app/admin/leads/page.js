@@ -466,6 +466,17 @@ export default function LeadsPage() {
     }
   }, [activeActionMenuId]);
 
+  useEffect(() => {
+    const handleOutsideBulkClick = () => {
+      setOpenStatusDropdown(false);
+      setOpenPriorityDropdown(false);
+    };
+    if (openStatusDropdown || openPriorityDropdown) {
+      window.addEventListener("click", handleOutsideBulkClick);
+      return () => window.removeEventListener("click", handleOutsideBulkClick);
+    }
+  }, [openStatusDropdown, openPriorityDropdown]);
+
   // Filter leads based on user selection (excluding converted deals)
   const filteredLeads = leads.filter((item) => {
     if (convertedLeadIds.some((cid) => String(cid) === String(item.id))) {
@@ -1203,7 +1214,8 @@ export default function LeadsPage() {
                 <button
                   className="btn btn-sm btn-outline-custom dropdown-toggle text-white"
                   type="button"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     setOpenStatusDropdown(!openStatusDropdown);
                     setOpenPriorityDropdown(false);
                   }}
@@ -1214,9 +1226,10 @@ export default function LeadsPage() {
                 {openStatusDropdown && (
                   <div
                     className="bulk-dropdown-menu dropdown-menu show"
-                    style={{ position: "absolute", right: 0, top: "110%" }}
+                    style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 1060 }}
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    <h6 className="dropdown-header text-white-50 px-2 py-1 small">Change Status To:</h6>
+                    <h6 className="dropdown-header text-muted px-2 py-1 small fw-bold">Change Status To:</h6>
                     {statuses.length > 0 ? (
                       statuses.map((st) => (
                         <button
@@ -1226,7 +1239,7 @@ export default function LeadsPage() {
                           onClick={() => handleBulkStatusUpdate(st.id, st.name)}
                         >
                           <i className="bi bi-arrow-right-circle text-primary"></i>
-                          {st.name}
+                          <span>{st.name}</span>
                         </button>
                       ))
                     ) : (
@@ -1239,7 +1252,7 @@ export default function LeadsPage() {
                             onClick={() => handleBulkStatusUpdate(null, stName)}
                           >
                             <i className="bi bi-arrow-right-circle text-primary"></i>
-                            {stName}
+                            <span>{stName}</span>
                           </button>
                         )
                       )
@@ -1253,7 +1266,8 @@ export default function LeadsPage() {
                 <button
                   className="btn btn-sm btn-outline-custom dropdown-toggle text-white"
                   type="button"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     setOpenPriorityDropdown(!openPriorityDropdown);
                     setOpenStatusDropdown(false);
                   }}
@@ -1264,9 +1278,10 @@ export default function LeadsPage() {
                 {openPriorityDropdown && (
                   <div
                     className="bulk-dropdown-menu dropdown-menu show"
-                    style={{ position: "absolute", right: 0, top: "110%" }}
+                    style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 1060 }}
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    <h6 className="dropdown-header text-white-50 px-2 py-1 small">Set Temperature:</h6>
+                    <h6 className="dropdown-header text-muted px-2 py-1 small fw-bold">Set Temperature:</h6>
                     <button
                       type="button"
                       className="dropdown-item text-danger fw-semibold"
