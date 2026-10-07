@@ -32,6 +32,13 @@ export default function QuotationMainPage() {
     return hasPermission(permission, currentUser);
   };
 
+  const formatDate = (date) => {
+    if (!date) return "-";
+    const [year, month, day] = date.split("T")[0].split("-");
+    if (!year || !month || !day) return date;
+    return `${day}-${month}-${year}`;
+  };
+
   // Active View Tab: 'records' (Default archive table per SS 1) vs 'maker' (Builder UI)
   const [activeTab, setActiveTab] = useState("records");
 
@@ -1461,7 +1468,9 @@ export default function QuotationMainPage() {
                         </td>
 
                         {/* 5. Date */}
-                        <td className="py-3 px-3 text-dark small">{quote.quotation_date}</td>
+                        <td className="py-3 px-3 text-dark small">
+                          {formatDate(quote.quotation_date)}
+                        </td>
 
                         {/* 6. Grand Total */}
                         <td className="py-3 px-3 text-end text-success fw-bold">
