@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import AdminLayout from "@/app/components/AdminLayout";
 import { quotationApi } from "@/lib/quotationApi";
+import api from "@/lib/axios";
 import { useToast } from "@/app/components/Toast";
 
 export default function QuotationDetailsPage() {
@@ -89,6 +90,27 @@ export default function QuotationDetailsPage() {
       if (res && res.status) {
         showToast(res.message || "Quotation emailed successfully with attached PDF!", "success");
         setShowSendModal(false);
+
+        // Auto log follow-up in lead history table
+        if (quotation.lead_id) {
+          try {
+            await api.post(`/leads/${quotation.lead_id}/follow-ups`, {
+              type: "Quotation Sent",
+              outcome: "Sent",
+              status: "Sent",
+              notes: `Official Quotation #${quotation.quotation_number} emailed to customer (${recipientEmail.trim()}). Total Amount: ₹${Number(quotation.total_amount || quotation.final_price || 0).toLocaleString("en-IN")}`,
+              follow_up_date: new Date().toISOString().split("T")[0],
+              follow_up_time: new Date().toLocaleTimeString("en-IN", {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+              quotation_id: quotation.id,
+            });
+          } catch (fuErr) {
+            console.log("Follow-up auto log note:", fuErr);
+          }
+        }
+
         // Refresh quotation to show 'sent' status & sent_at
         fetchQuotation();
       }

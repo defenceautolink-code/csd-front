@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import axios from "axios";
@@ -52,6 +52,59 @@ export default function LeadDetailPage() {
   // Quotations state
   const [quotations, setQuotations] = useState([]);
   const [isLoadingQuotations, setIsLoadingQuotations] = useState(false);
+
+  // Unified Follow-Up & Quotation History Timeline
+  const combinedHistory = useMemo(() => {
+    const list = (followUps || []).map((fu) => {
+      const isQuote =
+        fu.type?.toLowerCase().includes("quotation") ||
+        fu.outcome?.toLowerCase().includes("quotation") ||
+        Boolean(fu.quotation_id);
+
+      return {
+        ...fu,
+        _isQuotation: isQuote,
+        _quotationId: fu.quotation_id,
+        _sortDate: new Date(fu.follow_up_date || fu.created_at || 0).getTime(),
+      };
+    });
+
+    // Merge quotations from quotations list if not already logged as follow-up
+    (quotations || []).forEach((q) => {
+      const alreadyLogged = list.some(
+        (item) =>
+          String(item._quotationId) === String(q.id) ||
+          (item.notes && q.quotation_number && item.notes.includes(q.quotation_number))
+      );
+
+      if (!alreadyLogged) {
+        list.push({
+          id: `quote-${q.id}`,
+          type: "Quotation Sent",
+          status: q.status || "Sent",
+          outcome: q.status || "Sent",
+          follow_up_date:
+            q.quotation_date ||
+            (q.created_at ? new Date(q.created_at).toISOString().split("T")[0] : ""),
+          follow_up_time: q.created_at
+            ? new Date(q.created_at).toLocaleTimeString("en-IN", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "",
+          notes: `Official Quotation #${q.quotation_number || `#Q-${q.id}`} generated for ${
+            q.variant_name || q.model_name || lead?.model_variant || "Vehicle"
+          }. Total Amount: ₹${Number(q.total_amount || q.final_price || 0).toLocaleString("en-IN")}`,
+          user_name: q.created_by_name || q.user?.name || "Admin User (Super Admin)",
+          _isQuotation: true,
+          _quotationId: q.id,
+          _sortDate: new Date(q.quotation_date || q.created_at || 0).getTime(),
+        });
+      }
+    });
+
+    return list.sort((a, b) => (b._sortDate || 0) - (a._sortDate || 0));
+  }, [followUps, quotations, lead]);
 
   // Assignment history state
   const [assignments, setAssignments] = useState([]);
@@ -490,7 +543,7 @@ export default function LeadDetailPage() {
               <div className="d-flex align-items-center gap-2">
                 <i className="bi bi-telephone-outbound-fill text-primary fs-5"></i>
                 <h6 className="mb-0 fw-bold text-dark fs-6">
-                  Follow-Up History ({followUps.length})
+                  Follow-Up History ({combinedHistory.length})
                 </h6>
               </div>
 
@@ -523,7 +576,7 @@ export default function LeadDetailPage() {
                     <div className="spinner-border spinner-border-sm me-2"></div>
                     Loading follow-up interactions...
                   </div>
-                ) : followUps.length === 0 ? (
+                ) : combinedHistory.length === 0 ? (
                   <div className="text-center py-5 border rounded-3 bg-light">
                     <i className="bi bi-telephone-x text-muted display-6"></i>
                     <p className="mt-2 text-muted mb-3">No follow-up interaction logged yet for this lead.</p>
@@ -537,34 +590,99 @@ export default function LeadDetailPage() {
                   </div>
                 ) : (
                   <div className="d-flex flex-column gap-3">
-                    {followUps.map((fu, idx) => (
-                      <div key={fu.id || idx} className="p-3 border rounded-3 bg-light">
+                    {combinedHistory.map((fu, idx) => (
+                      <div
+                        key={fu.id || idx}
+                        className={`p-3 border rounded-3 ${
+                          fu._isQuotation
+                            ? "bg-white shadow-sm"
+                            : "bg-light"
+                        }`}
+                        style={{
+                          cursor: fu._quotationId ? "pointer" : "default",
+                          transition: "all 0.15s ease",
+                          borderColor: fu._isQuotation ? "#3F4912" : "#e2e8f0",
+                          borderLeftWidth: fu._isQuotation ? "4px" : "1px",
+                        }}
+                        onClick={() => {
+                          if (fu._quotationId) {
+                            router.push(`/admin/quotation/${fu._quotationId}`);
+                          }
+                        }}
+                        title={fu._quotationId ? "Click to view full quotation details" : undefined}
+                      >
                         <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
                           <div className="d-flex align-items-center gap-2">
-                            <span className="badge bg-primary text-white">
-                              <i className="bi bi-telephone-fill me-1"></i>
-                              {fu.type || "Phone Call"}
-                            </span>
-                            <span className="badge bg-info-subtle text-info border">
-                              {fu.status || fu.outcome || "Call Back"}
-                            </span>
+                            {fu._isQuotation ? (
+                              <>
+                                <span
+                                  className="badge text-white d-inline-flex align-items-center gap-1"
+                                  style={{ backgroundColor: "#3F4912" }}
+                                >
+                                  <i className="bi bi-file-earmark-spreadsheet-fill"></i>
+                                  {fu.type || "Quotation Sent"}
+                                </span>
+                                <span className="badge bg-success-subtle text-success border">
+                                  {fu.status || fu.outcome || "Sent"}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="badge bg-primary text-white">
+                                  <i className="bi bi-telephone-fill me-1"></i>
+                                  {fu.type || "Phone Call"}
+                                </span>
+                                <span className="badge bg-info-subtle text-info border">
+                                  {fu.status || fu.outcome || "Call Back"}
+                                </span>
+                              </>
+                            )}
                           </div>
-                          <span className="text-muted small">
-                            <i className="bi bi-calendar3 me-1"></i>
-                            {fu.follow_up_date} {fu.follow_up_time ? `at ${fu.follow_up_time}` : ""}
-                          </span>
+
+                          <div className="d-flex align-items-center gap-2">
+                            <span className="text-muted small">
+                              <i className="bi bi-calendar3 me-1"></i>
+                              {fu.follow_up_date} {fu.follow_up_time ? `at ${fu.follow_up_time}` : ""}
+                            </span>
+                            {fu._quotationId && (
+                              <Link
+                                href={`/admin/quotation/${fu._quotationId}`}
+                                className="btn btn-sm btn-outline-primary py-0 px-2 d-inline-flex align-items-center gap-1"
+                                style={{ fontSize: "0.78rem" }}
+                                onClick={(e) => e.stopPropagation()}
+                                title="Open Quotation View"
+                              >
+                                <i className="bi bi-eye"></i>
+                                <span>View Quotation</span>
+                              </Link>
+                            )}
+                          </div>
                         </div>
-                        {fu.notes && <p className="text-dark mb-2 small" style={{ whiteSpace: "pre-wrap" }}>{fu.notes}</p>}
+
+                        {fu.notes && (
+                          <p
+                            className="text-dark mb-2 small"
+                            style={{ whiteSpace: "pre-wrap" }}
+                          >
+                            {fu.notes}
+                          </p>
+                        )}
+
                         <div className="d-flex justify-content-between align-items-center text-muted small border-top pt-2">
                           <span>
                             Logged By: <strong className="text-dark">{fu.user_name || fu.user?.name || "Representative"}</strong>
                           </span>
-                          {fu.next_follow_up_date && (
+                          {fu._isQuotation && fu._quotationId ? (
+                            <span className="text-primary fw-semibold small d-inline-flex align-items-center gap-1">
+                              <i className="bi bi-box-arrow-up-right"></i>
+                              Click to open quotation
+                            </span>
+                          ) : fu.next_follow_up_date ? (
                             <span className="text-warning fw-semibold">
                               <i className="bi bi-alarm-fill me-1"></i>
                               Next: {fu.next_follow_up_date} {fu.next_follow_up_time || ""}
                             </span>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                     ))}
@@ -661,9 +779,9 @@ export default function LeadDetailPage() {
                                   <i className="bi bi-file-earmark-pdf text-danger"></i>
                                 </button>
                                 <Link
-                                  href={`/admin/quotation`}
+                                  href={`/admin/quotation/${q.id}`}
                                   className="btn btn-sm btn-outline-primary"
-                                  title="View in Quotations Desk"
+                                  title="View Quotation Details"
                                 >
                                   <i className="bi bi-eye"></i>
                                 </Link>
