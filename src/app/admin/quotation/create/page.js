@@ -482,6 +482,32 @@ function SendQuotationPageContent() {
       const res = await quotationApi.createQuotation(payload);
       if (res && res.status && res.data) {
         setSavedQuoteId(res.data.id);
+
+        // Auto-record interaction in lead follow-up history
+        if (selectedLeadId) {
+          try {
+            const calculatedTotal = itemsArray.reduce(
+              (acc, it) => acc + Number(it.unit_price || 0) * Number(it.quantity || 1),
+              0
+            );
+            await api.post(`/leads/${selectedLeadId}/follow-ups`, {
+              type: "Quotation Sent",
+              outcome: "Sent",
+              notes: `Official Quotation #${res.data.quotation_number} generated for ${
+                carName || "Vehicle"
+              } (${modelSpec || ""}). Total Amount: ₹${calculatedTotal.toLocaleString("en-IN")}`,
+              follow_up_date: new Date().toISOString().split("T")[0],
+              follow_up_time: new Date().toLocaleTimeString("en-IN", {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+              quotation_id: res.data.id,
+            });
+          } catch (fuErr) {
+            console.log("Follow-up auto log non-critical note:", fuErr);
+          }
+        }
+
         showToast(`Quotation #${res.data.quotation_number} saved successfully!`, "success");
         return res.data;
       }
