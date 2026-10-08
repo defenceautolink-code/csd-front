@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
@@ -12,14 +12,30 @@ export default function DealsPage() {
   const { showToast } = useToast();
 
   const [deals, setDeals] = useState([]);
+  const [pagination, setPagination] = useState({
+    current_page: 1,
+    last_page: 1,
+    per_page: 10,
+    total: 0,
+  });
   const [isLoading, setIsLoading] = useState(true);
+
+  // Filters & Search
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
+  const [stageFilter, setStageFilter] = useState("All");
+  const [paymentFilter, setPaymentFilter] = useState("All");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [perPage, setPerPage] = useState(10);
+
   const [activeActionMenuId, setActiveActionMenuId] = useState(null);
+
+  // Live Database KPI Metrics
+  const [metrics, setMetrics] = useState({
+    totalDeals: 0,
+    totalValue: 0,
+    totalCollected: 0,
+    pendingBalance: 0,
+  });
 
   // Payment Modal State
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -35,8 +51,28 @@ export default function DealsPage() {
   });
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
 
-  // View Deal / Payments Details Modal State
+  // Update Deal Modal State
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [selectedDealForUpdate, setSelectedDealForUpdate] = useState(null);
+  const [updateForm, setUpdateForm] = useState({
+    deal_status: "booking_confirmed",
+    color: "",
+    vin_chassis_number: "",
+    engine_number: "",
+    registration_number: "",
+    expected_delivery_date: "",
+    actual_delivery_date: "",
+    notes: "",
+  });
+  const [isSubmittingUpdate, setIsSubmittingUpdate] = useState(false);
+
+  // Delete Deal Modal State
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // View Deal / Ledger Modal State
   const [viewDeal, setViewDeal] = useState(null);
+  const [isVerifyingPaymentId, setIsVerifyingPaymentId] = useState(null);
 
   // Close 3-dots action menu on outside click
   useEffect(() => {
@@ -45,109 +81,114 @@ export default function DealsPage() {
     return () => window.removeEventListener("click", handleOutsideClick);
   }, []);
 
-  // Load Deals
-  const fetchDeals = async (from = startDate, to = endDate) => {
+  // Fetch Live KPI Metrics from Backend Analytics API
+  const fetchMetrics = async () => {
+    try {
+      const statsRes = await dealApi.getDealStats();
+      if (statsRes && statsRes.status && statsRes.data) {
+        const s = statsRes.data;
+        setMetrics({
+          totalDeals: Number(s.total_deals) || 0,
+          totalValue: Number(s.total_gross_value) || 0,
+          totalCollected: Number(s.total_collected) || 0,
+          pendingBalance: Number(s.total_pending_balance) || 0,
+        });
+      }
+    } catch (err) {
+      console.error("Error fetching deal metrics:", err);
+    }
+  };
+
+  // Fetch Deals with Server-Side Pagination & Filtering
+  const fetchDeals = async (
+    page = 1,
+    search = searchTerm,
+    stage = stageFilter,
+    from = startDate,
+    to = endDate,
+    customPerPage = pagination.per_page || 10
+  ) => {
     setIsLoading(true);
     try {
       const params = {
-        per_page: 100,
+        page,
+        per_page: customPerPage,
       };
-      // Send delivery date filter params specifically for backend when supported
+
+      if (search && search.trim()) {
+        params.search = search.trim();
+      }
+
+      if (stage && stage !== "All") {
+        params.deal_status = stage;
+      }
+
       if (from) {
-        params.delivery_from_date = from;
-        params.delivery_start_date = from;
+        params.from_date = from;
       }
+
       if (to) {
-        params.delivery_to_date = to;
-        params.delivery_end_date = to;
+        params.to_date = to;
       }
+
       const res = await dealApi.getDeals(params);
-      if (res && res.data) {
-        setDeals(res.data);
+      if (res && res.status && Array.isArray(res.data)) {
+        let list = res.data;
+
+        // Apply payment status client filter if requested
+        if (paymentFilter !== "All") {
+          list = list.filter((d) => d.payment_status === paymentFilter);
+        }
+
+        setDeals(list);
+
+        if (res.pagination) {
+          setPagination({
+            current_page: Number(res.pagination.current_page) || page,
+            last_page: Number(res.pagination.last_page) || 1,
+            per_page: Number(res.pagination.per_page) || customPerPage,
+            total: Number(res.pagination.total) || list.length,
+          });
+        }
       }
     } catch (e) {
-      console.error(e);
-      showToast("Error loading deals.", "error");
+      console.error("Error loading deals:", e);
+      showToast("Error loading deals from server.", "error");
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Debounced auto-fetch on search or filter change
   useEffect(() => {
-    fetchDeals(startDate, endDate);
+    fetchMetrics();
+    const timer = setTimeout(() => {
+      fetchDeals(1, searchTerm, stageFilter, startDate, endDate, pagination.per_page);
+    }, 300);
 
-    const handleUpdate = () => fetchDeals(startDate, endDate);
+    return () => clearTimeout(timer);
+  }, [searchTerm, stageFilter, paymentFilter, startDate, endDate]);
+
+  // Listener for deal events
+  useEffect(() => {
+    const handleUpdate = () => {
+      fetchMetrics();
+      fetchDeals(pagination.current_page, searchTerm, stageFilter, startDate, endDate, pagination.per_page);
+    };
+
     window.addEventListener("csd_deals_updated", handleUpdate);
     return () => {
       window.removeEventListener("csd_deals_updated", handleUpdate);
     };
-  }, [startDate, endDate]);
-
-  // Filtered Deals by Status, Delivery Date, and Search
-  const filteredDeals = useMemo(() => {
-    return deals.filter((deal) => {
-      if (statusFilter !== "All" && deal.deal_status !== statusFilter) {
-        return false;
-      }
-
-      // Delivery Date Filter
-      if (startDate || endDate) {
-        let delDate = null;
-        if (deal.expected_delivery_date) {
-          const raw = String(deal.expected_delivery_date).trim();
-          delDate = raw.includes("T") ? raw.split("T")[0] : raw.split(" ")[0];
-        }
-        if (!delDate) return false;
-        if (startDate && delDate < startDate) return false;
-        if (endDate && delDate > endDate) return false;
-      }
-
-      if (searchTerm.trim()) {
-        const q = searchTerm.toLowerCase();
-        const matchesName = deal.customer_name?.toLowerCase().includes(q);
-        const matchesPhone = deal.customer_phone?.toLowerCase().includes(q);
-        const matchesModel = deal.model_variant?.toLowerCase().includes(q);
-        const matchesVin = deal.vin_chassis_number?.toLowerCase().includes(q);
-        const matchesId = String(deal.id).includes(q) || (deal.deal_number && deal.deal_number.toLowerCase().includes(q));
-        return matchesName || matchesPhone || matchesModel || matchesVin || matchesId;
-      }
-      return true;
-    });
-  }, [deals, statusFilter, searchTerm, startDate, endDate]);
-
-  // Reset to first page on filter change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [statusFilter, searchTerm, startDate, endDate]);
-
-  // Paginated records for table
-  const totalItems = filteredDeals.length;
-  const lastPage = Math.max(1, Math.ceil(totalItems / perPage));
-  const paginatedDeals = useMemo(() => {
-    return filteredDeals.slice((currentPage - 1) * perPage, currentPage * perPage);
-  }, [filteredDeals, currentPage, perPage]);
-
-  // Aggregate Metrics
-  const metrics = useMemo(() => {
-    const totalDeals = deals.length;
-    const totalValue = deals.reduce((sum, d) => sum + (Number(d.net_amount) || 0), 0);
-    const totalCollected = deals.reduce((sum, d) => sum + (Number(d.paid_amount) || 0), 0);
-    const pendingBalance = Math.max(0, totalValue - totalCollected);
-    return {
-      totalDeals,
-      totalValue,
-      totalCollected,
-      pendingBalance,
-    };
-  }, [deals]);
+  }, [pagination.current_page, searchTerm, stageFilter, startDate, endDate, pagination.per_page]);
 
   // Open Payment Modal
   const handleOpenPayment = (deal) => {
     setSelectedDealForPayment(deal);
     setPaymentForm({
       amount: deal.balance_amount ? String(deal.balance_amount) : "",
-      payment_type: "part_payment",
-      payment_mode: "upi",
+      payment_type: "down_payment",
+      payment_mode: "neft_rtgs",
       payment_date: new Date().toISOString().split("T")[0],
       transaction_reference: "",
       bank_name: "",
@@ -156,7 +197,7 @@ export default function DealsPage() {
     setShowPaymentModal(true);
   };
 
-  // Submit Payment (calls api/payments)
+  // Submit Payment
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
     if (!selectedDealForPayment) return;
@@ -182,25 +223,106 @@ export default function DealsPage() {
     try {
       const res = await dealApi.addPayment(payload);
       showToast(res.message || `Payment of ₹${formatIndianCurrency(payAmount)} recorded successfully!`, "success");
-      setIsSubmittingPayment(false);
       setShowPaymentModal(false);
-      fetchDeals();
+      fetchMetrics();
+      fetchDeals(pagination.current_page, searchTerm, stageFilter, startDate, endDate, pagination.per_page);
     } catch (err) {
-      console.error(err);
-      showToast("Failed to record payment.", "error");
+      console.error("Payment error:", err);
+      showToast(err.response?.data?.message || "Failed to record payment.", "error");
+    } finally {
       setIsSubmittingPayment(false);
+    }
+  };
+
+  // Open Update Deal Modal
+  const handleOpenUpdateDeal = (deal) => {
+    setSelectedDealForUpdate(deal);
+    setUpdateForm({
+      deal_status: deal.raw_status || deal.deal_status || "booking_confirmed",
+      color: deal.color || "",
+      vin_chassis_number: deal.vin_chassis_number || "",
+      engine_number: deal.engine_number || "",
+      registration_number: deal.registration_number || "",
+      expected_delivery_date: deal.expected_delivery_date ? deal.expected_delivery_date.split("T")[0] : "",
+      actual_delivery_date: deal.actual_delivery_date ? deal.actual_delivery_date.split("T")[0] : "",
+      notes: deal.notes || "",
+    });
+    setShowUpdateModal(true);
+  };
+
+  // Submit Deal Update
+  const handleUpdateDealSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedDealForUpdate) return;
+
+    setIsSubmittingUpdate(true);
+    try {
+      const res = await dealApi.updateDeal(selectedDealForUpdate.id, updateForm);
+      showToast(res.message || "Deal details and delivery stage updated!", "success");
+      setShowUpdateModal(false);
+      fetchMetrics();
+      fetchDeals(pagination.current_page, searchTerm, stageFilter, startDate, endDate, pagination.per_page);
+    } catch (err) {
+      console.error("Update deal error:", err);
+      showToast(err.response?.data?.message || "Failed to update deal details.", "error");
+    } finally {
+      setIsSubmittingUpdate(false);
+    }
+  };
+
+  // Delete Deal
+  const handleDeleteDeal = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      const res = await dealApi.deleteDeal(deleteTarget.id);
+      showToast(res.message || "Deal deleted successfully!", "success");
+      setDeleteTarget(null);
+      fetchMetrics();
+      fetchDeals(pagination.current_page, searchTerm, stageFilter, startDate, endDate, pagination.per_page);
+    } catch (err) {
+      console.error("Delete deal error:", err);
+      showToast(err.response?.data?.message || "Failed to delete deal.", "error");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Verify / Clear Payment in Ledger Modal
+  const handleVerifyPayment = async (paymentId) => {
+    setIsVerifyingPaymentId(paymentId);
+    try {
+      const res = await dealApi.verifyPayment(paymentId, "clear");
+      showToast(res.message || "Payment verified and cleared successfully!", "success");
+
+      // Update in viewDeal modal
+      if (viewDeal && viewDeal.payments) {
+        const updatedPayments = viewDeal.payments.map((p) =>
+          p.id === paymentId ? { ...p, status: "cleared" } : p
+        );
+        setViewDeal({ ...viewDeal, payments: updatedPayments });
+      }
+
+      fetchMetrics();
+      fetchDeals(pagination.current_page, searchTerm, stageFilter, startDate, endDate, pagination.per_page);
+    } catch (err) {
+      console.error("Verify payment error:", err);
+      showToast(err.response?.data?.message || "Failed to verify payment.", "error");
+    } finally {
+      setIsVerifyingPaymentId(null);
     }
   };
 
   // Export CSV
   const handleExportCSV = () => {
-    if (filteredDeals.length === 0) {
-      showToast("No deals to export.", "info");
+    if (deals.length === 0) {
+      showToast("No deals available to export.", "info");
       return;
     }
 
     const headers = [
       "Deal ID",
+      "Deal Number",
       "Customer Name",
       "Phone",
       "Model Variant",
@@ -211,12 +333,14 @@ export default function DealsPage() {
       "Net Value",
       "Paid Amount",
       "Balance Pending",
-      "Status",
+      "Deal Stage",
+      "Payment Status",
       "Expected Delivery",
     ];
 
-    const rows = filteredDeals.map((d) => [
+    const rows = deals.map((d) => [
       `"${d.id}"`,
+      `"${d.deal_number}"`,
       `"${d.customer_name}"`,
       `"${d.customer_phone}"`,
       `"${d.model_variant}"`,
@@ -228,6 +352,7 @@ export default function DealsPage() {
       d.paid_amount,
       d.balance_amount,
       `"${d.deal_status}"`,
+      `"${d.payment_status}"`,
       `"${d.expected_delivery_date || ""}"`,
     ]);
 
@@ -245,13 +370,22 @@ export default function DealsPage() {
     showToast("Deals report exported successfully!", "success");
   };
 
+  const getStageBadgeClass = (stage) => {
+    const s = String(stage || "").toLowerCase();
+    if (s.includes("delivered")) return "bg-success text-white";
+    if (s.includes("ready")) return "bg-primary text-white";
+    if (s.includes("transit")) return "bg-info text-dark";
+    if (s.includes("cancel")) return "bg-danger text-white";
+    return "bg-secondary text-white";
+  };
+
   const payAmountNum = parseFloat(paymentForm.amount) || 0;
 
   return (
     <AdminLayout>
       <div className="page-body">
         {/* Page Breadcrumbs & Header Actions */}
-        <div className="page-header-wrapper">
+        <div className="page-header-wrapper mb-3">
           <div>
             <ul className="breadcrumb-custom">
               <li className="breadcrumb-item">
@@ -262,14 +396,17 @@ export default function DealsPage() {
               </li>
               <li className="breadcrumb-item active">Deals & Bookings</li>
             </ul>
-            <h1 className="page-title mt-1">Vehicle Deals & Bookings</h1>
-            <p className="text-muted small mb-0">
+            <h1 className="page-title mt-1 fs-3 fw-bold text-dark">Vehicle Deals & Bookings</h1>
+            <p className="text-secondary small mb-0">
               Manage locked deals, vehicle chassis allocations, payment milestones, and delivery schedules.
             </p>
           </div>
 
           <div className="page-header-actions d-flex align-items-center gap-2">
-
+            <Link href="/admin/leads" className="btn btn-outline-primary d-flex align-items-center gap-1">
+              <i className="bi bi-funnel-fill"></i>
+              <span>Convert Lead</span>
+            </Link>
             <button
               className="btn btn-outline-custom d-flex align-items-center gap-2"
               onClick={handleExportCSV}
@@ -280,12 +417,12 @@ export default function DealsPage() {
           </div>
         </div>
 
-        {/* KPI Stat Cards */}
+        {/* KPI Stat Cards (Powered by Backend Analytics API) */}
         <div className="row g-3 mb-4">
           <div className="col-xl-3 col-sm-6">
             <div className="card stat-card shadow-sm border-0">
               <div className="stat-card-header">
-                <span className="stat-card-title">Active Deals</span>
+                <span className="stat-card-title">Total Active Deals</span>
                 <div className="stat-icon-box primary">
                   <i className="bi bi-trophy-fill"></i>
                 </div>
@@ -305,9 +442,6 @@ export default function DealsPage() {
               <div className="stat-card-value text-dark">
                 ₹{formatIndianCurrency(metrics.totalValue)}
               </div>
-              {/* <span className="text-muted small fw-semibold fst-italic" style={{ fontSize: "11px" }}>
-                {numberToWords(metrics.totalValue)}
-              </span> */}
             </div>
           </div>
 
@@ -322,7 +456,6 @@ export default function DealsPage() {
               <div className="stat-card-value text-success">
                 ₹{formatIndianCurrency(metrics.totalCollected)}
               </div>
-             
             </div>
           </div>
 
@@ -334,10 +467,9 @@ export default function DealsPage() {
                   <i className="bi bi-clock-history"></i>
                 </div>
               </div>
-              <div className="stat-card-value text-warning">
+              <div className="stat-card-value text-danger">
                 ₹{formatIndianCurrency(metrics.pendingBalance)}
               </div>
-              
             </div>
           </div>
         </div>
@@ -349,28 +481,53 @@ export default function DealsPage() {
               <div className="d-flex align-items-center gap-2">
                 <h5 className="card-title mb-0 fw-bold">Active Vehicle Deals</h5>
                 <span className="badge bg-success-subtle text-success rounded-pill px-2">
-                  {filteredDeals.length} Deals
+                  {pagination.total || deals.length} Records
                 </span>
               </div>
 
               {/* Filters & Search */}
               <div className="d-flex flex-wrap align-items-center gap-2 ms-auto">
-                <div className="btn-group btn-group-sm" role="group">
-                  {["All", "Booked", "Partially Paid", "Fully Paid"].map((st) => (
-                    <button
-                      key={st}
-                      type="button"
-                      className={`btn ${statusFilter === st ? "btn-primary" : "btn-outline-secondary"}`}
-                      onClick={() => setStatusFilter(st)}
-                    >
-                      {st}
-                    </button>
-                  ))}
+                {/* Stage Filter */}
+                <div className="input-group input-group-sm" style={{ width: "165px" }}>
+                  <span className="input-group-text bg-light text-muted px-2" title="Delivery Stage">
+                    <i className="bi bi-truck me-1"></i>
+                    <span style={{ fontSize: "11px", fontWeight: "600" }}>Stage</span>
+                  </span>
+                  <select
+                    className="form-select form-select-sm px-1"
+                    value={stageFilter}
+                    onChange={(e) => setStageFilter(e.target.value)}
+                  >
+                    <option value="All">All Stages</option>
+                    <option value="booking_confirmed">Booked</option>
+                    <option value="in_transit">In Transit</option>
+                    <option value="ready_for_delivery">Ready for Delivery</option>
+                    <option value="delivered">Delivered</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
                 </div>
 
-                {/* Delivery Date Filter: From */}
-                <div className="input-group input-group-sm" style={{ width: "165px" }}>
-                  <span className="input-group-text bg-light text-muted px-2" title="Delivery Date From">
+                {/* Payment Status Filter */}
+                <div className="input-group input-group-sm" style={{ width: "160px" }}>
+                  <span className="input-group-text bg-light text-muted px-2" title="Payment Status">
+                    <i className="bi bi-credit-card me-1"></i>
+                    <span style={{ fontSize: "11px", fontWeight: "600" }}>Payment</span>
+                  </span>
+                  <select
+                    className="form-select form-select-sm px-1"
+                    value={paymentFilter}
+                    onChange={(e) => setPaymentFilter(e.target.value)}
+                  >
+                    <option value="All">All Payments</option>
+                    <option value="Fully Paid">Fully Paid</option>
+                    <option value="Partially Paid">Partially Paid</option>
+                    <option value="Pending">Pending</option>
+                  </select>
+                </div>
+
+                {/* Booking Date From */}
+                <div className="input-group input-group-sm" style={{ width: "155px" }}>
+                  <span className="input-group-text bg-light text-muted px-2">
                     <i className="bi bi-calendar-event me-1"></i>
                     <span style={{ fontSize: "11px", fontWeight: "600" }}>From</span>
                   </span>
@@ -379,13 +536,12 @@ export default function DealsPage() {
                     className="form-control form-control-sm px-1"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    title="Delivery date from"
                   />
                 </div>
 
-                {/* Delivery Date Filter: To */}
-                <div className="input-group input-group-sm" style={{ width: "160px" }}>
-                  <span className="input-group-text bg-light text-muted px-2" title="Delivery Date To">
+                {/* Booking Date To */}
+                <div className="input-group input-group-sm" style={{ width: "150px" }}>
+                  <span className="input-group-text bg-light text-muted px-2">
                     <i className="bi bi-calendar-check me-1"></i>
                     <span style={{ fontSize: "11px", fontWeight: "600" }}>To</span>
                   </span>
@@ -394,21 +550,22 @@ export default function DealsPage() {
                     className="form-control form-control-sm px-1"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    title="Delivery date to"
                   />
                 </div>
 
-                {/* Clear Date Filter Button */}
-                {(startDate || endDate) && (
+                {/* Clear Filters Button */}
+                {(startDate || endDate || stageFilter !== "All" || paymentFilter !== "All" || searchTerm) && (
                   <button
                     type="button"
                     className="btn btn-sm btn-outline-secondary px-2 d-flex align-items-center gap-1"
-                    style={{ fontSize: "0.8rem", height: "31px" }}
                     onClick={() => {
                       setStartDate("");
                       setEndDate("");
+                      setStageFilter("All");
+                      setPaymentFilter("All");
+                      setSearchTerm("");
                     }}
-                    title="Clear Delivery Date Filter"
+                    title="Clear Filters"
                   >
                     <i className="bi bi-x-circle"></i>
                     <span>Reset</span>
@@ -424,7 +581,7 @@ export default function DealsPage() {
                     <input
                       type="text"
                       className="form-control border-start-0"
-                      placeholder="Search name, phone..."
+                      placeholder="Search name, phone, VIN..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
@@ -444,40 +601,41 @@ export default function DealsPage() {
           </div>
 
           <div className="table-responsive">
-            <table className="table table-custom mb-0">
-              <thead>
+            <table className="table table-custom align-middle mb-0">
+              <thead className="border-bottom border-secondary border-opacity-25 text-secondary small text-uppercase">
                 <tr>
-                  <th style={{ width: "55px" }} className="text-center">Action</th>
-                  <th style={{ width: "80px" }}># Deal</th>
+                  <th style={{ width: "70px" }} className="text-center">Action</th>
+                  <th style={{ width: "100px" }}># Deal</th>
                   <th>Customer</th>
                   <th>Vehicle & Spec</th>
                   <th>Deal Financials</th>
                   <th>Payment Status</th>
+                  <th>Delivery Stage</th>
                   <th>Delivery Date</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan="7" className="text-center py-4 text-muted">
+                    <td colSpan="8" className="text-center py-4 text-muted">
                       <div className="spinner-border spinner-border-sm me-2" role="status"></div>
-                      Loading deals...
+                      Loading deals from database...
                     </td>
                   </tr>
-                ) : filteredDeals.length === 0 ? (
+                ) : deals.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="text-center py-5 text-muted">
+                    <td colSpan="8" className="text-center py-5 text-muted">
                       <div className="mb-2">
                         <i className="bi bi-trophy fs-1 text-secondary opacity-50"></i>
                       </div>
-                      <p className="mb-2 fw-semibold">No active deals found.</p>
+                      <p className="mb-2 fw-semibold">No active deals found matching your criteria.</p>
                       <Link href="/admin/leads" className="btn btn-sm btn-primary">
                         <i className="bi bi-funnel-fill me-1"></i> Convert Leads from Pipeline
                       </Link>
                     </td>
                   </tr>
                 ) : (
-                  paginatedDeals.map((deal) => {
+                  deals.map((deal) => {
                     const pctPaid = Math.min(
                       100,
                       Math.round(((deal.paid_amount || 0) / (deal.net_amount || 1)) * 100)
@@ -504,7 +662,7 @@ export default function DealsPage() {
                               <div
                                 className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute start-0 text-start"
                                 style={{
-                                  minWidth: "190px",
+                                  minWidth: "210px",
                                   zIndex: 1050,
                                   top: "100%",
                                   backgroundColor: "#FFFFFF",
@@ -527,6 +685,19 @@ export default function DealsPage() {
                                   </button>
                                 )}
 
+                                {/* Update Deal & Stage */}
+                                <button
+                                  type="button"
+                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-dark"
+                                  onClick={() => {
+                                    setActiveActionMenuId(null);
+                                    handleOpenUpdateDeal(deal);
+                                  }}
+                                >
+                                  <i className="bi bi-pencil-square text-warning"></i>
+                                  <span>Update Deal & Stage</span>
+                                </button>
+
                                 {/* View Voucher & History */}
                                 <button
                                   type="button"
@@ -537,7 +708,7 @@ export default function DealsPage() {
                                   }}
                                 >
                                   <i className="bi bi-receipt text-primary"></i>
-                                  <span>View Voucher & History</span>
+                                  <span>View Voucher & Ledger</span>
                                 </button>
 
                                 {/* Linked Quotation */}
@@ -551,6 +722,21 @@ export default function DealsPage() {
                                     <span>View Quotation #{deal.quotation_id}</span>
                                   </Link>
                                 )}
+
+                                <div className="dropdown-divider my-1"></div>
+
+                                {/* Delete Deal */}
+                                <button
+                                  type="button"
+                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-danger"
+                                  onClick={() => {
+                                    setActiveActionMenuId(null);
+                                    setDeleteTarget(deal);
+                                  }}
+                                >
+                                  <i className="bi bi-trash-fill text-danger"></i>
+                                  <span>Delete Deal</span>
+                                </button>
                               </div>
                             )}
                           </div>
@@ -558,8 +744,8 @@ export default function DealsPage() {
 
                         {/* 2. Deal ID */}
                         <td>
-                          <span className="badge bg-light text-dark border font-monospace px-2 py-1">
-                            #{deal.id}
+                          <span className="badge bg-light text-primary border font-monospace px-2 py-1">
+                            {deal.deal_number || `#${deal.id}`}
                           </span>
                         </td>
 
@@ -569,8 +755,13 @@ export default function DealsPage() {
                             <h6 className="mb-0 text-dark fw-bold">{deal.customer_name}</h6>
                             <div className="small text-muted">
                               <i className="bi bi-telephone me-1"></i>
-                              {deal.customer_phone}
+                              {deal.customer_phone || "-"}
                             </div>
+                            {deal.customer_city && (
+                              <div className="small text-secondary" style={{ fontSize: "11px" }}>
+                                <i className="bi bi-geo-alt me-1"></i>{deal.customer_city}
+                              </div>
+                            )}
                           </div>
                         </td>
 
@@ -578,11 +769,16 @@ export default function DealsPage() {
                         <td>
                           <div>
                             <div className="fw-semibold text-dark">{deal.model_variant}</div>
-                            <div className="small text-muted d-flex align-items-center gap-2 mt-1">
+                            <div className="small text-muted d-flex align-items-center gap-2 mt-1 flex-wrap">
                               <span className="badge bg-light text-dark border">
                                 <i className="bi bi-palette me-1"></i>
                                 {deal.color || "Standard"}
                               </span>
+                              {deal.vin_chassis_number && (
+                                <span className="badge bg-light text-secondary border font-monospace" title="VIN/Chassis">
+                                  {deal.vin_chassis_number}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -594,8 +790,8 @@ export default function DealsPage() {
                               ₹{formatIndianCurrency(deal.net_amount)}
                             </div>
                             {deal.discount_amount > 0 && (
-                              <div className="small text-success">
-                                Incl. ₹{formatIndianCurrency(deal.discount_amount)} discount
+                              <div className="small text-success" style={{ fontSize: "11px" }}>
+                                Incl. ₹{formatIndianCurrency(deal.discount_amount)} disc.
                               </div>
                             )}
                           </div>
@@ -624,13 +820,14 @@ export default function DealsPage() {
                             </div>
                             <div className="d-flex justify-content-between align-items-center mt-1">
                               <span
-                                className={`badge ${deal.deal_status === "Fully Paid"
-                                    ? "bg-success-subtle text-success"
-                                    : "bg-warning-subtle text-warning"
-                                  } px-2 py-0.5`}
+                                className={`badge ${
+                                  deal.payment_status === "Fully Paid"
+                                    ? "bg-success text-white"
+                                    : "bg-warning text-dark"
+                                } px-2 py-0.5`}
                                 style={{ fontSize: "10px" }}
                               >
-                                {deal.deal_status}
+                                {deal.payment_status}
                               </span>
                               <span className="text-muted" style={{ fontSize: "10px" }}>
                                 {pctPaid}%
@@ -639,16 +836,23 @@ export default function DealsPage() {
                           </div>
                         </td>
 
-                        {/* 7. Delivery Date */}
+                        {/* 7. Delivery Stage */}
+                        <td>
+                          <span className={`badge text-capitalize px-2 py-1 ${getStageBadgeClass(deal.deal_status)}`}>
+                            {deal.deal_status?.replace(/_/g, " ")}
+                          </span>
+                        </td>
+
+                        {/* 8. Delivery Date */}
                         <td>
                           <span className="small text-dark fw-semibold">
                             <i className="bi bi-calendar-event text-primary me-1"></i>
                             {deal.expected_delivery_date
                               ? new Date(deal.expected_delivery_date).toLocaleDateString("en-IN", {
-                                day: "2-digit",
-                                month: "short",
-                                year: "numeric",
-                              })
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                })
                               : "Pending"}
                           </span>
                         </td>
@@ -660,17 +864,17 @@ export default function DealsPage() {
             </table>
           </div>
 
-          {/* Pagination Controls */}
-          {!isLoading && filteredDeals.length > 0 && (
+          {/* Server-Side Pagination Controls */}
+          {!isLoading && pagination.total > 0 && (
             <Pagination
-              currentPage={currentPage}
-              lastPage={lastPage}
-              total={totalItems}
-              perPage={perPage}
-              onPageChange={(page) => setCurrentPage(page)}
+              currentPage={pagination.current_page || 1}
+              lastPage={pagination.last_page || 1}
+              total={pagination.total || deals.length}
+              perPage={pagination.per_page || 10}
+              onPageChange={(page) => fetchDeals(page, searchTerm, stageFilter, startDate, endDate, pagination.per_page)}
               onPerPageChange={(newPerPage) => {
-                setPerPage(newPerPage);
-                setCurrentPage(1);
+                setPagination((prev) => ({ ...prev, per_page: newPerPage }));
+                fetchDeals(1, searchTerm, stageFilter, startDate, endDate, newPerPage);
               }}
               perPageOptions={[10, 20, 50, 100]}
               itemName="deals"
@@ -732,7 +936,7 @@ export default function DealsPage() {
                         ₹{formatIndianCurrency(selectedDealForPayment.balance_amount)}
                       </h6>
                       <span className="badge bg-warning-subtle text-warning">
-                        {selectedDealForPayment.deal_status}
+                        {selectedDealForPayment.payment_status}
                       </span>
                     </div>
                   </div>
@@ -789,7 +993,6 @@ export default function DealsPage() {
                         <option value="down_payment">Down Payment</option>
                         <option value="token_advance">Token Advance</option>
                         <option value="part_payment">Part Payment</option>
-                        <option value="final_payment">Final Settlement</option>
                       </select>
                     </div>
 
@@ -809,7 +1012,6 @@ export default function DealsPage() {
                         <option value="upi">UPI / QR Code</option>
                         <option value="cash">Cash</option>
                         <option value="cheque">Cheque / Demand Draft</option>
-                        <option value="card">Debit / Credit Card</option>
                       </select>
                     </div>
 
@@ -829,19 +1031,18 @@ export default function DealsPage() {
                       />
                     </div>
 
-                    {/* Conditional: If Cash, hide Transaction Reference, Bank Name and Notes */}
+                    {/* Conditional: If Cash, hide Transaction Reference & Bank */}
                     {paymentForm.payment_mode === "cash" ? (
                       <div className="col-12">
                         <div className="p-2 px-3 bg-light border border-success-subtle rounded d-flex align-items-center gap-2 text-success small">
                           <i className="bi bi-cash-stack fs-5 text-success"></i>
                           <div>
-                            <strong>Cash Payment Mode:</strong> Transaction Reference, Bank Name aur Remarks cash ke liye required nahi hain. Cash counter par directly collect kiya jayega.
+                            <strong>Cash Mode:</strong> Direct cash collection at counter.
                           </div>
                         </div>
                       </div>
                     ) : (
                       <>
-                        {/* Transaction Reference */}
                         <div className="col-md-6">
                           <label className="form-label text-dark fw-bold small mb-1">
                             Transaction Reference / UTR
@@ -860,7 +1061,6 @@ export default function DealsPage() {
                           />
                         </div>
 
-                        {/* Bank Name */}
                         <div className="col-md-6">
                           <label className="form-label text-dark fw-bold small mb-1">
                             Bank Name
@@ -876,7 +1076,6 @@ export default function DealsPage() {
                           />
                         </div>
 
-                        {/* Notes */}
                         <div className="col-12">
                           <label className="form-label text-dark fw-bold small mb-1">
                             Payment Notes / Remarks
@@ -920,13 +1119,221 @@ export default function DealsPage() {
         )}
 
         {/* ===================================================================
-            MODAL 2: VIEW DEAL VOUCHER & PAYMENT HISTORY
+            MODAL 2: UPDATE DEAL STAGE & DETAILS
+            =================================================================== */}
+        {showUpdateModal && selectedDealForUpdate && (
+          <div className="modal-backdrop-custom" onClick={() => setShowUpdateModal(false)}>
+            <div
+              className="modal-dialog-custom"
+              onClick={(e) => e.stopPropagation()}
+              style={{ maxWidth: "600px" }}
+            >
+              <div className="modal-header-custom d-flex justify-content-between align-items-center">
+                <div className="d-flex align-items-center gap-2">
+                  <i className="bi bi-pencil-square text-warning fs-5"></i>
+                  <h5 className="modal-title-custom text-white mb-0 fw-bold">
+                    Update Deal & Delivery Stage
+                  </h5>
+                </div>
+                <button
+                  type="button"
+                  className="btn-close btn-close-white"
+                  onClick={() => setShowUpdateModal(false)}
+                ></button>
+              </div>
+
+              <form onSubmit={handleUpdateDealSubmit}>
+                <div className="modal-body-custom py-3">
+                  {/* Deal Header */}
+                  <div className="p-3 mb-3 bg-light rounded border d-flex justify-content-between align-items-center">
+                    <div>
+                      <span className="small text-muted text-uppercase fw-bold">Deal Reference</span>
+                      <h6 className="mb-0 text-dark fw-bold">{selectedDealForUpdate.deal_number}</h6>
+                      <div className="small text-muted">{selectedDealForUpdate.customer_name} ({selectedDealForUpdate.model_variant})</div>
+                    </div>
+                  </div>
+
+                  <div className="row g-3">
+                    {/* Deal Status / Delivery Stage */}
+                    <div className="col-md-6">
+                      <label className="form-label text-dark fw-bold small mb-1">
+                        Delivery Stage <span className="text-danger">*</span>
+                      </label>
+                      <select
+                        className="form-select"
+                        value={updateForm.deal_status}
+                        onChange={(e) => setUpdateForm({ ...updateForm, deal_status: e.target.value })}
+                        required
+                      >
+                        <option value="booking_confirmed">Booking Confirmed</option>
+                        <option value="in_transit">In Transit</option>
+                        <option value="ready_for_delivery">Ready for Delivery</option>
+                        <option value="delivered">Delivered</option>
+                        <option value="cancelled">Cancelled</option>
+                      </select>
+                    </div>
+
+                    {/* Color */}
+                    <div className="col-md-6">
+                      <label className="form-label text-dark fw-bold small mb-1">Vehicle Color</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. Polar White, Phantom Black"
+                        value={updateForm.color}
+                        onChange={(e) => setUpdateForm({ ...updateForm, color: e.target.value })}
+                      />
+                    </div>
+
+                    {/* VIN / Chassis Number */}
+                    <div className="col-md-6">
+                      <label className="form-label text-dark fw-bold small mb-1">VIN / Chassis Number</label>
+                      <input
+                        type="text"
+                        className="form-control font-monospace"
+                        placeholder="e.g. MALBA81CLNM123456"
+                        value={updateForm.vin_chassis_number}
+                        onChange={(e) => setUpdateForm({ ...updateForm, vin_chassis_number: e.target.value })}
+                      />
+                    </div>
+
+                    {/* Expected Delivery Date */}
+                    <div className="col-md-6">
+                      <label className="form-label text-dark fw-bold small mb-1">Expected Delivery Date</label>
+                      <input
+                        type="date"
+                        className="form-control"
+                        value={updateForm.expected_delivery_date}
+                        onChange={(e) => setUpdateForm({ ...updateForm, expected_delivery_date: e.target.value })}
+                      />
+                    </div>
+
+                    {/* Engine Number */}
+                    <div className="col-md-6">
+                      <label className="form-label text-dark fw-bold small mb-1">Engine Number</label>
+                      <input
+                        type="text"
+                        className="form-control font-monospace"
+                        placeholder="e.g. K15C123456"
+                        value={updateForm.engine_number}
+                        onChange={(e) => setUpdateForm({ ...updateForm, engine_number: e.target.value })}
+                      />
+                    </div>
+
+                    {/* Registration Number */}
+                    <div className="col-md-6">
+                      <label className="form-label text-dark fw-bold small mb-1">Registration / RTO No.</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. GJ-01-AB-1234"
+                        value={updateForm.registration_number}
+                        onChange={(e) => setUpdateForm({ ...updateForm, registration_number: e.target.value })}
+                      />
+                    </div>
+
+                    {/* Notes */}
+                    <div className="col-12">
+                      <label className="form-label text-dark fw-bold small mb-1">Deal Notes / Remarks</label>
+                      <textarea
+                        className="form-control"
+                        rows="2"
+                        placeholder="Enter any notes or special requirements..."
+                        value={updateForm.notes}
+                        onChange={(e) => setUpdateForm({ ...updateForm, notes: e.target.value })}
+                      ></textarea>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="modal-footer-custom d-flex justify-content-end gap-2 pt-3">
+                  <button
+                    type="button"
+                    className="btn btn-outline-custom"
+                    onClick={() => setShowUpdateModal(false)}
+                    disabled={isSubmittingUpdate}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-primary d-inline-flex align-items-center gap-1"
+                    disabled={isSubmittingUpdate}
+                  >
+                    <i className="bi bi-check-circle"></i>
+                    <span>{isSubmittingUpdate ? "Saving..." : "Save Changes"}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================================
+            MODAL 3: DELETE CONFIRMATION
+            =================================================================== */}
+        {deleteTarget && (
+          <div className="modal-backdrop-custom" onClick={() => !isDeleting && setDeleteTarget(null)}>
+            <div className="modal-dialog-custom modal-sm" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "420px" }}>
+              <div className="modal-header-custom bg-danger text-white">
+                <h5 className="modal-title-custom text-white mb-0 fs-6 fw-bold">
+                  <i className="bi bi-exclamation-triangle-fill me-2"></i> Delete Deal
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close btn-close-white"
+                  onClick={() => !isDeleting && setDeleteTarget(null)}
+                  disabled={isDeleting}
+                ></button>
+              </div>
+              <div className="modal-body-custom p-4 text-center">
+                <p className="mb-2 text-dark">
+                  Are you sure you want to delete deal <strong>{deleteTarget.deal_number}</strong>?
+                </p>
+                <div className="text-secondary small">Customer: {deleteTarget.customer_name}</div>
+                <div className="text-danger small mt-2">This action cannot be undone.</div>
+              </div>
+              <div className="modal-footer-custom d-flex justify-content-between p-3">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary"
+                  onClick={() => setDeleteTarget(null)}
+                  disabled={isDeleting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-danger d-flex align-items-center gap-1"
+                  onClick={handleDeleteDeal}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm" role="status"></span>
+                      <span>Deleting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <i className="bi bi-trash-fill"></i>
+                      <span>Yes, Delete</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================================
+            MODAL 4: VIEW DEAL VOUCHER & PAYMENT HISTORY
             =================================================================== */}
         {viewDeal && (
           <div className="modal-backdrop-custom" onClick={() => setViewDeal(null)}>
             <div
               className="modal-dialog-custom modal-lg"
               onClick={(e) => e.stopPropagation()}
+              id="printable-deal-ledger"
             >
               <div className="modal-header-custom d-flex justify-content-between align-items-center">
                 <div className="d-flex align-items-center gap-2">
@@ -1003,21 +1410,27 @@ export default function DealsPage() {
                   <p className="text-muted small py-2">No payment transactions recorded yet.</p>
                 ) : (
                   <div className="table-responsive">
-                    <table className="table table-sm table-bordered mb-0">
+                    <table className="table table-sm table-bordered align-middle mb-0">
                       <thead className="table-light small">
                         <tr>
                           <th>Date</th>
+                          <th>Receipt #</th>
                           <th>Type</th>
                           <th>Mode</th>
                           <th>Reference / UTR</th>
                           <th>Bank</th>
                           <th className="text-end">Amount</th>
+                          <th className="text-center">Status</th>
+                          <th className="text-center">Action</th>
                         </tr>
                       </thead>
                       <tbody className="small">
                         {viewDeal.payments.map((p, idx) => (
                           <tr key={p.id || idx}>
                             <td>{p.payment_date || new Date().toISOString().split("T")[0]}</td>
+                            <td className="font-monospace text-primary fw-bold">
+                              {p.receipt_number || `#REC-${p.id}`}
+                            </td>
                             <td>
                               <span className="badge bg-light text-dark border">
                                 {p.payment_type?.replace(/_/g, " ").toUpperCase()}
@@ -1032,6 +1445,44 @@ export default function DealsPage() {
                             <td>{p.bank_name || "-"}</td>
                             <td className="text-end fw-bold text-success">
                               ₹{formatIndianCurrency(p.amount)}
+                            </td>
+                            <td className="text-center">
+                              <span
+                                className={`badge text-capitalize ${
+                                  p.status === "cleared"
+                                    ? "bg-success text-white"
+                                    : p.status === "rejected"
+                                    ? "bg-danger text-white"
+                                    : "bg-warning text-dark"
+                                }`}
+                              >
+                                {p.status || "pending"}
+                              </span>
+                            </td>
+                            <td className="text-center">
+                              {p.status !== "cleared" ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-outline-success py-0 px-2"
+                                  style={{ fontSize: "11px" }}
+                                  disabled={isVerifyingPaymentId === p.id}
+                                  onClick={() => handleVerifyPayment(p.id)}
+                                  title="Verify & Clear Payment"
+                                >
+                                  {isVerifyingPaymentId === p.id ? (
+                                    <span className="spinner-border spinner-border-sm" role="status"></span>
+                                  ) : (
+                                    <>
+                                      <i className="bi bi-check2 me-1"></i>
+                                      <span>Clear</span>
+                                    </>
+                                  )}
+                                </button>
+                              ) : (
+                                <span className="text-success small fw-bold">
+                                  <i className="bi bi-check-circle-fill"></i>
+                                </span>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -1053,7 +1504,11 @@ export default function DealsPage() {
                   <button
                     type="button"
                     className="btn btn-primary d-inline-flex align-items-center gap-1"
-                    onClick={() => window.print()}
+                    onClick={() => {
+                      if (typeof window !== "undefined") {
+                        window.print();
+                      }
+                    }}
                   >
                     <i className="bi bi-printer"></i>
                     <span>Print Deal Receipt</span>

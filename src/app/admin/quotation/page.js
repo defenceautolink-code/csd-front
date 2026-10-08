@@ -62,10 +62,10 @@ export default function QuotationMainPage() {
   // ----------------------------------------------------
   // FORM STATES - CUSTOMER & LEAD INFO
   // ----------------------------------------------------
-  const [clientName, setClientName] = useState("Vikramaditya Singh");
-  const [clientMobile, setClientMobile] = useState("9825123456");
-  const [cityJurisdiction, setCityJurisdiction] = useState("Ahmedabad");
-  const [quotationDate, setQuotationDate] = useState("25.09.26");
+  const [clientName, setClientName] = useState("");
+  const [clientMobile, setClientMobile] = useState("");
+  const [cityJurisdiction, setCityJurisdiction] = useState("");
+  const [quotationDate, setQuotationDate] = useState("");
 
   useEffect(() => {
     const today = new Date();
@@ -78,8 +78,8 @@ export default function QuotationMainPage() {
   // ----------------------------------------------------
   // FORM STATES - VEHICLE & SPECIFICATIONS
   // ----------------------------------------------------
-  const [carName, setCarName] = useState("NEW VENUE");
-  const [modelSpec, setModelSpec] = useState("1.0 TURBO DCT HX5");
+  const [carName, setCarName] = useState("");
+  const [modelSpec, setModelSpec] = useState("");
   const [modelCol3, setModelCol3] = useState("N.A");
   const [variantFuel, setVariantFuel] = useState("PETROL");
   const [variantCol2, setVariantCol2] = useState("N.A");
@@ -88,18 +88,18 @@ export default function QuotationMainPage() {
   // ----------------------------------------------------
   // FORM STATES - SALES EXECUTIVE DETAILS
   // ----------------------------------------------------
-  const [executiveName, setExecutiveName] = useState("PRIYANKA PARMAR");
-  const [executivePhone, setExecutivePhone] = useState("97233 37621");
+  const [executiveName, setExecutiveName] = useState("");
+  const [executivePhone, setExecutivePhone] = useState("");
 
   // ----------------------------------------------------
   // FORM STATES - PRICE BREAKDOWN PARAMETERS (Column 1)
   // ----------------------------------------------------
-  const [csdPrice, setCsdPrice] = useState("999799");
-  const [gjRto, setGjRto] = useState("59869");
+  const [csdPrice, setCsdPrice] = useState("");
+  const [gjRto, setGjRto] = useState("");
   const [bhRto, setBhRto] = useState("N.A");
   const [crtm, setCrtm] = useState("N.A");
-  const [insurance, setInsurance] = useState("38600");
-  const [accessories, setAccessories] = useState("FREE KIT");
+  const [insurance, setInsurance] = useState("");
+  const [accessories, setAccessories] = useState("0");
   const [warranty, setWarranty] = useState("N.A");
   const [msReward, setMsReward] = useState("N.A");
   const [diffAmtCash, setDiffAmtCash] = useState("N.A");
@@ -346,24 +346,24 @@ export default function QuotationMainPage() {
   const handleResetSheet = () => {
     setClientName("");
     setClientMobile("");
-    setCityJurisdiction("Ahmedabad");
+    setCityJurisdiction("");
     setSelectedLeadId("");
     setSelectedBrandId("");
     setSelectedModelId("");
     setSelectedVariantId("");
-    setCarName("NEW VENUE");
-    setModelSpec("1.0 TURBO DCT HX5");
+    setCarName("");
+    setModelSpec("");
     setVariantFuel("PETROL");
-    setCsdPrice("999799");
-    setGjRto("59869");
+    setCsdPrice("");
+    setGjRto("");
     setBhRto("N.A");
     setCrtm("N.A");
-    setInsurance("38600");
-    setAccessories("FREE KIT");
+    setInsurance("");
+    setAccessories("0");
     setWarranty("N.A");
     setMsReward("N.A");
     setDiffAmtCash("N.A");
-    showToast("Quotation sheet parameters reset to defaults.", "info");
+    showToast("Quotation sheet parameters cleared.", "info");
   };
 
   const handlePrintPdf = () => {
@@ -385,7 +385,7 @@ export default function QuotationMainPage() {
     try {
       const itemsArray = [
         {
-          item_name: `${carName} – ${modelSpec}`,
+          item_name: `${carName || "Vehicle"} – ${modelSpec || "Standard"}`,
           description: `Fuel / Variant Type: ${variantFuel}`,
           quantity: 1,
           unit_price: parseAmount(csdPrice),
@@ -427,15 +427,70 @@ export default function QuotationMainPage() {
         });
       }
 
+      if (parseAmount(bhRto) > 0) {
+        itemsArray.push({
+          item_name: "BH Series RTO & Road Tax",
+          description: "Bharat Series 2-Year registration",
+          quantity: 1,
+          unit_price: parseAmount(bhRto),
+          discount: 0,
+          tax: 0,
+        });
+      }
+
+      if (parseAmount(crtm) > 0) {
+        itemsArray.push({
+          item_name: "CRTM Charges",
+          description: "Temporary permit & transit charges",
+          quantity: 1,
+          unit_price: parseAmount(crtm),
+          discount: 0,
+          tax: 0,
+        });
+      }
+
+      if (parseAmount(warranty) > 0) {
+        itemsArray.push({
+          item_name: "Extended Warranty Shield",
+          description: "Manufacturer extended warranty coverage",
+          quantity: 1,
+          unit_price: parseAmount(warranty),
+          discount: 0,
+          tax: 0,
+        });
+      }
+
+      if (parseAmount(diffAmtCash) > 0) {
+        itemsArray.push({
+          item_name: "Difference / Cash Adjustment",
+          description: "Price adjustment parameter",
+          quantity: 1,
+          unit_price: parseAmount(diffAmtCash),
+          discount: 0,
+          tax: 0,
+        });
+      }
+
+      let formattedDate = new Date().toISOString().split("T")[0];
+      if (quotationDate && quotationDate.includes(".")) {
+        const parts = quotationDate.split(".");
+        if (parts.length === 3) {
+          const day = parts[0].padStart(2, "0");
+          const month = parts[1].padStart(2, "0");
+          const year = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+          formattedDate = `${year}-${month}-${day}`;
+        }
+      }
+
       const payload = {
         lead_id: selectedLeadId ? Number(selectedLeadId) : null,
-        quotation_date: new Date().toISOString().split("T")[0],
+        quotation_date: formattedDate,
         customer_name: clientName.trim(),
         customer_phone: clientMobile.trim() || null,
-        customer_address: cityJurisdiction.trim() || "Ahmedabad",
+        customer_address: cityJurisdiction.trim() || null,
         customer_email: clientEmail.trim() || null,
-        subject: `Official Vehicle Quotation – ${carName} (${modelSpec})`,
-        description: `Official Price breakdown for ${clientName} prepared by ${executiveName}.`,
+        subject: `Official Vehicle Quotation – ${carName || "Vehicle"} ${modelSpec ? `(${modelSpec})` : ""}`.trim(),
+        description: `Official Price breakdown for ${clientName}${executiveName ? ` prepared by ${executiveName}` : ""}.`,
         payment_terms: "Booking advance as applicable, balance prior to vehicle delivery and RTO clearance.",
         delivery_terms: "Vehicle delivery subject to manufacturer allocation and receipt of full payment.",
         notes: "Prices prevailing at the time of invoicing & delivery will be applicable. Road tax as per RTO norms.",
@@ -522,24 +577,14 @@ export default function QuotationMainPage() {
       }
 
       const res = await quotationApi.getQuotations(params);
-      if (res && res.status) {
-        let list = res.data || [];
-        if (from || to) {
-          list = list.filter((q) => {
-            const qDate = q.quotation_date || q.created_at?.split("T")[0] || "";
-            if (!qDate) return true;
-            if (from && qDate < from) return false;
-            if (to && qDate > to) return false;
-            return true;
-          });
-        }
-        setQuotations(list);
+      if (res && res.status && Array.isArray(res.data)) {
+        setQuotations(res.data);
         if (res.pagination) {
           setPagination({
-            ...res.pagination,
-            current_page: page,
-            per_page: customPerPage,
-            total: (from || to) ? list.length : res.pagination.total,
+            current_page: Number(res.pagination.current_page) || page,
+            last_page: Number(res.pagination.last_page) || 1,
+            per_page: Number(res.pagination.per_page) || customPerPage,
+            total: Number(res.pagination.total) || res.data.length,
           });
         }
       }
@@ -552,9 +597,12 @@ export default function QuotationMainPage() {
 
   useEffect(() => {
     if (activeTab === "records") {
-      loadQuotationsList(1, searchTerm, statusFilter, startDate, endDate);
+      const timer = setTimeout(() => {
+        loadQuotationsList(1, searchTerm, statusFilter, startDate, endDate, pagination.per_page);
+      }, 300);
+      return () => clearTimeout(timer);
     }
-  }, [activeTab, startDate, endDate]);
+  }, [activeTab, searchTerm, statusFilter, startDate, endDate]);
 
   return (
     <AdminLayout>
@@ -1336,8 +1384,26 @@ export default function QuotationMainPage() {
                   />
                 </div>
 
-                {/* Reset Dates */}
-                {(startDate || endDate) && (
+                {/* Status Filter */}
+                <div className="input-group input-group-sm" style={{ width: "155px" }}>
+                  <span className="input-group-text bg-light text-muted px-2" title="Filter by Status">
+                    <i className="bi bi-funnel me-1"></i>
+                    <span style={{ fontSize: "11px", fontWeight: "600" }}>Status</span>
+                  </span>
+                  <select
+                    className="form-select form-select-sm px-1"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="draft">Draft</option>
+                    <option value="sent">Sent</option>
+                    <option value="accepted">Accepted</option>
+                  </select>
+                </div>
+
+                {/* Reset Filters */}
+                {(startDate || endDate || statusFilter || searchTerm) && (
                   <button
                     type="button"
                     className="btn btn-sm btn-outline-secondary px-2 d-flex align-items-center gap-1"
@@ -1345,8 +1411,10 @@ export default function QuotationMainPage() {
                     onClick={() => {
                       setStartDate("");
                       setEndDate("");
+                      setStatusFilter("");
+                      setSearchTerm("");
                     }}
-                    title="Clear Date Filters"
+                    title="Clear All Filters"
                   >
                     <i className="bi bi-x-circle"></i>
                     <span>Reset</span>
@@ -1361,34 +1429,33 @@ export default function QuotationMainPage() {
                     placeholder="Search customer, number..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        loadQuotationsList(1, searchTerm, statusFilter, startDate, endDate);
-                      }
-                    }}
                   />
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-sm"
-                    onClick={() => loadQuotationsList(1, searchTerm, statusFilter, startDate, endDate)}
-                    title="Search"
-                  >
-                    <i className="bi bi-search"></i>
-                  </button>
                   {searchTerm && (
                     <button
                       type="button"
                       className="btn btn-sm btn-outline-secondary"
-                      onClick={() => {
-                        setSearchTerm("");
-                        loadQuotationsList(1, "", statusFilter, startDate, endDate);
-                      }}
+                      onClick={() => setSearchTerm("")}
                       title="Clear Search"
                     >
                       <i className="bi bi-x"></i>
                     </button>
                   )}
                 </div>
+
+                {/* New Quotation Button */}
+                {can("quotation.create") && (
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm d-flex align-items-center gap-1 ms-1"
+                    onClick={() => {
+                      handleResetSheet();
+                      setActiveTab("maker");
+                    }}
+                  >
+                    <i className="bi bi-plus-circle-fill"></i>
+                    <span>New Quote</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1479,7 +1546,15 @@ export default function QuotationMainPage() {
 
                         {/* 7. Status */}
                         <td className="py-3 px-3 text-center">
-                          <span className={`badge ${quote.status === "sent" ? "bg-info text-dark" : "bg-warning text-dark"}`}>
+                          <span
+                            className={`badge text-capitalize ${
+                              quote.status === "accepted"
+                                ? "bg-success text-white"
+                                : quote.status === "sent"
+                                ? "bg-info text-dark"
+                                : "bg-warning text-dark"
+                            }`}
+                          >
                             {quote.status || "draft"}
                           </span>
                         </td>

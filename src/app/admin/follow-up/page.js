@@ -37,10 +37,17 @@ export default function FollowUpPage() {
     return () => window.removeEventListener("click", handleOutsideClick);
   }, []);
 
-  // Live follow-ups list & KPIs
-  const [allFollowUps, setAllFollowUps] = useState([]);
+  // Live follow-ups list & KPIs from backend
+  const [followUpsList, setFollowUpsList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [kpis, setKpis] = useState({ overdue: 0, due_today: 0, upcoming: 0, total: 0 });
+  const [pagination, setPagination] = useState({
+    current_page: 1,
+    last_page: 1,
+    per_page: 10,
+    total: 0,
+  });
+  const [leadsList, setLeadsList] = useState([]);
 
   // New Log form state
   const [callLog, setCallLog] = useState({
@@ -55,11 +62,24 @@ export default function FollowUpPage() {
     notes: "",
   });
 
-  // Fetch follow-ups from live backend API
-  const fetchFollowUps = async (from = startDate, to = endDate) => {
+  // Fetch follow-ups from live backend API following backend contract
+  const fetchFollowUps = async (
+    page = currentPage,
+    limit = perPage,
+    search = searchTerm,
+    from = startDate,
+    to = endDate,
+    tab = activeTab
+  ) => {
     try {
       setLoading(true);
-      const params = {};
+      const params = {
+        page: page,
+        per_page: limit,
+      };
+      if (search && search.trim()) {
+        params.search = search.trim();
+      }
       if (from) {
         params.from_date = from;
         params.start_date = from;
@@ -68,14 +88,28 @@ export default function FollowUpPage() {
         params.to_date = to;
         params.end_date = to;
       }
+      if (tab && tab !== "all") {
+        params.tab = tab;
+      }
+
       const res = await axios.get(`${API_URL}/follow-ups`, { params });
       if (res.data && res.data.status && Array.isArray(res.data.data)) {
         if (res.data.kpis) {
           setKpis({
-            overdue: res.data.kpis.overdue ?? 0,
-            due_today: res.data.kpis.due_today ?? 0,
-            upcoming: res.data.kpis.upcoming ?? 0,
-            total: res.data.kpis.total ?? res.data.data.length,
+            overdue: Number(res.data.kpis.overdue) || 0,
+            due_today: Number(res.data.kpis.due_today) || 0,
+            upcoming: Number(res.data.kpis.upcoming) || 0,
+            total: Number(res.data.kpis.total) || 0,
+          });
+        }
+        if (res.data.pagination) {
+          setPagination({
+            current_page: Number(res.data.pagination.current_page) || page,
+            last_page: Number(res.data.pagination.last_page) || 1,
+            per_page: Number(res.data.pagination.per_page) || limit,
+            total: Number(res.data.pagination.total) || 0,
+            from: res.data.pagination.from,
+            to: res.data.pagination.to,
           });
         }
         const todayStr = new Date().toISOString().split("T")[0];
@@ -153,7 +187,7 @@ export default function FollowUpPage() {
         });
 
         // Use real live items
-        setAllFollowUps(liveItems);
+        setFollowUpsList(liveItems);
       }
     } catch (err) {
       console.log("Follow-ups fetch error:", err);
@@ -162,16 +196,25 @@ export default function FollowUpPage() {
     }
   };
 
+  // Debounced fetch on search and filter change
   useEffect(() => {
-    fetchFollowUps(startDate, endDate);
-  }, [startDate, endDate]);
+    const timer = setTimeout(() => {
+      fetchFollowUps(1, perPage, searchTerm, startDate, endDate, activeTab);
+      setCurrentPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [startDate, endDate, searchTerm, activeTab]);
 
-  // When date filter is selected, auto switch tab to all to view all matched follow-ups
-  useEffect(() => {
-    if (startDate || endDate) {
-      setActiveTab("all");
-    }
-  }, [startDate, endDate]);
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage);
+    fetchFollowUps(newPage, perPage, searchTerm, startDate, endDate, activeTab);
+  };
+
+  const handlePerPageChange = (newPerPage) => {
+    setPerPage(newPerPage);
+    setCurrentPage(1);
+    fetchFollowUps(1, newPerPage, searchTerm, startDate, endDate, activeTab);
+  };
 
   const handleLogSubmit = async (e) => {
     e.preventDefault();
@@ -192,7 +235,7 @@ export default function FollowUpPage() {
       });
       showToast(`Follow-up call interaction logged for ${callLog.customer}!`, "success");
       setShowLogModal(false);
-      fetchFollowUps();
+      fetchFollowUps(currentPage, perPage, searchTerm, startDate, endDate, activeTab);
     } catch (err) {
       console.log("Submit error:", err);
       showToast(`Follow-up call interaction logged for ${callLog.customer}!`, "success");
@@ -200,47 +243,108 @@ export default function FollowUpPage() {
     }
   };
 
-  // Dynamic counts synchronized with allFollowUps
-  const overdueCount = allFollowUps.filter((i) => i.tab === "overdue").length;
-  const todayCount = allFollowUps.filter((i) => i.tab === "today").length;
-  const upcomingCount = allFollowUps.filter((i) => i.tab === "upcoming").length;
-  const allCount = allFollowUps.length;  // Filtered items by tab and search
-  const filteredList = allFollowUps.filter((item) => {
-    if (activeTab === "overdue" && item.tab !== "overdue") return false;
-    if (activeTab === "today" && item.tab !== "today") return false;
-    if (activeTab === "upcoming" && item.tab !== "upcoming") return false;
-
-    // Filter by Follow-up Create / Logged Date
-    if (startDate || endDate) {
-      const itemDate = item.rawFollowUpDate || item.follow_up_date || (item.created_at ? item.created_at.slice(0, 10) : null);
-      if (!itemDate) return false;
-      const cleanDate = itemDate.slice(0, 10);
-      if (startDate && cleanDate < startDate) return false;
-      if (endDate && cleanDate > endDate) return false;
-    }
-
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      return (
-        item.customer.toLowerCase().includes(term) ||
-        item.phone.toLowerCase().includes(term) ||
-        item.vehicle.toLowerCase().includes(term) ||
-        item.rep.toLowerCase().includes(term) ||
-        item.outcome.toLowerCase().includes(term)
-      );
-    }
-    return true;
-  });
-
-  // Reset to first page when any filter changes
   useEffect(() => {
-    setCurrentPage(1);
-  }, [activeTab, startDate, endDate, searchTerm]);
+    axios
+      .get(`${API_URL}/leads`)
+      .then((res) => {
+        if (res.data?.data && Array.isArray(res.data.data)) {
+          setLeadsList(res.data.data);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
-  // Paginated records for table
-  const totalItems = filteredList.length;
-  const lastPage = Math.max(1, Math.ceil(totalItems / perPage));
-  const paginatedList = filteredList.slice((currentPage - 1) * perPage, currentPage * perPage);
+  // Real CSV Export Handler (Exports all records respecting filters directly from backend)
+  const handleExportCSV = async () => {
+    try {
+      showToast("Preparing follow-up export...", "info");
+      const exportParams = { per_page: 5000 };
+      if (startDate) {
+        exportParams.from_date = startDate;
+        exportParams.start_date = startDate;
+      }
+      if (endDate) {
+        exportParams.to_date = endDate;
+        exportParams.end_date = endDate;
+      }
+      if (searchTerm && searchTerm.trim()) {
+        exportParams.search = searchTerm.trim();
+      }
+      if (activeTab && activeTab !== "all") {
+        exportParams.tab = activeTab;
+      }
+
+      const res = await axios.get(`${API_URL}/follow-ups`, { params: exportParams });
+      const rawList = res.data?.status && Array.isArray(res.data?.data) ? res.data.data : [];
+      if (rawList.length === 0) {
+        showToast("No follow-up records found to export.", "warning");
+        return;
+      }
+
+      const headers = [
+        "ID",
+        "Customer Name",
+        "Phone",
+        "City",
+        "Vehicle Interested",
+        "Brand",
+        "Call Outcome",
+        "Notes",
+        "Follow-up Date",
+        "Follow-up Time",
+        "Next Action Date",
+        "Next Action Time",
+        "Assigned Rep",
+      ];
+
+      const csvRows = [
+        headers.join(","),
+        ...rawList.map((item) => {
+          const cust = item.lead?.name || item.customer_name || "";
+          const phone = item.lead?.phone || item.phone || "";
+          const city = item.lead?.city || "";
+          const vehicle = item.lead?.model_variant || item.vehicle || "";
+          const brand = item.lead?.brand_name || "";
+          const outcome = item.status || item.type || "";
+          const notes = (item.notes || "").replace(/"/g, '""');
+          const rep = item.user_name || item.user?.name || item.lead?.assigned_user_name || "";
+          return [
+            item.id || "",
+            `"${cust.replace(/"/g, '""')}"`,
+            `"${phone}"`,
+            `"${city.replace(/"/g, '""')}"`,
+            `"${vehicle.replace(/"/g, '""')}"`,
+            `"${brand.replace(/"/g, '""')}"`,
+            `"${outcome.replace(/"/g, '""')}"`,
+            `"${notes}"`,
+            `"${item.follow_up_date || ""}"`,
+            `"${item.follow_up_time || ""}"`,
+            `"${item.next_follow_up_date || ""}"`,
+            `"${item.next_follow_up_time || ""}"`,
+            `"${rep.replace(/"/g, '""')}"`,
+          ].join(",");
+        }),
+      ].join("\n");
+
+      const blob = new Blob([csvRows], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `follow_ups_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showToast(`Exported ${rawList.length} follow-up records to CSV!`, "success");
+    } catch (err) {
+      console.log("Export error:", err);
+      showToast("Failed to export follow-ups to CSV.", "error");
+    }
+  };
+
+  // Filtered items by tab if local filter active
+  const displayedList = activeTab === "all" ? followUpsList : followUpsList.filter((item) => item.tab === activeTab);
 
   return (
     <AdminLayout>
@@ -261,7 +365,8 @@ export default function FollowUpPage() {
             {can("followup.export") && (
               <button
                 className="btn btn-outline-custom"
-                onClick={() => showToast("Exporting follow-up schedule to CSV...", "info")}
+                onClick={handleExportCSV}
+                title="Download follow-up records as CSV"
               >
                 <i className="bi bi-file-earmark-arrow-down"></i>
                 <span>Export CSV</span>
@@ -303,7 +408,7 @@ export default function FollowUpPage() {
                   <i className="bi bi-exclamation-triangle-fill"></i>
                 </div>
               </div>
-              <div className="stat-card-value">{overdueCount} Overdue</div>
+              <div className="stat-card-value">{kpis.overdue ?? 0} Overdue</div>
               <span className="text-danger small fw-semibold">Action required urgently</span>
             </div>
           </div>
@@ -316,7 +421,7 @@ export default function FollowUpPage() {
                   <i className="bi bi-calendar-check-fill"></i>
                 </div>
               </div>
-              <div className="stat-card-value">{todayCount} Calls</div>
+              <div className="stat-card-value">{kpis.due_today ?? 0} Calls</div>
               <span className="text-warning small fw-semibold">Scheduled for today</span>
             </div>
           </div>
@@ -329,7 +434,7 @@ export default function FollowUpPage() {
                   <i className="bi bi-clock-history"></i>
                 </div>
               </div>
-              <div className="stat-card-value">{upcomingCount} Calls</div>
+              <div className="stat-card-value">{kpis.upcoming ?? 0} Calls</div>
               <span className="text-info small fw-semibold">Pipeline nurturing</span>
             </div>
           </div>
@@ -337,12 +442,12 @@ export default function FollowUpPage() {
           <div className="col-xl-3 col-sm-6">
             <div className="card stat-card" style={{ borderLeft: "4px solid #22c55e" }}>
               <div className="stat-card-header">
-                <span className="stat-card-title">Completed Today</span>
+                <span className="stat-card-title">Total Follow-Ups</span>
                 <div className="stat-icon-box success">
                   <i className="bi bi-check2-all"></i>
                 </div>
               </div>
-              <div className="stat-card-value">{allCount} Calls</div>
+              <div className="stat-card-value">{kpis.total ?? 0} Calls</div>
               <span className="text-success small fw-semibold">Active follow-up interactions</span>
             </div>
           </div>
@@ -355,10 +460,10 @@ export default function FollowUpPage() {
               {/* Tab Pills */}
               <div className="d-flex align-items-center gap-2 flex-wrap">
                 {[
-                  { id: "all", label: "All Follow-ups", count: allCount },
-                  { id: "overdue", label: "Overdue", count: overdueCount },
-                  { id: "today", label: "Due Today", count: todayCount },
-                  { id: "upcoming", label: "Upcoming", count: upcomingCount },
+                  { id: "all", label: "All Follow-ups", count: kpis.total ?? 0 },
+                  { id: "overdue", label: "Overdue", count: kpis.overdue ?? 0 },
+                  { id: "today", label: "Due Today", count: kpis.due_today ?? 0 },
+                  { id: "upcoming", label: "Upcoming", count: kpis.upcoming ?? 0 },
                 ].map((tab) => {
                   const isActive = activeTab === tab.id;
                   return (
@@ -493,7 +598,7 @@ export default function FollowUpPage() {
                       <span className="text-muted small">Loading follow-ups...</span>
                     </td>
                   </tr>
-                ) : filteredList.length === 0 ? (
+                ) : displayedList.length === 0 ? (
                   <tr>
                     <td colSpan="6" className="text-center py-5 text-muted">
                       <i className="bi bi-inbox fs-3 d-block mb-2 text-secondary"></i>
@@ -501,7 +606,7 @@ export default function FollowUpPage() {
                     </td>
                   </tr>
                 ) : (
-                  paginatedList.map((item) => (
+                  displayedList.map((item) => (
                     <tr key={item.id}>
                       {/* 1. Action First Column with 3-Dots Dropdown Menu */}
                       <td className="text-center" onClick={(e) => e.stopPropagation()}>
@@ -661,18 +766,15 @@ export default function FollowUpPage() {
             </table>
           </div>
 
-          {/* Pagination Controls */}
-          {!loading && filteredList.length > 0 && (
+          {/* Pagination Controls following backend contract */}
+          {!loading && (pagination.total > 0 || displayedList.length > 0) && (
             <Pagination
-              currentPage={currentPage}
-              lastPage={lastPage}
-              total={totalItems}
-              perPage={perPage}
-              onPageChange={(page) => setCurrentPage(page)}
-              onPerPageChange={(newPerPage) => {
-                setPerPage(newPerPage);
-                setCurrentPage(1);
-              }}
+              currentPage={pagination.current_page || currentPage}
+              lastPage={pagination.last_page || 1}
+              total={pagination.total || displayedList.length}
+              perPage={pagination.per_page || perPage}
+              onPageChange={handlePageChange}
+              onPerPageChange={handlePerPageChange}
               perPageOptions={[10, 20, 50, 100]}
               itemName="follow-ups"
             />
@@ -697,6 +799,38 @@ export default function FollowUpPage() {
               <form onSubmit={handleLogSubmit}>
                 <div className="modal-body-custom">
                   <div className="row g-3">
+                    <div className="col-12">
+                      <label className="form-label text-dark fw-semibold small">
+                        Choose Existing Customer Lead (Optional)
+                      </label>
+                      <select
+                        className="form-select"
+                        value={callLog.lead_id || ""}
+                        onChange={(e) => {
+                          const lid = e.target.value;
+                          const selected = leadsList.find((l) => String(l.id) === String(lid));
+                          if (selected) {
+                            setCallLog({
+                              ...callLog,
+                              lead_id: selected.id,
+                              customer: selected.name,
+                              phone: selected.phone,
+                              vehicle: selected.model_variant || "",
+                            });
+                          } else {
+                            setCallLog({ ...callLog, lead_id: null });
+                          }
+                        }}
+                      >
+                        <option value="">-- Choose Existing Lead to Auto-fill --</option>
+                        {leadsList.map((l) => (
+                          <option key={l.id} value={l.id}>
+                            {l.name} ({l.phone}) - {l.model_variant || "General Inquiry"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
                     <div className="col-md-6">
                       <label className="form-label text-dark fw-semibold small">Customer Name</label>
                       <input

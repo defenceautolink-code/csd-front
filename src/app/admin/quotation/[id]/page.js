@@ -175,11 +175,6 @@ export default function QuotationDetailsPage() {
               <span>All Quotes</span>
             </Link>
 
-            <Link href={`/admin/quotation/${quotation.id}/edit`} className="btn btn-outline-custom">
-              <i className="bi bi-pencil me-1"></i>
-              <span>Edit</span>
-            </Link>
-
             <button type="button" className="btn btn-outline-custom" onClick={handlePrint}>
               <i className="bi bi-printer-fill me-1"></i>
               <span>Print</span>
