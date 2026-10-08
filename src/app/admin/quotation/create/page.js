@@ -49,9 +49,9 @@ function SendQuotationPageContent() {
   // ----------------------------------------------------
   // FORM STATES - CUSTOMER & LEAD INFO
   // ----------------------------------------------------
-  const [clientName, setClientName] = useState("Vikramaditya Singh");
-  const [clientMobile, setClientMobile] = useState("9825123456");
-  const [cityJurisdiction, setCityJurisdiction] = useState("Ahmedabad");
+  const [clientName, setClientName] = useState("");
+  const [clientMobile, setClientMobile] = useState("");
+  const [cityJurisdiction, setCityJurisdiction] = useState("");
   const [quotationDate, setQuotationDate] = useState(() => {
     const today = new Date();
     const dd = String(today.getDate()).padStart(2, "0");
@@ -63,8 +63,8 @@ function SendQuotationPageContent() {
   // ----------------------------------------------------
   // FORM STATES - VEHICLE & SPECIFICATIONS
   // ----------------------------------------------------
-  const [carName, setCarName] = useState("NEW VENUE");
-  const [modelSpec, setModelSpec] = useState("1.0 TURBO DCT HX5");
+  const [carName, setCarName] = useState("");
+  const [modelSpec, setModelSpec] = useState("");
   const [modelCol3, setModelCol3] = useState("N.A");
   const [variantFuel, setVariantFuel] = useState("PETROL");
   const [variantCol2, setVariantCol2] = useState("N.A");
@@ -73,18 +73,18 @@ function SendQuotationPageContent() {
   // ----------------------------------------------------
   // FORM STATES - SALES EXECUTIVE DETAILS
   // ----------------------------------------------------
-  const [executiveName, setExecutiveName] = useState("PRIYANKA PARMAR");
-  const [executivePhone, setExecutivePhone] = useState("97233 37621");
+  const [executiveName, setExecutiveName] = useState("");
+  const [executivePhone, setExecutivePhone] = useState("");
 
   // ----------------------------------------------------
   // FORM STATES - PRICE BREAKDOWN PARAMETERS (Column 1)
   // ----------------------------------------------------
-  const [csdPrice, setCsdPrice] = useState("999799");
-  const [gjRto, setGjRto] = useState("59869");
+  const [csdPrice, setCsdPrice] = useState("");
+  const [gjRto, setGjRto] = useState("");
   const [bhRto, setBhRto] = useState("N.A");
   const [crtm, setCrtm] = useState("N.A");
-  const [insurance, setInsurance] = useState("38600");
-  const [accessories, setAccessories] = useState("FREE KIT");
+  const [insurance, setInsurance] = useState("");
+  const [accessories, setAccessories] = useState("0");
   const [warranty, setWarranty] = useState("N.A");
   const [msReward, setMsReward] = useState("N.A");
   const [diffAmtCash, setDiffAmtCash] = useState("N.A");
@@ -368,24 +368,24 @@ function SendQuotationPageContent() {
   const handleResetSheet = () => {
     setClientName("");
     setClientMobile("");
-    setCityJurisdiction("Ahmedabad");
+    setCityJurisdiction("");
     setSelectedLeadId("");
     setSelectedBrandId("");
     setSelectedModelId("");
     setSelectedVariantId("");
-    setCarName("NEW VENUE");
-    setModelSpec("1.0 TURBO DCT HX5");
+    setCarName("");
+    setModelSpec("");
     setVariantFuel("PETROL");
-    setCsdPrice("999799");
-    setGjRto("59869");
+    setCsdPrice("");
+    setGjRto("");
     setBhRto("N.A");
     setCrtm("N.A");
-    setInsurance("38600");
-    setAccessories("FREE KIT");
+    setInsurance("");
+    setAccessories("0");
     setWarranty("N.A");
     setMsReward("N.A");
     setDiffAmtCash("N.A");
-    showToast("Quotation sheet parameters reset to defaults.", "info");
+    showToast("Quotation sheet parameters cleared.", "info");
   };
 
   // ----------------------------------------------------
@@ -647,7 +647,7 @@ function SendQuotationPageContent() {
                       className="form-control"
                       value={clientName}
                       onChange={(e) => setClientName(e.target.value)}
-                      placeholder="Vikramaditya Singh"
+                      placeholder="Enter client name"
                     />
                   </div>
                   <div className="col-md-6">
@@ -657,7 +657,7 @@ function SendQuotationPageContent() {
                       className="form-control"
                       value={clientMobile}
                       onChange={(e) => setClientMobile(e.target.value)}
-                      placeholder="9825123456"
+                      placeholder="Enter mobile number"
                     />
                   </div>
                 </div>
@@ -671,7 +671,7 @@ function SendQuotationPageContent() {
                       className="form-control"
                       value={cityJurisdiction}
                       onChange={(e) => setCityJurisdiction(e.target.value)}
-                      placeholder="Ahmedabad"
+                      placeholder="e.g. Ahmedabad"
                     />
                   </div>
                   <div className="col-md-6">
@@ -815,7 +815,7 @@ function SendQuotationPageContent() {
                       className="form-control"
                       value={executiveName}
                       onChange={(e) => setExecutiveName(e.target.value)}
-                      placeholder="PRIYANKA PARMAR"
+                      placeholder="Executive Full Name"
                     />
                   </div>
                   <div className="col-md-6">
@@ -825,7 +825,7 @@ function SendQuotationPageContent() {
                       className="form-control"
                       value={executivePhone}
                       onChange={(e) => setExecutivePhone(e.target.value)}
-                      placeholder="97233 37621"
+                      placeholder="Executive Phone Number"
                     />
                   </div>
                 </div>

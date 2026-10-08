@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import axios from "axios";
 import { usePathname } from "next/navigation";
@@ -9,7 +9,7 @@ import { useToast } from "@/app/components/Toast";
 import { hasPermission, hasRole } from "@/utils/auth";
 import LeadImportModal from "./LeadImportModal";
 import ConvertDealModal from "./ConvertDealModal";
-import { getConvertedLeadIds } from "@/services/dealApi";
+import dealApi, { getConvertedLeadIds } from "@/services/dealApi";
 import Pagination from "@/components/common/Pagination";
 
 export default function LeadsPage() {
@@ -125,7 +125,7 @@ export default function LeadsPage() {
     budget: "",
     source_id: "",
     status_id: "",
-    assigned_user_name: "David Miller (Sales Executive)",
+    assigned_user_name: "",
   });
   const [isTriggeringWishes, setIsTriggeringWishes] = useState(false);
 
@@ -291,6 +291,10 @@ export default function LeadsPage() {
       addModels.find((m) => String(m.id) === String(formData.model_id))?.name || "General Inquiry"
     );
 
+    const selectedUser = usersList.find(
+      (u) => `${u.name} (${u.role || "Executive"})` === formData.assigned_user_name || u.name === formData.assigned_user_name
+    );
+
     setIsSubmitting(true);
     try {
       const response = await axios.post(`${API_URL}/leads`, {
@@ -312,7 +316,8 @@ export default function LeadsPage() {
         total_deal_amount: formData.budget ? parseFloat(formData.budget) : null,
         source_id: formData.source_id || null,
         status_id: formData.status_id || null,
-        assigned_user_name: formData.assigned_user_name,
+        assigned_to: selectedUser ? selectedUser.id : null,
+        assigned_user_name: formData.assigned_user_name || (selectedUser ? selectedUser.name : ""),
       });
 
       if (response.data && response.data.status) {
@@ -335,7 +340,7 @@ export default function LeadsPage() {
           budget: "",
           source_id: "",
           status_id: "",
-          assigned_user_name: "David Miller (Sales Executive)",
+          assigned_user_name: "",
         });
         setAddModels([]);
         setAddVariants([]);
@@ -466,42 +471,58 @@ export default function LeadsPage() {
     }
   }, [activeActionMenuId]);
 
-  // Filter leads based on user selection (excluding converted deals)
-  const filteredLeads = leads.filter((item) => {
-    if (convertedLeadIds.some((cid) => String(cid) === String(item.id))) {
-      return false;
+  useEffect(() => {
+    const handleOutsideBulkClick = () => {
+      setOpenStatusDropdown(false);
+      setOpenPriorityDropdown(false);
+    };
+    if (openStatusDropdown || openPriorityDropdown) {
+      window.addEventListener("click", handleOutsideBulkClick);
+      return () => window.removeEventListener("click", handleOutsideBulkClick);
     }
+  }, [openStatusDropdown, openPriorityDropdown]);
 
-    const matchesSearch =
-      item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.phone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.model_variant?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.city?.toLowerCase().includes(searchTerm.toLowerCase());
+  // Active leads in pipeline (excluding leads already converted to deals)
+  const activeLeads = useMemo(() => {
+    return leads.filter((item) => {
+      return !convertedLeadIds.some((cid) => String(cid) === String(item.id));
+    });
+  }, [leads, convertedLeadIds]);
 
-    const matchesPriority = !priorityFilter || item.priority === priorityFilter;
-    const matchesSegment = !segmentFilter || item.vehicle_segment === segmentFilter;
-    const matchesStatus = !statusFilter || item.status_name === statusFilter;
+  // Filter leads based on user selection (excluding converted deals)
+  const filteredLeads = useMemo(() => {
+    return activeLeads.filter((item) => {
+      const matchesSearch =
+        item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.phone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.model_variant?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.city?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    // Filter by Created Date (created_at)
-    const matchesDate = (() => {
-      if (!startDate && !endDate) return true;
-      if (!item.created_at) return false;
-      try {
-        const itemDate = new Date(item.created_at).toISOString().split("T")[0];
-        if (startDate && itemDate < startDate) return false;
-        if (endDate && itemDate > endDate) return false;
-        return true;
-      } catch {
-        const itemDateStr = String(item.created_at).slice(0, 10);
-        if (startDate && itemDateStr < startDate) return false;
-        if (endDate && itemDateStr > endDate) return false;
-        return true;
-      }
-    })();
+      const matchesPriority = !priorityFilter || item.priority === priorityFilter;
+      const matchesSegment = !segmentFilter || item.vehicle_segment === segmentFilter;
+      const matchesStatus = !statusFilter || item.status_name === statusFilter;
 
-    return matchesSearch && matchesPriority && matchesSegment && matchesStatus && matchesDate;
-  });
+      // Filter by Created Date (created_at)
+      const matchesDate = (() => {
+        if (!startDate && !endDate) return true;
+        if (!item.created_at) return false;
+        try {
+          const itemDate = new Date(item.created_at).toISOString().split("T")[0];
+          if (startDate && itemDate < startDate) return false;
+          if (endDate && itemDate > endDate) return false;
+          return true;
+        } catch {
+          const itemDateStr = String(item.created_at).slice(0, 10);
+          if (startDate && itemDateStr < startDate) return false;
+          if (endDate && itemDateStr > endDate) return false;
+          return true;
+        }
+      })();
+
+      return matchesSearch && matchesPriority && matchesSegment && matchesStatus && matchesDate;
+    });
+  }, [activeLeads, searchTerm, priorityFilter, segmentFilter, statusFilter, startDate, endDate]);
 
   // Reset to first page when any filter changes
   useEffect(() => {
@@ -1017,7 +1038,7 @@ export default function LeadsPage() {
   const userExecList = usersList
     .filter((u) => u.status === "Active" || !u.status)
     .map((u) => `${u.name} (${u.role || "Executive"})`);
-  const executiveOptions = Array.from(new Set([...userExecList, ...defaultExecutives]));
+  const executiveOptions = userExecList.length > 0 ? userExecList : defaultExecutives;
 
   return (
     <AdminLayout>
@@ -1094,7 +1115,7 @@ export default function LeadsPage() {
                   purchase_timeline: "Immediate (Within 7 Days)",
                   source_id: sources[0]?.id || "",
                   status_id: statuses[0]?.id || "",
-                  assigned_user_name: "David Miller (Sales Executive)",
+                  assigned_user_name: "",
                 });
                 setShowAddModal(true);
               }}
@@ -1115,7 +1136,7 @@ export default function LeadsPage() {
                   <i className="bi bi-funnel-fill"></i>
                 </div>
               </div>
-              <div className="stat-card-value">{leads.length} Leads</div>
+              <div className="stat-card-value">{activeLeads.length} Leads</div>
               <span className="text-primary small fw-semibold">Live Database Records</span>
             </div>
           </div>
@@ -1128,7 +1149,9 @@ export default function LeadsPage() {
                   <i className="bi bi-fire"></i>
                 </div>
               </div>
-              <div className="stat-card-value">{leads.filter((l) => l.priority === "Hot").length} Hot</div>
+              <div className="stat-card-value">
+                {activeLeads.filter((l) => String(l.priority).toLowerCase() === "hot").length} Hot
+              </div>
               <span className="text-danger small fw-semibold">Immediate Buying Interest</span>
             </div>
           </div>
@@ -1142,7 +1165,7 @@ export default function LeadsPage() {
                 </div>
               </div>
               <div className="stat-card-value">
-                {leads.filter((l) => l.vehicle_segment === "4 Wheeler").length} Leads
+                {activeLeads.filter((l) => String(l.vehicle_segment).toLowerCase() === "4 wheeler").length} Leads
               </div>
               <span className="text-success small fw-semibold">Cars & SUVs Inquiries</span>
             </div>
@@ -1203,7 +1226,8 @@ export default function LeadsPage() {
                 <button
                   className="btn btn-sm btn-outline-custom dropdown-toggle text-white"
                   type="button"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     setOpenStatusDropdown(!openStatusDropdown);
                     setOpenPriorityDropdown(false);
                   }}
@@ -1214,9 +1238,10 @@ export default function LeadsPage() {
                 {openStatusDropdown && (
                   <div
                     className="bulk-dropdown-menu dropdown-menu show"
-                    style={{ position: "absolute", right: 0, top: "110%" }}
+                    style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 1060 }}
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    <h6 className="dropdown-header text-white-50 px-2 py-1 small">Change Status To:</h6>
+                    <h6 className="dropdown-header text-muted px-2 py-1 small fw-bold">Change Status To:</h6>
                     {statuses.length > 0 ? (
                       statuses.map((st) => (
                         <button
@@ -1226,7 +1251,7 @@ export default function LeadsPage() {
                           onClick={() => handleBulkStatusUpdate(st.id, st.name)}
                         >
                           <i className="bi bi-arrow-right-circle text-primary"></i>
-                          {st.name}
+                          <span>{st.name}</span>
                         </button>
                       ))
                     ) : (
@@ -1239,7 +1264,7 @@ export default function LeadsPage() {
                             onClick={() => handleBulkStatusUpdate(null, stName)}
                           >
                             <i className="bi bi-arrow-right-circle text-primary"></i>
-                            {stName}
+                            <span>{stName}</span>
                           </button>
                         )
                       )
@@ -1253,7 +1278,8 @@ export default function LeadsPage() {
                 <button
                   className="btn btn-sm btn-outline-custom dropdown-toggle text-white"
                   type="button"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     setOpenPriorityDropdown(!openPriorityDropdown);
                     setOpenStatusDropdown(false);
                   }}
@@ -1264,9 +1290,10 @@ export default function LeadsPage() {
                 {openPriorityDropdown && (
                   <div
                     className="bulk-dropdown-menu dropdown-menu show"
-                    style={{ position: "absolute", right: 0, top: "110%" }}
+                    style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 1060 }}
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    <h6 className="dropdown-header text-white-50 px-2 py-1 small">Set Temperature:</h6>
+                    <h6 className="dropdown-header text-muted px-2 py-1 small fw-bold">Set Temperature:</h6>
                     <button
                       type="button"
                       className="dropdown-item text-danger fw-semibold"
@@ -2189,18 +2216,21 @@ export default function LeadsPage() {
                       </select>
                     </div>
 
-                    {/* <div className="col-md-4">
+                    <div className="col-md-4">
                       <label className="form-label text-dark fw-bold small">Assigned Executive</label>
                       <select
                         className="form-select"
                         value={formData.assigned_user_name}
                         onChange={(e) => setFormData({ ...formData, assigned_user_name: e.target.value })}
                       >
-                        <option value="David Miller (Sales Executive)">David Miller (Sales Executive)</option>
-                        <option value="Alexander Vance (Sales Director)">Alexander Vance (Sales Director)</option>
-                        <option value="Rajesh Kumar (Sales Executive)">Rajesh Kumar (Sales Executive)</option>
+                        <option value="">Choose Executive</option>
+                        {executiveOptions.map((opt) => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
                       </select>
-                    </div> */}
+                    </div>
                   </div>
                 </div>
 
@@ -2520,9 +2550,11 @@ export default function LeadsPage() {
                         value={editLead.assigned_user_name}
                         onChange={(e) => setEditLead({ ...editLead, assigned_user_name: e.target.value })}
                       >
-                        <option value="David Miller (Sales Executive)">David Miller (Sales Executive)</option>
-                        <option value="Alexander Vance (Sales Director)">Alexander Vance (Sales Director)</option>
-                        <option value="Rajesh Kumar (Sales Executive)">Rajesh Kumar (Sales Executive)</option>
+                        {executiveOptions.map((opt) => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>

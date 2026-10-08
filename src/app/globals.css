@@ -1726,7 +1726,47 @@ label.text-white,
     margin-bottom: 1.25rem;
     box-shadow: var(--shadow-md);
     color: #FFFFFF;
+    position: relative;
+    z-index: 100;
     animation: bulkBarSlideIn 0.25s ease-out forwards;
+}
+
+.bulk-dropdown-menu {
+    min-width: 200px !important;
+    background-color: #FFFFFF !important;
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 10px !important;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+    padding: 0.5rem !important;
+    z-index: 1060 !important;
+}
+
+.bulk-dropdown-menu .dropdown-header {
+    color: #64748B !important;
+    font-weight: 700 !important;
+    font-size: 0.72rem !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    padding: 0.35rem 0.65rem 0.45rem !important;
+    margin-bottom: 0.25rem !important;
+    border-bottom: 1px solid #F1F5F9 !important;
+}
+
+.bulk-dropdown-menu .dropdown-item {
+    color: #1E293B !important;
+    padding: 0.45rem 0.75rem !important;
+    border-radius: 6px !important;
+    font-weight: 500 !important;
+    font-size: 0.84rem !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+    cursor: pointer;
+}
+
+.bulk-dropdown-menu .dropdown-item:hover {
+    background-color: #F8FAFC !important;
+    color: #0F172A !important;
 }
 
 @keyframes bulkBarSlideIn {
