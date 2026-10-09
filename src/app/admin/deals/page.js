@@ -47,6 +47,7 @@ export default function DealsPage() {
     payment_date: new Date().toISOString().split("T")[0],
     transaction_reference: "",
     bank_name: "HDFC Bank",
+    received_by: "",
     notes: "Customer down payment transfer",
   });
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
@@ -184,6 +185,14 @@ export default function DealsPage() {
 
   // Open Payment Modal
   const handleOpenPayment = (deal) => {
+    let currentUserName = "";
+    if (typeof window !== "undefined") {
+      try {
+        const userObj = JSON.parse(localStorage.getItem("user") || "{}");
+        currentUserName = userObj?.name || "";
+      } catch (e) {}
+    }
+
     setSelectedDealForPayment(deal);
     setPaymentForm({
       amount: deal.balance_amount ? String(deal.balance_amount) : "",
@@ -192,6 +201,7 @@ export default function DealsPage() {
       payment_date: new Date().toISOString().split("T")[0],
       transaction_reference: "",
       bank_name: "",
+      received_by: currentUserName,
       notes: "",
     });
     setShowPaymentModal(true);
@@ -208,6 +218,11 @@ export default function DealsPage() {
       return;
     }
 
+    if (!paymentForm.received_by.trim()) {
+      showToast("Please enter the name of the person who received payment.", "error");
+      return;
+    }
+
     setIsSubmittingPayment(true);
     const payload = {
       deal_id: selectedDealForPayment.id,
@@ -217,6 +232,7 @@ export default function DealsPage() {
       payment_date: paymentForm.payment_date,
       transaction_reference: paymentForm.transaction_reference.trim(),
       bank_name: paymentForm.bank_name.trim(),
+      received_by: paymentForm.received_by.trim(),
       notes: paymentForm.notes.trim(),
     };
 
@@ -383,9 +399,60 @@ export default function DealsPage() {
 
   return (
     <AdminLayout>
+      {/* =========================================================================
+          PRINT-ONLY STYLESHEET: Clean Official Deal Voucher Receipt Format
+          ========================================================================= */}
+      <style jsx global>{`
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          #printable-deal-ledger,
+          #printable-deal-ledger * {
+            visibility: visible !important;
+          }
+          #printable-deal-ledger {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 24px !important;
+            background: #ffffff !important;
+            box-shadow: none !important;
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 4px !important;
+            color: #0f172a !important;
+          }
+          .modal-backdrop-custom {
+            background: transparent !important;
+            position: static !important;
+            padding: 0 !important;
+          }
+          .modal-dialog-custom {
+            max-width: 100% !important;
+            margin: 0 !important;
+            box-shadow: none !important;
+          }
+          .modal-header-custom,
+          .modal-footer-custom,
+          .btn-close,
+          .no-print {
+            display: none !important;
+          }
+          .print-only-block {
+            display: block !important;
+          }
+          .print-only-flex {
+            display: flex !important;
+          }
+        }
+      `}</style>
+
       <div className="page-body">
         {/* Page Breadcrumbs & Header Actions */}
-        <div className="page-header-wrapper mb-3">
+        <div className="page-header-wrapper mb-3 no-print">
           <div>
             <ul className="breadcrumb-custom">
               <li className="breadcrumb-item">
@@ -779,6 +846,15 @@ export default function DealsPage() {
                                   {deal.vin_chassis_number}
                                 </span>
                               )}
+                              {deal.has_insurance === "Yes" ? (
+                                <span className="badge bg-success-subtle text-success border border-success-subtle" title="Insurance Included">
+                                  <i className="bi bi-shield-check me-1"></i>Insurance: Yes
+                                </span>
+                              ) : (
+                                <span className="badge bg-light text-muted border" title="Insurance Not Included">
+                                  Insurance: No
+                                </span>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -1031,13 +1107,30 @@ export default function DealsPage() {
                       />
                     </div>
 
-                    {/* Conditional: If Cash, hide Transaction Reference & Bank */}
+                    {/* Received By (Person Name) */}
+                    <div className="col-md-6">
+                      <label className="form-label text-dark fw-bold small mb-1">
+                        Received By (Person Name) <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. Cashier / Executive Name"
+                        required
+                        value={paymentForm.received_by}
+                        onChange={(e) =>
+                          setPaymentForm({ ...paymentForm, received_by: e.target.value })
+                        }
+                      />
+                    </div>
+
+                    {/* Conditional: If Cash, show info banner */}
                     {paymentForm.payment_mode === "cash" ? (
                       <div className="col-12">
                         <div className="p-2 px-3 bg-light border border-success-subtle rounded d-flex align-items-center gap-2 text-success small">
                           <i className="bi bi-cash-stack fs-5 text-success"></i>
                           <div>
-                            <strong>Cash Mode:</strong> Direct cash collection at counter.
+                            <strong>Cash Mode:</strong> Direct cash collection at counter. Received by: <strong>{paymentForm.received_by || "Staff"}</strong>.
                           </div>
                         </div>
                       </div>
@@ -1075,23 +1168,23 @@ export default function DealsPage() {
                             }
                           />
                         </div>
-
-                        <div className="col-12">
-                          <label className="form-label text-dark fw-bold small mb-1">
-                            Payment Notes / Remarks
-                          </label>
-                          <input
-                            type="text"
-                            className="form-control"
-                            placeholder="e.g. Customer payment transfer"
-                            value={paymentForm.notes}
-                            onChange={(e) =>
-                              setPaymentForm({ ...paymentForm, notes: e.target.value })
-                            }
-                          />
-                        </div>
                       </>
                     )}
+
+                    <div className="col-12">
+                      <label className="form-label text-dark fw-bold small mb-1">
+                        Payment Notes / Remarks
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. Customer payment transfer"
+                        value={paymentForm.notes}
+                        onChange={(e) =>
+                          setPaymentForm({ ...paymentForm, notes: e.target.value })
+                        }
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -1350,6 +1443,27 @@ export default function DealsPage() {
               </div>
 
               <div className="modal-body-custom py-3">
+                {/* Official Dealership Header (Visible on Print) */}
+                <div className="d-none print-only-block text-center border-bottom pb-3 mb-3">
+                  <div style={{ fontSize: "24px", fontWeight: "800", color: "#1e3a8a", letterSpacing: "0.5px" }}>
+                    DEFENCE AUTOLINK
+                  </div>
+                  <div style={{ fontSize: "11px", color: "#475569", fontWeight: "600", textTransform: "uppercase" }}>
+                    OFFICIAL MULTI-BRAND AUTOMOTIVE DEALERSHIP • SALES & SERVICES
+                  </div>
+                  <div style={{ fontSize: "11px", color: "#64748b" }}>
+                    Main Ring Road Showroom, South Extension Part-II, New Delhi – 110049 • GSTIN: 07AAAAA0000A1Z5
+                  </div>
+                  <div style={{ marginTop: "8px", fontSize: "14px", fontWeight: "700", color: "#0f172a", textTransform: "uppercase", letterSpacing: "0.5px", textDecoration: "underline" }}>
+                    OFFICIAL VEHICLE DEAL ORDER VOUCHER & PAYMENT RECEIPT
+                  </div>
+                  <div className="d-flex justify-content-between align-items-center mt-3 small text-muted px-2" style={{ fontSize: "12px" }}>
+                    <span><strong>Deal Reference:</strong> <span className="font-monospace text-dark fw-bold">{viewDeal.deal_number}</span></span>
+                    <span><strong>Booking Date:</strong> <span className="text-dark fw-semibold">{viewDeal.created_at ? viewDeal.created_at.split("T")[0] : new Date().toISOString().split("T")[0]}</span></span>
+                    <span><strong>Status:</strong> <span className="text-success fw-bold">Booking Confirmed</span></span>
+                  </div>
+                </div>
+
                 {/* Summary Banner */}
                 <div className="p-3 mb-3 bg-light rounded border d-flex flex-wrap justify-content-between align-items-center gap-3">
                   <div>
@@ -1363,6 +1477,17 @@ export default function DealsPage() {
                     <div className="small text-muted">
                       Color: {viewDeal.color || "Standard"} • VIN: {viewDeal.vin_chassis_number || "Pending"}
                     </div>
+                    <div className="mt-1">
+                      {viewDeal.has_insurance === "Yes" ? (
+                        <span className="badge bg-success-subtle text-success border border-success-subtle" style={{ fontSize: "11px" }}>
+                          <i className="bi bi-shield-check me-1"></i>Insurance: Yes
+                        </span>
+                      ) : (
+                        <span className="badge bg-secondary-subtle text-muted border" style={{ fontSize: "11px" }}>
+                          Insurance: No
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="text-end">
                     <span className="small text-muted text-uppercase fw-bold">Deal Value</span>
@@ -1374,32 +1499,44 @@ export default function DealsPage() {
                 </div>
 
                 {/* Financial Ledger Breakdown */}
-                <div className="row g-2 mb-3 text-center">
-                  <div className="col-4">
-                    <div className="p-2 border rounded bg-white">
-                      <span className="small text-muted">Total Net Amount</span>
-                      <div className="fw-bold text-dark fs-6">
-                        ₹{formatIndianCurrency(viewDeal.net_amount)}
+                {(() => {
+                  const netVal = Number(viewDeal.net_amount || viewDeal.total_amount || 0);
+                  const paymentsList = Array.isArray(viewDeal.payments) ? viewDeal.payments : [];
+                  const recVal = Math.max(
+                    Number(viewDeal.paid_amount || viewDeal.total_paid || 0),
+                    paymentsList.filter((p) => p.status !== "rejected").reduce((s, p) => s + (Number(p.amount) || 0), 0)
+                  );
+                  const dueVal = Math.max(0, netVal - recVal);
+
+                  return (
+                    <div className="row g-2 mb-3 text-center">
+                      <div className="col-4">
+                        <div className="p-2 border rounded bg-white">
+                          <span className="small text-muted">Total Net Amount</span>
+                          <div className="fw-bold text-dark fs-6">
+                            ₹{formatIndianCurrency(netVal)}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="col-4">
+                        <div className="p-2 border rounded bg-success-subtle">
+                          <span className="small text-muted">Total Received</span>
+                          <div className="fw-bold text-success fs-6">
+                            ₹{formatIndianCurrency(recVal)}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="col-4">
+                        <div className="p-2 border rounded bg-danger-subtle">
+                          <span className="small text-muted">Balance Due</span>
+                          <div className="fw-bold text-danger fs-6">
+                            ₹{formatIndianCurrency(dueVal)}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="col-4">
-                    <div className="p-2 border rounded bg-success-subtle">
-                      <span className="small text-muted">Total Received</span>
-                      <div className="fw-bold text-success fs-6">
-                        ₹{formatIndianCurrency(viewDeal.paid_amount || 0)}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="col-4">
-                    <div className="p-2 border rounded bg-danger-subtle">
-                      <span className="small text-muted">Balance Due</span>
-                      <div className="fw-bold text-danger fs-6">
-                        ₹{formatIndianCurrency(viewDeal.balance_amount || 0)}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 {/* Payment History Table */}
                 <h6 className="fw-bold text-dark mb-2 d-flex align-items-center gap-1 border-bottom pb-1">
@@ -1419,6 +1556,7 @@ export default function DealsPage() {
                           <th>Mode</th>
                           <th>Reference / UTR</th>
                           <th>Bank</th>
+                          <th>Received By</th>
                           <th className="text-end">Amount</th>
                           <th className="text-center">Status</th>
                           <th className="text-center">Action</th>
@@ -1443,46 +1581,21 @@ export default function DealsPage() {
                             </td>
                             <td className="font-monospace">{p.transaction_reference || "-"}</td>
                             <td>{p.bank_name || "-"}</td>
+                            <td className="fw-semibold text-dark">
+                              {p.received_by || p.recorded_by_name || p.recorded_by?.name || "-"}
+                            </td>
                             <td className="text-end fw-bold text-success">
                               ₹{formatIndianCurrency(p.amount)}
                             </td>
                             <td className="text-center">
-                              <span
-                                className={`badge text-capitalize ${
-                                  p.status === "cleared"
-                                    ? "bg-success text-white"
-                                    : p.status === "rejected"
-                                    ? "bg-danger text-white"
-                                    : "bg-warning text-dark"
-                                }`}
-                              >
-                                {p.status || "pending"}
+                              <span className={`badge px-2 py-1 ${p.status === "rejected" ? "bg-danger text-white" : "bg-success text-white"}`}>
+                                {p.status === "rejected" ? "Rejected" : "Cleared"}
                               </span>
                             </td>
                             <td className="text-center">
-                              {p.status !== "cleared" ? (
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-outline-success py-0 px-2"
-                                  style={{ fontSize: "11px" }}
-                                  disabled={isVerifyingPaymentId === p.id}
-                                  onClick={() => handleVerifyPayment(p.id)}
-                                  title="Verify & Clear Payment"
-                                >
-                                  {isVerifyingPaymentId === p.id ? (
-                                    <span className="spinner-border spinner-border-sm" role="status"></span>
-                                  ) : (
-                                    <>
-                                      <i className="bi bi-check2 me-1"></i>
-                                      <span>Clear</span>
-                                    </>
-                                  )}
-                                </button>
-                              ) : (
-                                <span className="text-success small fw-bold">
-                                  <i className="bi bi-check-circle-fill"></i>
-                                </span>
-                              )}
+                              <span className="badge bg-success-subtle text-success border border-success border-opacity-25 px-2 py-1">
+                                <i className="bi bi-check-circle-fill me-1"></i>Cleared
+                              </span>
                             </td>
                           </tr>
                         ))}
@@ -1490,6 +1603,23 @@ export default function DealsPage() {
                     </table>
                   </div>
                 )}
+
+                {/* Official Signatures & Seal (Visible on Print) */}
+                <div className="d-none print-only-flex justify-content-between align-items-end mt-5 pt-4 border-top">
+                  <div className="text-center" style={{ minWidth: "220px" }}>
+                    <div style={{ borderBottom: "1px dashed #64748b", height: "45px" }}></div>
+                    <div className="small fw-semibold mt-1 text-dark">Customer Signature</div>
+                  </div>
+                  <div className="text-center" style={{ minWidth: "160px" }}>
+                    <div className="border border-secondary border-dashed text-secondary p-2 rounded mb-1" style={{ fontSize: "10px", letterSpacing: "1px" }}>
+                      OFFICIAL DEALERSHIP STAMP
+                    </div>
+                  </div>
+                  <div className="text-center" style={{ minWidth: "220px" }}>
+                    <div style={{ borderBottom: "1px dashed #64748b", height: "45px" }}></div>
+                    <div className="small fw-semibold mt-1 text-dark">Authorized Signatory</div>
+                  </div>
+                </div>
               </div>
 
               <div className="modal-footer-custom d-flex justify-content-between align-items-center pt-3">

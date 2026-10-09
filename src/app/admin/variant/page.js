@@ -317,7 +317,7 @@ export default function VariantPage() {
 
         {/* KPI Stat Cards */}
         <div className="row g-3 mb-4">
-          <div className="col-xl-3 col-sm-6">
+          <div className="col-md-4 col-sm-6">
             <div className="card stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">Total Variants</span>
@@ -330,7 +330,7 @@ export default function VariantPage() {
             </div>
           </div>
 
-          <div className="col-xl-3 col-sm-6">
+          <div className="col-md-4 col-sm-6">
             <div className="card stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">Active Trims</span>
@@ -345,7 +345,7 @@ export default function VariantPage() {
             </div>
           </div>
 
-          <div className="col-xl-3 col-sm-6">
+          <div className="col-md-4 col-sm-6">
             <div className="card stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">Mapped Models</span>
@@ -355,19 +355,6 @@ export default function VariantPage() {
               </div>
               <div className="stat-card-value">{new Set(variants.map((v) => v.model_id)).size} Models</div>
               <span className="text-warning small fw-semibold">Configured with Variants</span>
-            </div>
-          </div>
-
-          <div className="col-xl-3 col-sm-6">
-            <div className="card stat-card">
-              <div className="stat-card-header">
-                <span className="stat-card-title">Backend API</span>
-                <div className="stat-icon-box info">
-                  <i className="bi bi-hdd-network-fill"></i>
-                </div>
-              </div>
-              <div className="stat-card-value">Connected</div>
-              <span className="text-info small fw-semibold">REST API (/api/variants)</span>
             </div>
           </div>
         </div>

@@ -8,6 +8,29 @@ import { useToast } from "@/app/components/Toast";
 import { hasPermission } from "@/utils/auth";
 import Pagination from "@/components/common/Pagination";
 
+// Helper to filter brands based on vehicle segment
+const isBrandMatchingSegment = (brand, segment) => {
+  if (!segment || !brand) return true;
+  const vt = brand.vehicle_type || brand.vehicle_segment || brand.segment;
+  if (!vt) return true;
+  const segNormalized = String(segment).toLowerCase().trim();
+  const segNum = segNormalized.includes("2") ? "2" : segNormalized.includes("4") ? "4" : "";
+
+  if (Array.isArray(vt)) {
+    return vt.some((t) => {
+      const s = String(t).toLowerCase().trim();
+      return s === segNormalized || (segNum && s.includes(segNum));
+    });
+  }
+
+  if (typeof vt === "string") {
+    const s = vt.toLowerCase().trim();
+    return s === segNormalized || (segNum && s.includes(segNum));
+  }
+
+  return true;
+};
+
 export default function ModelPage() {
   const { showToast } = useToast();
   const [currentUser, setCurrentUser] = useState(null);
@@ -267,7 +290,7 @@ export default function ModelPage() {
 
         {/* Model KPI Counters */}
         <div className="row g-3 mb-4">
-          <div className="col-xl-3 col-sm-6">
+          <div className="col-md-4 col-sm-6">
             <div className="card stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">Total Models</span>
@@ -280,7 +303,7 @@ export default function ModelPage() {
             </div>
           </div>
 
-          <div className="col-xl-3 col-sm-6">
+          <div className="col-md-4 col-sm-6">
             <div className="card stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">4 Wheeler Models</span>
@@ -295,7 +318,7 @@ export default function ModelPage() {
             </div>
           </div>
 
-          <div className="col-xl-3 col-sm-6">
+          <div className="col-md-4 col-sm-6">
             <div className="card stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">2 Wheeler Models</span>
@@ -307,19 +330,6 @@ export default function ModelPage() {
                 {models.filter((m) => m.vehicle_segment === "2 Wheeler").length} Models
               </div>
               <span className="text-warning small fw-semibold">Bikes & Scooters</span>
-            </div>
-          </div>
-
-          <div className="col-xl-3 col-sm-6">
-            <div className="card stat-card">
-              <div className="stat-card-header">
-                <span className="stat-card-title">Backend API</span>
-                <div className="stat-icon-box info">
-                  <i className="bi bi-hdd-network-fill"></i>
-                </div>
-              </div>
-              <div className="stat-card-value">Connected</div>
-              <span className="text-info small fw-semibold">REST API (/api/models)</span>
             </div>
           </div>
         </div>
@@ -526,7 +536,17 @@ export default function ModelPage() {
                           id="addRadio2W"
                           value="2 Wheeler"
                           checked={formData.vehicle_segment === "2 Wheeler"}
-                          onChange={(e) => setFormData({ ...formData, vehicle_segment: e.target.value })}
+                          onChange={(e) => {
+                            const newSeg = e.target.value;
+                            const isCurrentBrandValid = brands.some(
+                              (b) => String(b.id) === String(formData.brand_id) && isBrandMatchingSegment(b, newSeg)
+                            );
+                            setFormData({
+                              ...formData,
+                              vehicle_segment: newSeg,
+                              ...(isCurrentBrandValid ? {} : { brand_id: "" }),
+                            });
+                          }}
                         />
                         <label className="form-check-label small" htmlFor="addRadio2W">
                           <i className="bi bi-bicycle text-info me-1"></i> 2 Wheeler
@@ -541,7 +561,17 @@ export default function ModelPage() {
                           id="addRadio4W"
                           value="4 Wheeler"
                           checked={formData.vehicle_segment === "4 Wheeler"}
-                          onChange={(e) => setFormData({ ...formData, vehicle_segment: e.target.value })}
+                          onChange={(e) => {
+                            const newSeg = e.target.value;
+                            const isCurrentBrandValid = brands.some(
+                              (b) => String(b.id) === String(formData.brand_id) && isBrandMatchingSegment(b, newSeg)
+                            );
+                            setFormData({
+                              ...formData,
+                              vehicle_segment: newSeg,
+                              ...(isCurrentBrandValid ? {} : { brand_id: "" }),
+                            });
+                          }}
                         />
                         <label className="form-check-label small" htmlFor="addRadio4W">
                           <i className="bi bi-car-front-fill text-primary me-1"></i> 4 Wheeler
@@ -562,11 +592,13 @@ export default function ModelPage() {
                       onChange={(e) => setFormData({ ...formData, brand_id: e.target.value })}
                     >
                       <option value="">Choose Brand</option>
-                      {brands.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.name}
-                        </option>
-                      ))}
+                      {brands
+                        .filter((b) => isBrandMatchingSegment(b, formData.vehicle_segment))
+                        .map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.name}
+                          </option>
+                        ))}
                     </select>
                   </div>
 
@@ -660,7 +692,17 @@ export default function ModelPage() {
                           id="editRadio2W"
                           value="2 Wheeler"
                           checked={editModel.vehicle_segment === "2 Wheeler"}
-                          onChange={(e) => setEditModel({ ...editModel, vehicle_segment: e.target.value })}
+                          onChange={(e) => {
+                            const newSeg = e.target.value;
+                            const isCurrentBrandValid = brands.some(
+                              (b) => String(b.id) === String(editModel.brand_id) && isBrandMatchingSegment(b, newSeg)
+                            );
+                            setEditModel({
+                              ...editModel,
+                              vehicle_segment: newSeg,
+                              ...(isCurrentBrandValid ? {} : { brand_id: "" }),
+                            });
+                          }}
                         />
                         <label className="form-check-label small" htmlFor="editRadio2W">
                           <i className="bi bi-bicycle text-info me-1"></i> 2 Wheeler
@@ -675,7 +717,17 @@ export default function ModelPage() {
                           id="editRadio4W"
                           value="4 Wheeler"
                           checked={editModel.vehicle_segment === "4 Wheeler"}
-                          onChange={(e) => setEditModel({ ...editModel, vehicle_segment: e.target.value })}
+                          onChange={(e) => {
+                            const newSeg = e.target.value;
+                            const isCurrentBrandValid = brands.some(
+                              (b) => String(b.id) === String(editModel.brand_id) && isBrandMatchingSegment(b, newSeg)
+                            );
+                            setEditModel({
+                              ...editModel,
+                              vehicle_segment: newSeg,
+                              ...(isCurrentBrandValid ? {} : { brand_id: "" }),
+                            });
+                          }}
                         />
                         <label className="form-check-label small" htmlFor="editRadio4W">
                           <i className="bi bi-car-front-fill text-primary me-1"></i> 4 Wheeler
@@ -696,11 +748,13 @@ export default function ModelPage() {
                       onChange={(e) => setEditModel({ ...editModel, brand_id: e.target.value })}
                     >
                       <option value="">Choose Brand</option>
-                      {brands.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.name}
-                        </option>
-                      ))}
+                      {brands
+                        .filter((b) => isBrandMatchingSegment(b, editModel.vehicle_segment))
+                        .map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.name}
+                          </option>
+                        ))}
                     </select>
                   </div>
 

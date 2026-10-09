@@ -883,7 +883,6 @@ export default function SalesExecutiveLeadDetailsPage({ params }) {
                       >
                         <option value="">-- Keep Current Status ({lead.status_name}) --</option>
                         <option value="In Follow-Up">In Follow-Up</option>
-                        <option value="Test Drive Scheduled">Test Drive Scheduled</option>
                         <option value="Quotation Sent">Quotation Sent</option>
                         <option value="Negotiation">Negotiation</option>
                         <option value="Deal Won">Deal Won</option>

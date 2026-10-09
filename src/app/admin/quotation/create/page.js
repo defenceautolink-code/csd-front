@@ -191,27 +191,109 @@ function SendQuotationPageContent() {
 
     setSelectedLeadId(leadId);
     try {
-      const res = await quotationApi.getLeadForQuotation(leadId);
-      if (res && res.status && res.data) {
-        const lead = res.data;
-        setClientName(lead.customer_name || "");
-        setClientMobile(lead.phone || "");
-        setCityJurisdiction(lead.city || lead.address || "Ahmedabad");
-        setClientEmail(lead.email || "");
+      const [quoteLeadRes, directLeadRes] = await Promise.all([
+        quotationApi.getLeadForQuotation(leadId).catch(() => null),
+        api.get(`/leads/${leadId}`).catch(() => null),
+      ]);
+      const quoteLead = quoteLeadRes?.data || quoteLeadRes || {};
+      const directLead = directLeadRes?.data?.data || directLeadRes?.data || {};
+      const lead = { ...directLead, ...quoteLead };
 
-        if (lead.model_variant) {
-          setCarName(lead.brand_name ? `${lead.brand_name} ${lead.model_variant}` : lead.model_variant);
-          setModelSpec(lead.model_variant);
-        }
+      setClientName(lead.customer_name || lead.name || "");
+      setClientMobile(lead.phone || "");
+      setCityJurisdiction(lead.city || lead.address || "Ahmedabad");
+      setClientEmail(lead.email || "");
 
-        // Match Brand if available
-        if (lead.brand_id) {
-          setSelectedBrandId(lead.brand_id);
-          fetchModelsForBrand(lead.brand_id);
-        }
-
-        showToast(`Auto-filled customer details for ${lead.customer_name}!`, "success");
+      // 1. Identify and select Brand
+      let availableBrands = brandsList;
+      if (!availableBrands || availableBrands.length === 0) {
+        try {
+          const bRes = await api.get("/brands");
+          availableBrands = bRes?.data?.data || bRes?.data || [];
+          if (availableBrands.length > 0) setBrandsList(availableBrands);
+        } catch (e) {}
       }
+
+      let brandId = lead.brand_id || directLead.brand_id || directLead.brand?.id;
+      if (!brandId && (lead.brand_name || lead.model_variant)) {
+        const matchedB = (availableBrands || []).find((b) =>
+          (lead.brand_name && b.name.toLowerCase() === String(lead.brand_name).toLowerCase()) ||
+          (lead.model_variant && lead.model_variant.toLowerCase().includes(b.name.toLowerCase()))
+        );
+        if (matchedB) brandId = matchedB.id;
+      }
+
+      let models = [];
+      let brandObj = null;
+      if (brandId) {
+        setSelectedBrandId(String(brandId));
+        brandObj = (availableBrands || []).find((b) => String(b.id) === String(brandId));
+        if (brandObj) setCarName(brandObj.name.toUpperCase());
+
+        setIsLoadingModels(true);
+        try {
+          const modelsRes = await api.get(`/models?brand_id=${brandId}`);
+          models = modelsRes?.data?.data || modelsRes?.data || [];
+          setModelsList(models);
+        } catch (e) {} finally {
+          setIsLoadingModels(false);
+        }
+      }
+
+      // 2. Identify and select Model
+      let modelId = lead.model_id || directLead.model_id || directLead.model?.id;
+      let targetModel = models.find((m) => String(m.id) === String(modelId));
+      if (!targetModel && (lead.model_name || lead.model_variant)) {
+        const searchStr = (lead.model_name || lead.model_variant || "").toLowerCase();
+        targetModel = models.find((m) => searchStr.includes(m.name.toLowerCase()));
+      }
+
+      let variants = [];
+      if (targetModel) {
+        const foundModelId = targetModel.id;
+        setSelectedModelId(String(foundModelId));
+        setModelSpec(targetModel.name.toUpperCase());
+        setCarName(`${brandObj ? brandObj.name.toUpperCase() + " " : ""}${targetModel.name.toUpperCase()}`);
+
+        setIsLoadingVariants(true);
+        try {
+          const variantsRes = await api.get(`/variants?model_id=${foundModelId}`);
+          variants = variantsRes?.data?.data || variantsRes?.data || [];
+          setVariantsList(variants);
+        } catch (e) {} finally {
+          setIsLoadingVariants(false);
+        }
+      }
+
+      // 3. Identify and select Variant & Pricing
+      let variantId = lead.variant_id || directLead.variant_id || directLead.variant?.id;
+      let targetVariant = variants.find((v) => String(v.id) === String(variantId));
+      if (!targetVariant && (lead.variant_name || lead.model_variant)) {
+        const searchVar = (lead.variant_name || lead.model_variant || "").toLowerCase();
+        targetVariant = variants.find((v) => searchVar.includes(v.name.toLowerCase()));
+      }
+      if (!targetVariant && variants.length === 1) {
+        targetVariant = variants[0];
+      }
+
+      if (targetVariant) {
+        setSelectedVariantId(String(targetVariant.id));
+        setModelSpec(targetVariant.name.toUpperCase());
+
+        if (targetVariant.price && Number(targetVariant.price) > 0) {
+          const numPrice = Number(targetVariant.price);
+          setCsdPrice(String(numPrice));
+          const estRto = Math.round(numPrice * 0.06);
+          setGjRto(String(estRto));
+          const estIns = Math.round(numPrice * 0.038);
+          setInsurance(String(estIns));
+        }
+      } else if (lead.model_variant) {
+        setCarName(lead.brand_name ? `${lead.brand_name} ${lead.model_variant}` : lead.model_variant);
+        setModelSpec(lead.model_variant);
+      }
+
+      showToast(`Auto-filled vehicle & details for ${lead.customer_name || lead.name || "lead"}!`, "success");
     } catch (err) {
       console.error("Error fetching lead for quote:", err);
     }
@@ -463,6 +545,20 @@ function SendQuotationPageContent() {
         });
       }
 
+      const itemsWithTotals = itemsArray.map((it) => ({
+        ...it,
+        total: Math.max(0, (Number(it.unit_price) || 0) * (Number(it.quantity) || 1) - (Number(it.discount) || 0)),
+      }));
+
+      const calculatedSubtotal = itemsWithTotals.reduce(
+        (acc, it) => acc + Number(it.unit_price || 0) * Number(it.quantity || 1),
+        0
+      );
+      const calculatedGrandTotal = itemsWithTotals.reduce(
+        (acc, it) => acc + Number(it.total || 0),
+        0
+      );
+
       const payload = {
         lead_id: selectedLeadId ? Number(selectedLeadId) : null,
         quotation_date: new Date().toISOString().split("T")[0],
@@ -476,7 +572,11 @@ function SendQuotationPageContent() {
         delivery_terms: "Vehicle delivery subject to manufacturer allocation and receipt of full payment.",
         notes: "Prices prevailing at the time of invoicing & delivery will be applicable. Road tax as per RTO norms.",
         status: status,
-        items: itemsArray,
+        subtotal: calculatedSubtotal,
+        grand_total: calculatedGrandTotal,
+        total_amount: calculatedGrandTotal,
+        total: calculatedGrandTotal,
+        items: itemsWithTotals,
       };
 
       const res = await quotationApi.createQuotation(payload);

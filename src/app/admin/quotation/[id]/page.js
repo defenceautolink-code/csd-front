@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, usePathname } from "next/navigation";
 import AdminLayout from "@/app/components/AdminLayout";
 import { quotationApi } from "@/lib/quotationApi";
 import api from "@/lib/axios";
@@ -11,8 +11,25 @@ import { useToast } from "@/app/components/Toast";
 export default function QuotationDetailsPage() {
   const params = useParams();
   const router = useRouter();
+  const pathname = usePathname();
   const { showToast } = useToast();
   const quotationId = params.id;
+
+  const baseQuotationPath = pathname?.startsWith("/sales-manager")
+    ? "/sales-manager/quotation"
+    : pathname?.startsWith("/receptionist")
+      ? "/receptionist/quotation"
+      : pathname?.startsWith("/sales-executive")
+        ? "/sales-executive/quotation"
+        : "/admin/quotation";
+
+  const homePath = pathname?.startsWith("/sales-manager")
+    ? "/sales-manager/dashboard"
+    : pathname?.startsWith("/receptionist")
+      ? "/receptionist/dashboard"
+      : pathname?.startsWith("/sales-executive")
+        ? "/sales-executive/dashboard"
+        : "/admin/dashboard";
 
   const [quotation, setQuotation] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -160,7 +177,7 @@ export default function QuotationDetailsPage() {
               The requested quotation does not exist or you don't have permission to access it.
             </p>
             <div>
-              <Link href="/admin/quotation" className="btn btn-primary btn-sm px-4">
+              <Link href={baseQuotationPath} className="btn btn-primary btn-sm px-4">
                 <i className="bi bi-arrow-left me-1"></i> Back to Quotations
               </Link>
             </div>
@@ -172,16 +189,46 @@ export default function QuotationDetailsPage() {
 
   return (
     <AdminLayout>
+      {/* =========================================================================
+          PRINT-ONLY STYLESHEET: Ensures ONLY inner quotation sheet prints cleanly
+          ========================================================================= */}
+      <style jsx global>{`
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          #printableQuoteCard,
+          #printableQuoteCard * {
+            visibility: visible !important;
+          }
+          #printableQuoteCard {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 15px !important;
+            background: #ffffff !important;
+            box-shadow: none !important;
+            border: none !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}</style>
+
       <div className="page-body pb-5">
         {/* Navigation Breadcrumbs & Header Actions */}
-        <div className="page-header-wrapper mb-4">
+        <div className="page-header-wrapper mb-4 no-print">
           <div>
             <ul className="breadcrumb-custom">
               <li className="breadcrumb-item">
-                <Link href="/admin/dashboard">Home</Link>
+                <Link href={homePath}>Home</Link>
               </li>
               <li className="breadcrumb-item">
-                <Link href="/admin/quotation">Quotations</Link>
+                <Link href={baseQuotationPath}>Quotations</Link>
               </li>
               <li className="breadcrumb-item active">{quotation.quotation_number}</li>
             </ul>
@@ -192,7 +239,7 @@ export default function QuotationDetailsPage() {
           </div>
 
           <div className="page-header-actions d-flex align-items-center gap-2 flex-wrap">
-            <Link href="/admin/quotation" className="btn btn-outline-custom">
+            <Link href={baseQuotationPath} className="btn btn-outline-custom">
               <i className="bi bi-arrow-left me-1"></i>
               <span>All Quotes</span>
             </Link>
@@ -200,25 +247,6 @@ export default function QuotationDetailsPage() {
             <button type="button" className="btn btn-outline-custom" onClick={handlePrint}>
               <i className="bi bi-printer-fill me-1"></i>
               <span>Print</span>
-            </button>
-
-            <button
-              type="button"
-              className="btn btn-outline-custom text-info"
-              onClick={handleDownloadPdf}
-              disabled={isDownloadingPdf}
-            >
-              {isDownloadingPdf ? (
-                <>
-                  <span className="spinner-border spinner-border-sm me-1" role="status"></span>
-                  <span>Generating PDF...</span>
-                </>
-              ) : (
-                <>
-                  <i className="bi bi-file-earmark-pdf-fill me-1"></i>
-                  <span>Download PDF</span>
-                </>
-              )}
             </button>
 
             <button

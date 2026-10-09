@@ -371,6 +371,18 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                   </Link>
                 </li>
               )}
+              {canNavigate("/receptionist/model") && (
+                <li className="nav-item">
+                  <Link
+                    href="/receptionist/model"
+                    className={`nav-link ${isLinkActive("/receptionist/model") ? "active" : ""}`}
+                    onClick={onCloseMobile}
+                  >
+                    <i className="bi bi-car-front-fill"></i>
+                    <span>Models</span>
+                  </Link>
+                </li>
+              )}
               {canNavigate("/receptionist/variant") && (
                 <li className="nav-item">
                   <Link

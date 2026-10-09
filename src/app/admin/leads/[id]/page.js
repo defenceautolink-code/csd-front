@@ -53,6 +53,32 @@ export default function LeadDetailPage() {
   const [quotations, setQuotations] = useState([]);
   const [isLoadingQuotations, setIsLoadingQuotations] = useState(false);
 
+  // Safe resolver for quotation grand total across all backend response variations
+  const getQuotationAmount = (q) => {
+    if (!q) return 0;
+    const directAmt = Number(
+      q.grand_total ||
+      q.total_amount ||
+      q.final_price ||
+      q.total ||
+      q.subtotal ||
+      0
+    );
+    if (directAmt > 0) return directAmt;
+    if (Array.isArray(q.items) && q.items.length > 0) {
+      const itemsSum = q.items.reduce(
+        (sum, it) =>
+          sum +
+          (Number(it.total) ||
+            Number(it.unit_price || 0) * Number(it.quantity || 1) -
+              Number(it.discount || 0)),
+        0
+      );
+      if (itemsSum > 0) return itemsSum;
+    }
+    return 0;
+  };
+
   // Unified Follow-Up & Quotation History Timeline
   const combinedHistory = useMemo(() => {
     const list = (followUps || []).map((fu) => {
@@ -94,7 +120,7 @@ export default function LeadDetailPage() {
             : "",
           notes: `Official Quotation #${q.quotation_number || `#Q-${q.id}`} generated for ${
             q.variant_name || q.model_name || lead?.model_variant || "Vehicle"
-          }. Total Amount: ₹${Number(q.total_amount || q.final_price || 0).toLocaleString("en-IN")}`,
+          }. Total Amount: ₹${getQuotationAmount(q).toLocaleString("en-IN")}`,
           user_name: q.created_by_name || q.user?.name || "Admin User (Super Admin)",
           _isQuotation: true,
           _quotationId: q.id,
@@ -797,7 +823,7 @@ export default function LeadDetailPage() {
                               </span>
                             </td>
                             <td className="fw-bold text-success">
-                              ₹{Number(q.total_amount || q.final_price || 0).toLocaleString("en-IN")}
+                              ₹{getQuotationAmount(q).toLocaleString("en-IN")}
                             </td>
                             <td>
                               <span className="badge bg-secondary-subtle text-dark border">
@@ -926,7 +952,6 @@ export default function LeadDetailPage() {
                       >
                         <option value="Interested / Call Back">Interested / Call Back</option>
                         <option value="Quotation Requested">Quotation Requested</option>
-                        <option value="Test Drive Scheduled">Test Drive Scheduled</option>
                         <option value="Negotiation / Price Discussion">Negotiation / Price Discussion</option>
                         <option value="Not Reachable / Busy">Not Reachable / Busy</option>
                         <option value="Lost to Competitor">Lost to Competitor</option>

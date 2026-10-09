@@ -12,6 +12,29 @@ import ConvertDealModal from "./ConvertDealModal";
 import dealApi, { getConvertedLeadIds } from "@/services/dealApi";
 import Pagination from "@/components/common/Pagination";
 
+// Helper to filter brands based on vehicle segment
+const isBrandMatchingSegment = (brand, segment) => {
+  if (!segment || !brand) return true;
+  const vt = brand.vehicle_type || brand.vehicle_segment || brand.segment;
+  if (!vt) return true;
+  const segNormalized = String(segment).toLowerCase().trim();
+  const segNum = segNormalized.includes("2") ? "2" : segNormalized.includes("4") ? "4" : "";
+
+  if (Array.isArray(vt)) {
+    return vt.some((t) => {
+      const s = String(t).toLowerCase().trim();
+      return s === segNormalized || (segNum && s.includes(segNum));
+    });
+  }
+
+  if (typeof vt === "string") {
+    const s = vt.toLowerCase().trim();
+    return s === segNormalized || (segNum && s.includes(segNum));
+  }
+
+  return true;
+};
+
 export default function LeadsPage() {
   const pathname = usePathname();
   const { showToast } = useToast();
@@ -278,8 +301,17 @@ export default function LeadsPage() {
       showToast("Please enter customer name.", "error");
       return;
     }
-    if (!formData.phone.trim()) {
+    const cleanPhone = formData.phone ? formData.phone.trim().replace(/\D/g, "") : "";
+    if (!cleanPhone) {
       showToast("Please enter phone number.", "error");
+      return;
+    }
+    if (cleanPhone.length !== 10) {
+      showToast("Phone number must be exactly 10 digits.", "error");
+      return;
+    }
+    if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
+      showToast("Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9.", "error");
       return;
     }
     if (!formData.model_variant && !formData.model_id) {
@@ -300,7 +332,7 @@ export default function LeadsPage() {
       const response = await axios.post(`${API_URL}/leads`, {
         name: formData.name.trim(),
         email: formData.email.trim(),
-        phone: formData.phone.trim(),
+        phone: cleanPhone,
         city: formData.city.trim(),
         state: formData.state.trim(),
         birth_date: formData.birth_date || null,
@@ -363,8 +395,17 @@ export default function LeadsPage() {
       showToast("Please enter customer name.", "error");
       return;
     }
-    if (!editLead.phone.trim()) {
+    const cleanEditPhone = editLead.phone ? String(editLead.phone).trim().replace(/\D/g, "") : "";
+    if (!cleanEditPhone) {
       showToast("Please enter phone number.", "error");
+      return;
+    }
+    if (cleanEditPhone.length !== 10) {
+      showToast("Phone number must be exactly 10 digits.", "error");
+      return;
+    }
+    if (!/^[6-9]\d{9}$/.test(cleanEditPhone)) {
+      showToast("Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9.", "error");
       return;
     }
     if (!editLead.model_variant && !editLead.model_id) {
@@ -381,7 +422,7 @@ export default function LeadsPage() {
       const response = await axios.put(`${API_URL}/leads/${editLead.id}`, {
         name: editLead.name.trim(),
         email: editLead.email ? editLead.email.trim() : "",
-        phone: editLead.phone.trim(),
+        phone: cleanEditPhone,
         city: editLead.city ? editLead.city.trim() : "",
         state: editLead.state ? editLead.state.trim() : "",
         birth_date: editLead.birth_date || null,
@@ -1648,7 +1689,7 @@ export default function LeadsPage() {
                                         id: lead.id,
                                         name: lead.name,
                                         email: lead.email || "",
-                                        phone: lead.phone,
+                                        phone: lead.phone ? String(lead.phone).replace(/\D/g, "").slice(-10) : "",
                                         city: lead.city || "",
                                         state: lead.state || "",
                                         birth_date: lead.birth_date ? lead.birth_date.split("T")[0] : "",
@@ -1897,11 +1938,17 @@ export default function LeadsPage() {
                       </label>
                       <input
                         type="tel"
+                        inputMode="numeric"
+                        pattern="[6-9][0-9]{9}"
+                        maxLength={10}
                         className="form-control"
-                        placeholder="+91 98765 43210"
+                        placeholder="e.g. 9876543210"
                         required
                         value={formData.phone}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        onChange={(e) => {
+                          const onlyNums = e.target.value.replace(/\D/g, "").slice(0, 10);
+                          setFormData({ ...formData, phone: onlyNums });
+                        }}
                       />
                     </div>
 
@@ -1973,7 +2020,21 @@ export default function LeadsPage() {
                           id="addSeg2W"
                           value="2 Wheeler"
                           checked={formData.vehicle_segment === "2 Wheeler"}
-                          onChange={(e) => setFormData({ ...formData, vehicle_segment: e.target.value })}
+                          onChange={(e) => {
+                            const newSeg = e.target.value;
+                            const isCurrentBrandValid = brands.some(
+                              (b) => String(b.id) === String(formData.brand_id) && isBrandMatchingSegment(b, newSeg)
+                            );
+                            setFormData({
+                              ...formData,
+                              vehicle_segment: newSeg,
+                              ...(isCurrentBrandValid ? {} : { brand_id: "", model_id: "", variant_id: "", model_variant: "" }),
+                            });
+                            if (!isCurrentBrandValid) {
+                              setAddModels([]);
+                              setAddVariants([]);
+                            }
+                          }}
                         />
                         <label className="form-check-label small" style={{ color: "#FFFFFF" }} htmlFor="addSeg2W">
                           <i className="bi bi-bicycle text-info me-1"></i> 2 Wheeler (Bike / Scooter)
@@ -1988,7 +2049,21 @@ export default function LeadsPage() {
                           id="addSeg4W"
                           value="4 Wheeler"
                           checked={formData.vehicle_segment === "4 Wheeler"}
-                          onChange={(e) => setFormData({ ...formData, vehicle_segment: e.target.value })}
+                          onChange={(e) => {
+                            const newSeg = e.target.value;
+                            const isCurrentBrandValid = brands.some(
+                              (b) => String(b.id) === String(formData.brand_id) && isBrandMatchingSegment(b, newSeg)
+                            );
+                            setFormData({
+                              ...formData,
+                              vehicle_segment: newSeg,
+                              ...(isCurrentBrandValid ? {} : { brand_id: "", model_id: "", variant_id: "", model_variant: "" }),
+                            });
+                            if (!isCurrentBrandValid) {
+                              setAddModels([]);
+                              setAddVariants([]);
+                            }
+                          }}
                         />
                         <label className="form-check-label small" style={{ color: "#FFFFFF" }} htmlFor="addSeg4W">
                           <i className="bi bi-car-front-fill text-primary me-1"></i> 4 Wheeler (Car / SUV)
@@ -2012,11 +2087,13 @@ export default function LeadsPage() {
                         }}
                       >
                         <option value="">Select Brand</option>
-                        {brands.map((b) => (
-                          <option key={b.id} value={b.id}>
-                            {b.name}
-                          </option>
-                        ))}
+                        {brands
+                          .filter((b) => isBrandMatchingSegment(b, formData.vehicle_segment))
+                          .map((b) => (
+                            <option key={b.id} value={b.id}>
+                              {b.name}
+                            </option>
+                          ))}
                       </select>
                     </div>
 
@@ -2315,10 +2392,17 @@ export default function LeadsPage() {
                       </label>
                       <input
                         type="tel"
+                        inputMode="numeric"
+                        pattern="[6-9][0-9]{9}"
+                        maxLength={10}
                         className="form-control"
+                        placeholder="e.g. 9876543210"
                         required
                         value={editLead.phone}
-                        onChange={(e) => setEditLead({ ...editLead, phone: e.target.value })}
+                        onChange={(e) => {
+                          const onlyNums = e.target.value.replace(/\D/g, "").slice(0, 10);
+                          setEditLead({ ...editLead, phone: onlyNums });
+                        }}
                       />
                     </div>
 
@@ -2372,6 +2456,74 @@ export default function LeadsPage() {
                     2. Vehicle Requirement & Priority
                   </h6>
 
+                  <div className="mb-3">
+                    <label className="form-label text-dark fw-bold small mb-1">
+                      Vehicle Segment <span className="text-danger">*</span>
+                    </label>
+                    <div
+                      className="p-2 rounded-2 d-flex align-items-center gap-4 dark-selection-box"
+                      style={{ background: "#181A1B", border: "1px solid #33383B" }}
+                    >
+                      <div className="form-check mb-0">
+                        <input
+                          className="form-check-input"
+                          type="radio"
+                          name="editSeg"
+                          id="editSeg2W"
+                          value="2 Wheeler"
+                          checked={editLead.vehicle_segment === "2 Wheeler"}
+                          onChange={(e) => {
+                            const newSeg = e.target.value;
+                            const isCurrentBrandValid = brands.some(
+                              (b) => String(b.id) === String(editLead.brand_id) && isBrandMatchingSegment(b, newSeg)
+                            );
+                            setEditLead({
+                              ...editLead,
+                              vehicle_segment: newSeg,
+                              ...(isCurrentBrandValid ? {} : { brand_id: "", model_id: "", variant_id: "", model_variant: "" }),
+                            });
+                            if (!isCurrentBrandValid) {
+                              setEditModels([]);
+                              setEditVariants([]);
+                            }
+                          }}
+                        />
+                        <label className="form-check-label small" style={{ color: "#FFFFFF" }} htmlFor="editSeg2W">
+                          <i className="bi bi-bicycle text-info me-1"></i> 2 Wheeler (Bike / Scooter)
+                        </label>
+                      </div>
+
+                      <div className="form-check mb-0">
+                        <input
+                          className="form-check-input"
+                          type="radio"
+                          name="editSeg"
+                          id="editSeg4W"
+                          value="4 Wheeler"
+                          checked={editLead.vehicle_segment === "4 Wheeler" || !editLead.vehicle_segment}
+                          onChange={(e) => {
+                            const newSeg = e.target.value;
+                            const isCurrentBrandValid = brands.some(
+                              (b) => String(b.id) === String(editLead.brand_id) && isBrandMatchingSegment(b, newSeg)
+                            );
+                            setEditLead({
+                              ...editLead,
+                              vehicle_segment: newSeg,
+                              ...(isCurrentBrandValid ? {} : { brand_id: "", model_id: "", variant_id: "", model_variant: "" }),
+                            });
+                            if (!isCurrentBrandValid) {
+                              setEditModels([]);
+                              setEditVariants([]);
+                            }
+                          }}
+                        />
+                        <label className="form-check-label small" style={{ color: "#FFFFFF" }} htmlFor="editSeg4W">
+                          <i className="bi bi-car-front-fill text-primary me-1"></i> 4 Wheeler (Car / SUV)
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="row g-3 mb-3">
                     <div className="col-md-4">
                       <label className="form-label text-dark fw-bold small">Brand Name</label>
@@ -2385,11 +2537,13 @@ export default function LeadsPage() {
                         }}
                       >
                         <option value="">Select Brand</option>
-                        {brands.map((b) => (
-                          <option key={b.id} value={b.id}>
-                            {b.name}
-                          </option>
-                        ))}
+                        {brands
+                          .filter((b) => isBrandMatchingSegment(b, editLead.vehicle_segment || "4 Wheeler"))
+                          .map((b) => (
+                            <option key={b.id} value={b.id}>
+                              {b.name}
+                            </option>
+                          ))}
                       </select>
                     </div>
 
@@ -2667,12 +2821,12 @@ export default function LeadsPage() {
                 </div>
 
                 {/* Assignment History Section */}
-                <div className="mt-4 pt-3 border-top border-secondary">
+                <div className="mt-4 pt-3 border-top">
                   <div className="d-flex align-items-center justify-content-between mb-2">
                     <h6 className="text-dark fw-bold mb-0 small">
                       <i className="bi bi-clock-history text-warning me-1"></i> Assignment History
                     </h6>
-                    <span className="badge bg-secondary-subtle text-black small">
+                    <span className="badge bg-secondary-subtle text-dark small border">
                       {leadAssignmentHistory.length} {leadAssignmentHistory.length === 1 ? "Record" : "Records"}
                     </span>
                   </div>
@@ -2683,7 +2837,7 @@ export default function LeadsPage() {
                       Loading history...
                     </div>
                   ) : leadAssignmentHistory.length === 0 ? (
-                    <div className="text-muted small py-2 px-3 rounded-2 bg-dark border">
+                    <div className="text-muted small py-3 px-3 rounded-2 text-center" style={{ background: "#f8fafc", border: "1px dashed #cbd5e1" }}>
                       No reassignment history recorded yet.
                     </div>
                   ) : (
@@ -2691,24 +2845,24 @@ export default function LeadsPage() {
                       {leadAssignmentHistory.map((hist) => (
                         <div
                           key={hist.id}
-                          className="p-2 rounded-2"
-                          style={{ background: "#161819", border: "1px solid #33383B" }}
+                          className="p-3 rounded-2 shadow-sm"
+                          style={{ background: "#ffffff", border: "1px solid #e2e8f0" }}
                         >
                           <div className="d-flex align-items-center justify-content-between">
-                            <span className="text-white fw-bold small">
-                              <i className="bi bi-person-check text-info me-1"></i>
+                            <span className="fw-bold small" style={{ color: "#111827" }}>
+                              <i className="bi bi-person-check text-primary me-1"></i>
                               {hist.assign_to_name || "Unassigned"}
                             </span>
                             <span className="text-muted" style={{ fontSize: "11px" }}>
                               {new Date(hist.created_at).toLocaleString()}
                             </span>
                           </div>
-                          <div className="d-flex align-items-center justify-content-between mt-1">
+                          <div className="d-flex align-items-center justify-content-between mt-2 pt-1 border-top" style={{ borderColor: "#f1f5f9" }}>
                             <span className="text-muted" style={{ fontSize: "12px" }}>
-                              By: <strong className="text-secondary">{hist.assign_by_name || "System"}</strong>
+                              By: <strong style={{ color: "#111827" }}>{hist.assign_by_name || "System"}</strong>
                             </span>
                             {hist.remarks && (
-                              <span className="badge bg-dark border text-light" style={{ fontSize: "11px" }}>
+                              <span className="badge bg-light text-dark border" style={{ fontSize: "11px" }}>
                                 {hist.remarks}
                               </span>
                             )}
@@ -2720,12 +2874,12 @@ export default function LeadsPage() {
                 </div>
 
                 {/* Follow-Up Interaction History */}
-                <div className="mt-4 pt-3 border-top border-secondary">
+                <div className="mt-4 pt-3 border-top">
                   <div className="d-flex align-items-center justify-content-between mb-2">
                     <h6 className="text-dark fw-bold mb-0 small">
                       <i className="bi bi-telephone-outbound-fill text-primary me-1"></i> Follow-Up Interaction History
                     </h6>
-                    <span className="badge bg-primary-subtle text-primary small">
+                    <span className="badge bg-primary-subtle text-primary small border">
                       {leadFollowUpHistory.length} {leadFollowUpHistory.length === 1 ? "Call Log" : "Call Logs"}
                     </span>
                   </div>
@@ -2736,7 +2890,7 @@ export default function LeadsPage() {
                       Loading follow-ups...
                     </div>
                   ) : leadFollowUpHistory.length === 0 ? (
-                    <div className="text-muted small py-2 px-3 rounded-2 bg-dark border">
+                    <div className="text-muted small py-3 px-3 rounded-2 text-center" style={{ background: "#f8fafc", border: "1px dashed #cbd5e1" }}>
                       No follow-up interaction logged yet for this lead.
                     </div>
                   ) : (
@@ -2744,11 +2898,11 @@ export default function LeadsPage() {
                       {leadFollowUpHistory.map((fu) => (
                         <div
                           key={fu.id}
-                          className="p-2 rounded-2"
-                          style={{ background: "#161819", border: "1px solid #33383B" }}
+                          className="p-3 rounded-2 shadow-sm"
+                          style={{ background: "#ffffff", border: "1px solid #e2e8f0" }}
                         >
                           <div className="d-flex align-items-center justify-content-between">
-                            <span className="text-white fw-bold small">
+                            <span className="fw-bold small" style={{ color: "#111827" }}>
                               <i className="bi bi-telephone-forward text-success me-1"></i>
                               {fu.type || "Phone Call"}: <span className="badge bg-info-subtle text-info border ms-1">{fu.status || "Follow-up"}</span>
                             </span>
@@ -2757,14 +2911,14 @@ export default function LeadsPage() {
                             </span>
                           </div>
                           {fu.notes && (
-                       <div className="text-light small mt-1"style={{ fontSize: "12px", opacity: 0.9 }}>
-                         {fu.notes}
-                        </div>
+                            <div className="small mt-2 p-2 rounded" style={{ fontSize: "12px", background: "#f8fafc", color: "#1e293b", border: "1px solid #f1f5f9" }}>
+                              {fu.notes}
+                            </div>
                           )}
-                          <div className="d-flex align-items-center justify-content-between mt-1 text-muted" style={{ fontSize: "11px" }}>
-                            <span>Logged by: <strong className="text-secondary">{fu.user_name || fu.user?.name || "Rep"}</strong></span>
+                          <div className="d-flex align-items-center justify-content-between mt-2 pt-1 border-top text-muted" style={{ fontSize: "11px", borderColor: "#f1f5f9" }}>
+                            <span>Logged by: <strong style={{ color: "#111827" }}>{fu.user_name || fu.user?.name || "Rep"}</strong></span>
                             {fu.next_follow_up_date && (
-                              <span className="text-warning">
+                              <span className="text-warning-emphasis fw-semibold">
                                 <i className="bi bi-calendar-event me-1"></i>
                                 Next: {fu.next_follow_up_date} {fu.next_follow_up_time || ""}
                               </span>
@@ -2777,12 +2931,12 @@ export default function LeadsPage() {
                 </div>
 
                 {/* Quotations History Section */}
-                <div className="mt-4 pt-3 border-top border-secondary">
+                <div className="mt-4 pt-3 border-top">
                   <div className="d-flex align-items-center justify-content-between mb-2">
                     <h6 className="text-dark fw-bold mb-0 small">
                       <i className="bi bi-file-earmark-spreadsheet-fill text-info me-1"></i> Customer Quotations Sent
                     </h6>
-                    <span className="badge bg-info-subtle text-info small">
+                    <span className="badge bg-info-subtle text-info small border">
                       {leadQuotationsHistory.length} {leadQuotationsHistory.length === 1 ? "Quote" : "Quotes"}
                     </span>
                   </div>
@@ -2793,7 +2947,7 @@ export default function LeadsPage() {
                       Loading quotations...
                     </div>
                   ) : leadQuotationsHistory.length === 0 ? (
-                    <div className="text-muted small py-2 px-3 rounded-2 bg-dark border">
+                    <div className="text-muted small py-3 px-3 rounded-2 text-center" style={{ background: "#f8fafc", border: "1px dashed #cbd5e1" }}>
                       No quotation generated yet for this lead.
                     </div>
                   ) : (
@@ -2801,19 +2955,29 @@ export default function LeadsPage() {
                       {leadQuotationsHistory.map((q) => (
                         <div
                           key={q.id}
-                          className="p-2 rounded-2"
-                          style={{ background: "#161819", border: "1px solid #33383B" }}
+                          className="p-3 rounded-2 shadow-sm"
+                          style={{ background: "#ffffff", border: "1px solid #e2e8f0" }}
                         >
                           <div className="d-flex align-items-center justify-content-between">
-                            <span className="text-white fw-bold small">
+                            <span className="fw-bold small" style={{ color: "#111827" }}>
+                              <i className="bi bi-file-earmark-text text-info me-1"></i>
                               {q.quotation_number || `#Q-${q.id}`}
                             </span>
-                            <span className="text-success fw-bold" style={{ fontSize: "12px" }}>
-                              ₹{Number(q.total_amount || q.final_price || 0).toLocaleString("en-IN")}
+                            <span className="text-success fw-bold" style={{ fontSize: "13px" }}>
+                              ₹{Number(
+                                q.grand_total ||
+                                q.total_amount ||
+                                q.final_price ||
+                                q.total ||
+                                q.subtotal ||
+                                (Array.isArray(q.items) && q.items.length
+                                  ? q.items.reduce((s, it) => s + (Number(it.total) || Number(it.unit_price || 0) * Number(it.quantity || 1) - Number(it.discount || 0)), 0)
+                                  : 0)
+                              ).toLocaleString("en-IN")}
                             </span>
                           </div>
-                          <div className="d-flex align-items-center justify-content-between mt-1 text-muted" style={{ fontSize: "11px" }}>
-                            <span>Status: <strong className="text-secondary">{q.status || "Draft"}</strong></span>
+                          <div className="d-flex align-items-center justify-content-between mt-2 pt-1 border-top text-muted" style={{ fontSize: "11px", borderColor: "#f1f5f9" }}>
+                            <span>Status: <strong className="text-capitalize" style={{ color: "#111827" }}>{q.status || "Draft"}</strong></span>
                             <span>{q.quotation_date || (q.created_at ? new Date(q.created_at).toLocaleDateString("en-IN") : "-")}</span>
                           </div>
                         </div>
@@ -3129,7 +3293,6 @@ export default function LeadsPage() {
                         onChange={(e) => setFollowUpForm({ ...followUpForm, outcome: e.target.value })}
                       >
                         <option value="Interested / Call Back">Interested / Call Back</option>
-                        <option value="Test Drive Requested">Test Drive Requested</option>
                         <option value="Quotation Requested">Quotation Requested</option>
                         <option value="Ready for Booking">Ready for Booking</option>
                         <option value="Not Answering / Busy">Not Answering / Busy</option>

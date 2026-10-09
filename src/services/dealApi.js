@@ -10,8 +10,64 @@ export function normalizeDeal(d) {
   const totalAmount = Number(d.total_amount) || 0;
   const discountAmount = Number(d.discount_amount) || 0;
   const netAmount = Number(d.net_amount) || Math.max(0, totalAmount - discountAmount);
-  const paidAmount = Number(d.total_paid ?? d.paid_amount ?? 0);
-  const balanceAmount = Number(d.balance_due ?? d.balance_amount ?? Math.max(0, netAmount - paidAmount));
+
+  // Normalize payments and extract Reference, Bank, and Received By with fallbacks
+  const rawPayments = Array.isArray(d.payments) ? d.payments : [];
+  const normalizedPayments = rawPayments.map((p) => {
+    let ref =
+      p.transaction_reference ||
+      p.reference_no ||
+      p.reference_number ||
+      p.reference ||
+      p.transaction_id ||
+      p.txn_id ||
+      p.utr ||
+      p.utr_number ||
+      "";
+
+    let bank = p.bank_name || p.bank || "";
+
+    let recBy =
+      p.received_by ||
+      p.received_by_name ||
+      p.recorded_by_name ||
+      p.recorded_by?.name ||
+      p.user?.name ||
+      p.collected_by ||
+      "";
+
+    // Fallback extraction from notes if backend didn't store direct column values
+    if (typeof p.notes === "string" && p.notes) {
+      if (!ref) {
+        const refMatch = p.notes.match(/(?:UTR\/Ref|UTR|Ref|Reference):\s*([^,\)\n•]+)/i);
+        if (refMatch && refMatch[1]) ref = refMatch[1].trim();
+      }
+      if (!bank) {
+        const bankMatch = p.notes.match(/Bank:\s*([^,\)\n•]+)/i);
+        if (bankMatch && bankMatch[1]) bank = bankMatch[1].trim();
+      }
+      if (!recBy) {
+        const recMatch = p.notes.match(/Received By:\s*([^,\)\n•]+)/i);
+        if (recMatch && recMatch[1]) recBy = recMatch[1].trim();
+      }
+    }
+
+    return {
+      ...p,
+      status: p.status === "rejected" ? "rejected" : "cleared",
+      transaction_reference: ref,
+      bank_name: bank,
+      received_by: recBy,
+    };
+  });
+
+  const validPaymentsSum = normalizedPayments
+    .filter((p) => p.status !== "rejected")
+    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+  const backendPaid = Number(d.total_paid ?? d.paid_amount ?? 0);
+  const paidAmount = Math.max(backendPaid, validPaymentsSum);
+  const balanceAmount = Math.max(0, netAmount - paidAmount);
 
   // Determine computed payment status
   let paymentStatus = "Pending";
@@ -56,7 +112,15 @@ export function normalizeDeal(d) {
     expected_delivery_date: d.expected_delivery_date || "",
     actual_delivery_date: d.actual_delivery_date || "",
     notes: d.notes || "",
-    payments: Array.isArray(d.payments) ? d.payments : [],
+    has_insurance:
+      d.has_insurance === true ||
+      d.has_insurance === 1 ||
+      d.insurance === "Yes" ||
+      (typeof d.notes === "string" && d.notes.toLowerCase().includes("insurance: yes"))
+        ? "Yes"
+        : "No",
+    insurance_amount: Number(d.insurance_amount || 0),
+    payments: normalizedPayments,
     created_at: d.created_at || new Date().toISOString(),
   };
 }
@@ -114,6 +178,8 @@ export const dealApi = {
       lead_id: Number(payload.lead_id),
       total_amount: Number(payload.total_amount),
       discount_amount: Number(payload.discount_amount || 0),
+      has_insurance: payload.has_insurance ? true : false,
+      insurance: payload.insurance || (payload.has_insurance ? "Yes" : "No"),
       color: payload.color ? String(payload.color).trim() : "Standard",
       vin_chassis_number: payload.vin_chassis_number ? String(payload.vin_chassis_number).trim() : "",
       expected_delivery_date: payload.expected_delivery_date || null,
@@ -121,6 +187,9 @@ export const dealApi = {
       sales_executive_id: validExecId,
       user_id: currentUserId,
       created_by: currentUserId,
+      notes: payload.has_insurance
+        ? "Insurance Included: Yes"
+        : "Insurance Included: No",
     };
 
     const initialAmount = Number(payload.initial_payment?.amount || 0);
@@ -134,18 +203,63 @@ export const dealApi = {
         type = "token_advance";
       }
 
+      const refStr = payload.initial_payment.transaction_reference ? String(payload.initial_payment.transaction_reference).trim() : "";
+      const bankStr = payload.initial_payment.bank_name ? String(payload.initial_payment.bank_name).trim() : "";
+      const initReceivedBy = payload.initial_payment.received_by ? String(payload.initial_payment.received_by).trim() : "";
+
+      const metaParts = [];
+      if (refStr) metaParts.push(`UTR: ${refStr}`);
+      if (bankStr) metaParts.push(`Bank: ${bankStr}`);
+      if (initReceivedBy) metaParts.push(`Received By: ${initReceivedBy}`);
+      const metaStr = metaParts.length > 0 ? ` [${metaParts.join(" • ")}]` : "";
+
+      const notesBase = payload.initial_payment.notes ? String(payload.initial_payment.notes).trim() : "Initial booking advance";
+      const fullNotes = notesBase + metaStr;
+
       apiPayload.initial_payment = {
         amount: initialAmount,
         payment_type: type,
         payment_mode: mode,
-        transaction_reference: payload.initial_payment.transaction_reference ? String(payload.initial_payment.transaction_reference).trim() : "",
-        bank_name: payload.initial_payment.bank_name ? String(payload.initial_payment.bank_name).trim() : "",
-        notes: payload.initial_payment.notes ? String(payload.initial_payment.notes).trim() : "Initial booking advance",
+        status: "cleared",
+        payment_status: "cleared",
+        is_cleared: 1,
+        transaction_reference: refStr,
+        reference_no: refStr,
+        reference_number: refStr,
+        reference: refStr,
+        utr: refStr,
+        bank_name: bankStr,
+        bank: bankStr,
+        received_by: initReceivedBy,
+        received_by_name: initReceivedBy,
+        recorded_by: initReceivedBy,
+        notes: fullNotes,
       };
+
+      if (refStr) {
+        apiPayload.transaction_reference = refStr;
+        apiPayload.reference_no = refStr;
+      }
+      if (bankStr) {
+        apiPayload.bank_name = bankStr;
+        apiPayload.bank = bankStr;
+      }
+      if (initReceivedBy) {
+        apiPayload.received_by = initReceivedBy;
+      }
     }
 
     try {
       const response = await api.post("/deals/convert-lead", apiPayload);
+      const createdPaymentId =
+        response?.data?.payment?.id ||
+        response?.data?.data?.payment?.id ||
+        response?.data?.payment_id;
+      if (createdPaymentId) {
+        try {
+          await api.post(`/payments/${createdPaymentId}/verify`, { action: "clear" });
+        } catch (_) {}
+      }
       markLeadAsConverted(payload.lead_id);
       window.dispatchEvent(new Event("csd_deals_updated"));
       return response.data;
@@ -233,18 +347,48 @@ export const dealApi = {
       type = "part_payment";
     }
 
+    const refStr = payload.transaction_reference ? String(payload.transaction_reference).trim() : "";
+    const bankStr = payload.bank_name ? String(payload.bank_name).trim() : "";
+    const receivedBy = payload.received_by ? String(payload.received_by).trim() : "";
+
+    const metaParts = [];
+    if (refStr) metaParts.push(`UTR: ${refStr}`);
+    if (bankStr) metaParts.push(`Bank: ${bankStr}`);
+    if (receivedBy) metaParts.push(`Received By: ${receivedBy}`);
+    const metaStr = metaParts.length > 0 ? ` [${metaParts.join(" • ")}]` : "";
+
+    const notesBase = payload.notes ? String(payload.notes).trim() : "Payment recorded";
+    const fullNotes = notesBase + metaStr;
+
     const apiPayload = {
       deal_id: Number(payload.deal_id),
       amount: Number(payload.amount),
       payment_type: type,
       payment_mode: mode,
+      status: "cleared",
+      payment_status: "cleared",
+      is_cleared: 1,
       payment_date: payload.payment_date || new Date().toISOString().split("T")[0],
-      transaction_reference: payload.transaction_reference ? String(payload.transaction_reference).trim() : "",
-      bank_name: payload.bank_name ? String(payload.bank_name).trim() : "",
-      notes: payload.notes ? String(payload.notes).trim() : "",
+      transaction_reference: refStr,
+      reference_no: refStr,
+      reference_number: refStr,
+      reference: refStr,
+      utr: refStr,
+      bank_name: bankStr,
+      bank: bankStr,
+      received_by: receivedBy,
+      received_by_name: receivedBy,
+      recorded_by: receivedBy,
+      notes: fullNotes,
     };
 
     const response = await api.post("/payments", apiPayload);
+    const pid = response?.data?.id || response?.data?.data?.id;
+    if (pid) {
+      try {
+        await api.post(`/payments/${pid}/verify`, { action: "clear" });
+      } catch (_) {}
+    }
     window.dispatchEvent(new Event("csd_deals_updated"));
     return response.data;
   },
