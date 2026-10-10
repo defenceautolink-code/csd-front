@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import AdminLayout from "@/app/components/AdminLayout";
 import { quotationApi } from "@/lib/quotationApi";
 import { salesExecutiveApi } from "@/lib/salesExecutiveApi";
@@ -13,6 +13,16 @@ import Pagination from "@/components/common/Pagination";
 
 export default function QuotationMainPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const isReceptionist = pathname ? pathname.startsWith("/receptionist") : false;
+  const baseQuotationPath = pathname?.startsWith("/sales-manager")
+    ? "/sales-manager/quotation"
+    : pathname?.startsWith("/receptionist")
+      ? "/receptionist/quotation"
+      : pathname?.startsWith("/sales-executive")
+        ? "/sales-executive/quotation"
+        : "/admin/quotation";
+
   const { showToast } = useToast();
   const [mounted, setMounted] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
@@ -197,26 +207,109 @@ export default function QuotationMainPage() {
 
     setSelectedLeadId(leadId);
     try {
-      const res = await quotationApi.getLeadForQuotation(leadId);
-      if (res && res.status && res.data) {
-        const lead = res.data;
-        setClientName(lead.customer_name || "");
-        setClientMobile(lead.phone || "");
-        setCityJurisdiction(lead.city || lead.address || "Ahmedabad");
-        setClientEmail(lead.email || "");
+      const [quoteLeadRes, directLeadRes] = await Promise.all([
+        quotationApi.getLeadForQuotation(leadId).catch(() => null),
+        api.get(`/leads/${leadId}`).catch(() => null),
+      ]);
+      const quoteLead = quoteLeadRes?.data || quoteLeadRes || {};
+      const directLead = directLeadRes?.data?.data || directLeadRes?.data || {};
+      const lead = { ...directLead, ...quoteLead };
 
-        if (lead.model_variant) {
-          setCarName(lead.brand_name ? `${lead.brand_name} ${lead.model_variant}` : lead.model_variant);
-          setModelSpec(lead.model_variant);
-        }
+      setClientName(lead.customer_name || lead.name || "");
+      setClientMobile(lead.phone || "");
+      setCityJurisdiction(lead.city || lead.address || "Ahmedabad");
+      setClientEmail(lead.email || "");
 
-        if (lead.brand_id) {
-          setSelectedBrandId(lead.brand_id);
-          fetchModelsForBrand(lead.brand_id);
-        }
-
-        showToast(`Auto-filled customer details for ${lead.customer_name}!`, "success");
+      // 1. Identify and select Brand
+      let availableBrands = brandsList;
+      if (!availableBrands || availableBrands.length === 0) {
+        try {
+          const bRes = await api.get("/brands");
+          availableBrands = bRes?.data?.data || bRes?.data || [];
+          if (availableBrands.length > 0) setBrandsList(availableBrands);
+        } catch (e) { }
       }
+
+      let brandId = lead.brand_id || directLead.brand_id || directLead.brand?.id;
+      if (!brandId && (lead.brand_name || lead.model_variant)) {
+        const matchedB = (availableBrands || []).find((b) =>
+          (lead.brand_name && b.name.toLowerCase() === String(lead.brand_name).toLowerCase()) ||
+          (lead.model_variant && lead.model_variant.toLowerCase().includes(b.name.toLowerCase()))
+        );
+        if (matchedB) brandId = matchedB.id;
+      }
+
+      let models = [];
+      let brandObj = null;
+      if (brandId) {
+        setSelectedBrandId(String(brandId));
+        brandObj = (availableBrands || []).find((b) => String(b.id) === String(brandId));
+        if (brandObj) setCarName(brandObj.name.toUpperCase());
+
+        setIsLoadingModels(true);
+        try {
+          const modelsRes = await api.get(`/models?brand_id=${brandId}`);
+          models = modelsRes?.data?.data || modelsRes?.data || [];
+          setModelsList(models);
+        } catch (e) { } finally {
+          setIsLoadingModels(false);
+        }
+      }
+
+      // 2. Identify and select Model
+      let modelId = lead.model_id || directLead.model_id || directLead.model?.id;
+      let targetModel = models.find((m) => String(m.id) === String(modelId));
+      if (!targetModel && (lead.model_name || lead.model_variant)) {
+        const searchStr = (lead.model_name || lead.model_variant || "").toLowerCase();
+        targetModel = models.find((m) => searchStr.includes(m.name.toLowerCase()));
+      }
+
+      let variants = [];
+      if (targetModel) {
+        const foundModelId = targetModel.id;
+        setSelectedModelId(String(foundModelId));
+        setModelSpec(targetModel.name.toUpperCase());
+        setCarName(`${brandObj ? brandObj.name.toUpperCase() + " " : ""}${targetModel.name.toUpperCase()}`);
+
+        setIsLoadingVariants(true);
+        try {
+          const variantsRes = await api.get(`/variants?model_id=${foundModelId}`);
+          variants = variantsRes?.data?.data || variantsRes?.data || [];
+          setVariantsList(variants);
+        } catch (e) { } finally {
+          setIsLoadingVariants(false);
+        }
+      }
+
+      // 3. Identify and select Variant & Pricing
+      let variantId = lead.variant_id || directLead.variant_id || directLead.variant?.id;
+      let targetVariant = variants.find((v) => String(v.id) === String(variantId));
+      if (!targetVariant && (lead.variant_name || lead.model_variant)) {
+        const searchVar = (lead.variant_name || lead.model_variant || "").toLowerCase();
+        targetVariant = variants.find((v) => searchVar.includes(v.name.toLowerCase()));
+      }
+      if (!targetVariant && variants.length === 1) {
+        targetVariant = variants[0];
+      }
+
+      if (targetVariant) {
+        setSelectedVariantId(String(targetVariant.id));
+        setModelSpec(targetVariant.name.toUpperCase());
+
+        if (targetVariant.price && Number(targetVariant.price) > 0) {
+          const numPrice = Number(targetVariant.price);
+          setCsdPrice(String(numPrice));
+          const estRto = Math.round(numPrice * 0.06);
+          setGjRto(String(estRto));
+          const estIns = Math.round(numPrice * 0.038);
+          setInsurance(String(estIns));
+        }
+      } else if (lead.model_variant) {
+        setCarName(lead.brand_name ? `${lead.brand_name} ${lead.model_variant}` : lead.model_variant);
+        setModelSpec(lead.model_variant);
+      }
+
+      showToast(`Auto-filled vehicle & details for ${lead.customer_name || lead.name || "lead"}!`, "success");
     } catch (err) {
       console.error("Error fetching lead for quote:", err);
     }
@@ -482,6 +575,20 @@ export default function QuotationMainPage() {
         }
       }
 
+      const itemsWithTotals = itemsArray.map((it) => ({
+        ...it,
+        total: Math.max(0, (Number(it.unit_price) || 0) * (Number(it.quantity) || 1) - (Number(it.discount) || 0)),
+      }));
+
+      const calculatedSubtotal = itemsWithTotals.reduce(
+        (acc, it) => acc + Number(it.unit_price || 0) * Number(it.quantity || 1),
+        0
+      );
+      const calculatedGrandTotal = itemsWithTotals.reduce(
+        (acc, it) => acc + Number(it.total || 0),
+        0
+      );
+
       const payload = {
         lead_id: selectedLeadId ? Number(selectedLeadId) : null,
         quotation_date: formattedDate,
@@ -495,7 +602,11 @@ export default function QuotationMainPage() {
         delivery_terms: "Vehicle delivery subject to manufacturer allocation and receipt of full payment.",
         notes: "Prices prevailing at the time of invoicing & delivery will be applicable. Road tax as per RTO norms.",
         status: status,
-        items: itemsArray,
+        subtotal: calculatedSubtotal,
+        grand_total: calculatedGrandTotal,
+        total_amount: calculatedGrandTotal,
+        total: calculatedGrandTotal,
+        items: itemsWithTotals,
       };
 
       const res = await quotationApi.createQuotation(payload);
@@ -511,9 +622,8 @@ export default function QuotationMainPage() {
               type: "Quotation Sent",
               outcome: "Sent",
               status: "Sent",
-              notes: `Official Quotation #${res.data.quotation_number} generated for ${
-                carName || "Vehicle"
-              } (${modelSpec || ""}). Total Amount: ₹${calculatedTotal.toLocaleString("en-IN")}`,
+              notes: `Official Quotation #${res.data.quotation_number} generated for ${carName || "Vehicle"
+                } (${modelSpec || ""}). Total Amount: ₹${calculatedTotal.toLocaleString("en-IN")}`,
               follow_up_date: new Date().toISOString().split("T")[0],
               follow_up_time: new Date().toLocaleTimeString("en-IN", {
                 hour: "2-digit",
@@ -725,8 +835,8 @@ export default function QuotationMainPage() {
                           lead.priority?.toLowerCase() === "hot"
                             ? "🔥"
                             : lead.priority?.toLowerCase() === "warm"
-                            ? "☀️"
-                            : "❄️";
+                              ? "☀️"
+                              : "❄️";
                         return (
                           <option key={lead.id} value={lead.id}>
                             {lead.name} ({lead.model_variant || lead.brand_name || "Lead"} - {lead.priority || "Standard"} {priorityEmoji})
@@ -1518,33 +1628,27 @@ export default function QuotationMainPage() {
                         {/* 1. Actions First Column */}
                         <td className="py-3 px-3 text-center">
                           <div className="d-flex align-items-center justify-content-center gap-1">
-                            {can("quotation.view") && (
+                            {(can("quotation.view") || isReceptionist) && (
                               <Link
-                                href={`/admin/quotation/${quote.id}`}
+                                href={`${baseQuotationPath}/${quote.id}`}
                                 className="btn btn-outline-custom btn-sm p-1 px-2"
                                 title="View Quotation"
                               >
                                 <i className="bi bi-eye"></i>
                               </Link>
                             )}
-                            {can("quotation.print_pdf") && (
-                              <button
-                                type="button"
-                                className="btn btn-outline-custom btn-sm p-1 px-2 text-info"
-                                title="Download PDF"
-                                onClick={() => quotationApi.downloadPdf(quote.id, quote.quotation_number)}
-                              >
-                                <i className="bi bi-file-earmark-pdf-fill"></i>
-                              </button>
-                            )}
                           </div>
                         </td>
 
                         {/* 2. Quotation # */}
                         <td className="py-3 px-3">
-                          <Link href={`/admin/quotation/${quote.id}`} className="fw-bold text-primary text-decoration-none">
-                            {quote.quotation_number}
-                          </Link>
+                          {isReceptionist ? (
+                            <span className="fw-bold text-dark">{quote.quotation_number}</span>
+                          ) : (
+                            <Link href={`${baseQuotationPath}/${quote.id}`} className="fw-bold text-primary text-decoration-none">
+                              {quote.quotation_number}
+                            </Link>
+                          )}
                         </td>
 
                         {/* 3. Customer */}
@@ -1573,13 +1677,12 @@ export default function QuotationMainPage() {
                         {/* 7. Status */}
                         <td className="py-3 px-3 text-center">
                           <span
-                            className={`badge text-capitalize ${
-                              quote.status === "accepted"
+                            className={`badge text-capitalize ${quote.status === "accepted"
                                 ? "bg-success text-white"
                                 : quote.status === "sent"
-                                ? "bg-info text-dark"
-                                : "bg-warning text-dark"
-                            }`}
+                                  ? "bg-info text-dark"
+                                  : "bg-warning text-dark"
+                              }`}
                           >
                             {quote.status || "draft"}
                           </span>

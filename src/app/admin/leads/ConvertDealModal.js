@@ -23,6 +23,8 @@ export default function ConvertDealModal({
     quotation_id: "",
     total_amount: "",
     discount_amount: "0",
+    has_insurance: "No", // default "No"
+    insurance_amount: "",
     color: "",
     vin_chassis_number: "",
     expected_delivery_date: "",
@@ -32,6 +34,7 @@ export default function ConvertDealModal({
       payment_mode: "upi",
       transaction_reference: "",
       bank_name: "",
+      received_by: "",
       notes: "",
     },
   });
@@ -46,10 +49,19 @@ export default function ConvertDealModal({
 
       const leadBudget = lead.budget || lead.total_deal_amount || "";
 
+      let currentUserName = "";
+      if (typeof window !== "undefined") {
+        try {
+          const userObj = JSON.parse(localStorage.getItem("user") || "{}");
+          currentUserName = userObj?.name || "";
+        } catch (e) {}
+      }
+
       setFormData({
         quotation_id: lead.quotation_id || "",
         total_amount: leadBudget ? String(leadBudget) : "",
         discount_amount: "0",
+        has_insurance: "No",
         color: lead.color || "Standard",
         vin_chassis_number: lead.vin_chassis_number || "",
         expected_delivery_date: deliveryStr,
@@ -59,6 +71,7 @@ export default function ConvertDealModal({
           payment_mode: "upi",
           transaction_reference: "",
           bank_name: "",
+          received_by: currentUserName,
           notes: "",
         },
       });
@@ -116,6 +129,7 @@ export default function ConvertDealModal({
       setFormData((prev) => ({
         ...prev,
         quotation_id: "",
+        has_insurance: "No",
       }));
       return;
     }
@@ -126,6 +140,7 @@ export default function ConvertDealModal({
       ...prev,
       quotation_id: quote.id,
       total_amount: quoteTotal > 0 ? String(quoteTotal) : prev.total_amount,
+      has_insurance: "No",
     }));
     showToast(`Selected Quotation #${quote.quotation_number || quote.id}`, "info");
   };
@@ -163,6 +178,8 @@ export default function ConvertDealModal({
       quotation_id: formData.quotation_id ? Number(formData.quotation_id) : null,
       total_amount: totalNum,
       discount_amount: discountNum,
+      has_insurance: formData.has_insurance === "Yes",
+      insurance: formData.has_insurance,
       color: formData.color.trim(),
       vin_chassis_number: formData.vin_chassis_number.trim(),
       expected_delivery_date: formData.expected_delivery_date,
@@ -173,6 +190,7 @@ export default function ConvertDealModal({
         payment_mode: formData.initial_payment.payment_mode,
         transaction_reference: formData.initial_payment.transaction_reference.trim(),
         bank_name: formData.initial_payment.bank_name.trim(),
+        received_by: (formData.initial_payment.received_by || "").trim(),
         notes: formData.initial_payment.notes.trim(),
       },
     };
@@ -431,8 +449,48 @@ export default function ConvertDealModal({
                 )}
               </div>
 
-              {/* Net Deal Value Calculation Summary Banner */}
-              <div className="col-12">
+              {/* Insurance Included (Yes / No - Default: No) */}
+              <div className="col-md-6">
+                <label className="form-label text-dark fw-bold small mb-1 d-flex justify-content-between align-items-center">
+                  <span>
+                    <i className="bi bi-shield-check text-primary me-1"></i>
+                    Insurance Included?
+                  </span>
+                  <span className="badge bg-secondary-subtle text-muted" style={{ fontSize: "10px" }}>Default: No</span>
+                </label>
+                <div
+                  className="d-flex align-items-center gap-3 p-2 rounded border bg-light"
+                  style={{ height: "38px" }}
+                >
+                  <div className="form-check mb-0">
+                    <input
+                      className="form-check-input"
+                      type="radio"
+                      name="dealInsuranceToggle"
+                      id="insRadioNo"
+                      value="No"
+                      checked={formData.has_insurance === "No"}
+                      onChange={() => setFormData({ ...formData, has_insurance: "No" })}
+                    />
+                    <label className="form-check-label small fw-semibold text-dark" htmlFor="insRadioNo" style={{ cursor: "pointer" }}>
+                      No
+                    </label>
+                  </div>
+                  <div className="form-check mb-0">
+                    <input
+                      className="form-check-input"
+                      type="radio"
+                      name="dealInsuranceToggle"
+                      id="insRadioYes"
+                      value="Yes"
+                      checked={formData.has_insurance === "Yes"}
+                      onChange={() => setFormData({ ...formData, has_insurance: "Yes" })}
+                    />
+                    <label className="form-check-label small fw-bold text-success" htmlFor="insRadioYes" style={{ cursor: "pointer" }}>
+                      Yes
+                    </label>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -617,6 +675,28 @@ export default function ConvertDealModal({
                             initial_payment: {
                               ...formData.initial_payment,
                               bank_name: e.target.value,
+                            },
+                          })
+                        }
+                      />
+                    </div>
+
+                    {/* Received By (Person Name) */}
+                    <div className="col-md-6">
+                      <label className="form-label text-dark fw-bold small mb-1">
+                        Received By (Person Name)
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. Cashier / Executive Name"
+                        value={formData.initial_payment.received_by}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            initial_payment: {
+                              ...formData.initial_payment,
+                              received_by: e.target.value,
                             },
                           })
                         }

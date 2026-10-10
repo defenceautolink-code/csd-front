@@ -135,6 +135,16 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                   <span>Deals & Bookings</span>
                 </Link>
               </li>
+              <li className="nav-item">
+                <Link
+                  href="/sales-executive/insurance"
+                  className={`nav-link ${isLinkActive("/sales-executive/insurance") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-shield-check"></i>
+                  <span>Insurance Reminders</span>
+                </Link>
+              </li>
               {canNavigate("/sales-executive/follow-up") && <li className="nav-item">
                 <Link
                   href="/sales-executive/follow-up"
@@ -228,6 +238,16 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                 >
                   <i className="bi bi-trophy-fill"></i>
                   <span>Deals & Bookings</span>
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link
+                  href="/sales-manager/insurance"
+                  className={`nav-link ${isLinkActive("/sales-manager/insurance") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-shield-check"></i>
+                  <span>Insurance Reminders</span>
                 </Link>
               </li>
               <li className="nav-item">
@@ -368,6 +388,18 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                   >
                     <i className="bi bi-shield-shaded"></i>
                     <span>Brands</span>
+                  </Link>
+                </li>
+              )}
+              {canNavigate("/receptionist/model") && (
+                <li className="nav-item">
+                  <Link
+                    href="/receptionist/model"
+                    className={`nav-link ${isLinkActive("/receptionist/model") ? "active" : ""}`}
+                    onClick={onCloseMobile}
+                  >
+                    <i className="bi bi-car-front-fill"></i>
+                    <span>Models</span>
                   </Link>
                 </li>
               )}
@@ -513,6 +545,16 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                 >
                   <i className="bi bi-trophy-fill"></i>
                   <span>Deals & Bookings</span>
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link
+                  href="/admin/insurance"
+                  className={`nav-link ${isLinkActive("/admin/insurance") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-shield-check"></i>
+                  <span>Insurance Reminders</span>
                 </Link>
               </li>
               <li className="nav-item">

@@ -199,6 +199,12 @@ export default function QuotationEditPage() {
         payment_terms: paymentTerms.trim() || null,
         delivery_terms: deliveryTerms.trim() || null,
         notes: notes.trim() || null,
+        subtotal: subtotal,
+        discount: totalDiscount,
+        tax: totalTax,
+        grand_total: grandTotal,
+        total_amount: grandTotal,
+        total: grandTotal,
         items: items.map((it) => ({
           item_name: it.item_name.trim(),
           description: it.description?.trim() || null,
@@ -206,6 +212,7 @@ export default function QuotationEditPage() {
           unit_price: Number(it.unit_price) || 0,
           discount: Number(it.discount) || 0,
           tax: Number(it.tax) || 0,
+          total: Math.max(0, (Number(it.quantity) || 1) * (Number(it.unit_price) || 0) - (Number(it.discount) || 0)),
         })),
       };
 

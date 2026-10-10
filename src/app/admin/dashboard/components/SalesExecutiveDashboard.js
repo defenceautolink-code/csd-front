@@ -679,7 +679,6 @@ export default function SalesExecutiveDashboard({ onAddLead }) {
                   >
                     <option value="Connected - Interested">Connected - Highly Interested</option>
                     <option value="Connected - Quotation Requested">Connected - Quotation Requested</option>
-                    <option value="Connected - Scheduled Test Drive">Connected - Scheduled Test Drive</option>
                     <option value="Call Back Later">Call Back Later / Busy</option>
                     <option value="Ringing No Answer">Ringing No Answer</option>
                   </select>

@@ -290,7 +290,7 @@ export default function BrandPage() {
 
         {/* Brand KPI Counters */}
         <div className="row g-3 mb-4">
-          <div className="col-xl-3 col-sm-6">
+          <div className="col-md-4 col-sm-6">
             <div className="card stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">Total Brands</span>
@@ -303,7 +303,7 @@ export default function BrandPage() {
             </div>
           </div>
 
-          <div className="col-xl-3 col-sm-6">
+          <div className="col-md-4 col-sm-6">
             <div className="card stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">4 Wheeler Brands</span>
@@ -325,7 +325,7 @@ export default function BrandPage() {
             </div>
           </div>
 
-          <div className="col-xl-3 col-sm-6">
+          <div className="col-md-4 col-sm-6">
             <div className="card stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">2 Wheeler Brands</span>
@@ -344,19 +344,6 @@ export default function BrandPage() {
                 Brands
               </div>
               <span className="text-warning small fw-semibold">Bikes & Scooters</span>
-            </div>
-          </div>
-
-          <div className="col-xl-3 col-sm-6">
-            <div className="card stat-card">
-              <div className="stat-card-header">
-                <span className="stat-card-title">Backend API</span>
-                <div className="stat-icon-box info">
-                  <i className="bi bi-hdd-network-fill"></i>
-                </div>
-              </div>
-              <div className="stat-card-value">Connected</div>
-              <span className="text-info small fw-semibold">REST API (/api/brands)</span>
             </div>
           </div>
         </div>

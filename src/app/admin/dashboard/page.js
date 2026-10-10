@@ -57,6 +57,11 @@ export default function DashboardPage() {
 
   const handleAddLeadSubmit = (e) => {
     e.preventDefault();
+    const cleanPhone = newLead.phone ? newLead.phone.trim().replace(/\D/g, "") : "";
+    if (!cleanPhone || cleanPhone.length !== 10 || !/^[6-9]\d{9}$/.test(cleanPhone)) {
+      showToast("Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9.", "error");
+      return;
+    }
     showToast(
       `New Lead created for ${newLead.name} (${newLead.brand} ${newLead.model}) with ${newLead.priority} priority!`,
       "success"
@@ -181,11 +186,17 @@ export default function DashboardPage() {
                       <label className="form-label fw-semibold small">Phone Number *</label>
                       <input
                         type="tel"
+                        inputMode="numeric"
+                        pattern="[6-9][0-9]{9}"
+                        maxLength={10}
                         className="form-control"
-                        placeholder="+91 98765 43210"
+                        placeholder="e.g. 9876543210"
                         required
                         value={newLead.phone}
-                        onChange={(e) => setNewLead({ ...newLead, phone: e.target.value })}
+                        onChange={(e) => {
+                          const onlyNums = e.target.value.replace(/\D/g, "").slice(0, 10);
+                          setNewLead({ ...newLead, phone: onlyNums });
+                        }}
                       />
                     </div>
 
