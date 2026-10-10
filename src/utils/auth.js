@@ -416,6 +416,8 @@ export function canAccessAdminPath(pathname, customUser = undefined) {
     ["/admin/leads", "lead.view_assigned"],
     ["/admin/pipeline", "lead.view_all"],
     ["/admin/deals", "lead.view_assigned"],
+    ["/admin/insurance", "insurance.reminder"],
+    ["/admin/insurance-reminders", "insurance.reminder"],
     ["/admin/follow-up", "followup.call_now"],
     ["/admin/users", "user.view"],
     ["/admin/reports", "reports.view"],

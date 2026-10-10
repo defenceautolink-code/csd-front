@@ -3,7 +3,10 @@ import { clearAuthSession } from "@/utils/auth";
 
 // Create Axios Instance with default settings
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api",
+  baseURL:
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    "https://api.defenceautolink.com/api",
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",

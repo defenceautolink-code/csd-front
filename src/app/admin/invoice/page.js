@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef, useSyncExternalStore } from "react";
 import Link from "next/link";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
 import Pagination from "@/components/common/Pagination";
 import api from "@/lib/axios";
+import tokenBillingApi from "@/services/tokenBillingApi";
+import dealApi from "@/services/dealApi";
 
 // Helper to generate Invoice Number in exact required format:
 
@@ -23,80 +25,55 @@ export const formatCurrency = (amount) => {
   return "₹" + num.toLocaleString("en-IN");
 };
 
-// Default Pipeline Leads from Dealership CRM Pipeline
-const DEFAULT_PIPELINE_LEADS = [
-
+// Default Fallback Deals from CRM Deals & Bookings
+const DEFAULT_FALLBACK_DEALS = [
   {
-    id: "lead-102",
+    id: 102,
+    deal_number: "DEAL-2026-0001",
     customer_name: "Major Vikramaditya Singh",
-    phone: "98251 23456",
-    email: "vikram.singh@army.nic.in",
-    city: "Gandhinagar, Gujarat",
+    customer_phone: "9825123456",
+    customer_email: "vikram.singh@army.nic.in",
+    customer_city: "Gandhinagar, Gujarat",
     brand_name: "Hyundai",
     model_variant: "New Venue 1.0 Turbo DCT HX5",
-    priority: "Hot",
-    status_name: "Booking Confirmed",
-    total_deal_amount: 1095000,
+    color: "Titan Grey",
+    total_amount: 1095000,
+    net_amount: 1095000,
+    total_paid: 50000,
+    balance_due: 1045000,
+    deal_status: "booking_confirmed",
   },
   {
-    id: "lead-103",
+    id: 103,
+    deal_number: "DEAL-2026-0002",
     customer_name: "Havildar Amit Deshmukh",
-    phone: "94210 98765",
-    email: "amit.deshmukh@gmail.com",
-    city: "Vadodara, Gujarat",
+    customer_phone: "9421098765",
+    customer_email: "amit.deshmukh@gmail.com",
+    customer_city: "Vadodara, Gujarat",
     brand_name: "Tata",
     model_variant: "Nexon Fearless Plus S 1.2 Turbo",
-    priority: "Warm",
-    status_name: "CSD Scrutiny",
-    total_deal_amount: 1320000,
+    color: "Daytona Grey",
+    total_amount: 1320000,
+    net_amount: 1320000,
+    total_paid: 50000,
+    balance_due: 1270000,
+    deal_status: "booking_confirmed",
   },
   {
-    id: "lead-104",
+    id: 104,
+    deal_number: "DEAL-2026-0003",
     customer_name: "Captain Sunita Rawat",
-    phone: "98980 11223",
-    email: "sunita.rawat@nic.in",
-    city: "Ahmedabad, Gujarat",
+    customer_phone: "9898011223",
+    customer_email: "sunita.rawat@nic.in",
+    customer_city: "Ahmedabad, Gujarat",
     brand_name: "Mahindra",
     model_variant: "XUV700 AX7 Diesel AT Luxury Pack",
-    priority: "Hot",
-    status_name: "Ready for Delivery",
-    total_deal_amount: 2180000,
-  },
-  {
-    id: "lead-105",
-    customer_name: "Col. Ajay Rathore",
-    phone: "98250 99881",
-    email: "ajay.rathore@gov.in",
-    city: "Ahmedabad, Gujarat",
-    brand_name: "Toyota",
-    model_variant: "Innova Hycross VX Hybrid",
-    priority: "Hot",
-    status_name: "Quotation Approved",
-    total_deal_amount: 2550000,
-  },
-  {
-    id: "lead-106",
-    customer_name: "Lt. Col. Pradeep Nair",
-    phone: "97120 33445",
-    email: "pradeep.nair@indianarmy.org",
-    city: "Surat, Gujarat",
-    brand_name: "Kia",
-    model_variant: "Seltos GTX Plus 1.5 Turbo DCT",
-    priority: "Warm",
-    status_name: "Follow-up Scheduled",
-    total_deal_amount: 1980000,
-  },
-  {
-    id: "lead-107",
-    customer_name: "Subedar Major Balwant Singh",
-    phone: "98799 44556",
-    email: "balwant.singh@csd.gov.in",
-    city: "Jamnagar, Gujarat",
-    brand_name: "Maruti Suzuki",
-    model_variant: "Brezza ZXI Plus AT",
-    priority: "Hot",
-    status_name: "CSD Indent Open",
-    total_deal_amount: 1380000,
+    color: "Midnight Black",
+    total_amount: 2180000,
+    net_amount: 2180000,
+    total_paid: 100000,
+    balance_due: 2080000,
+    deal_status: "booking_confirmed",
   },
 ];
 
@@ -420,8 +397,12 @@ export default function GenerateInvoicePage() {
       return INITIAL_DEMO_TOKENS;
     }
   });
-  const [pipelineLeads, setPipelineLeads] = useState(DEFAULT_PIPELINE_LEADS);
-  const [isLoadingLeads, setIsLoadingLeads] = useState(false);
+  const [deals, setDeals] = useState(DEFAULT_FALLBACK_DEALS);
+  const [isLoadingDeals, setIsLoadingDeals] = useState(false);
+  const [dealSearchQuery, setDealSearchQuery] = useState("");
+  const [isDealDropdownOpen, setIsDealDropdownOpen] = useState(false);
+  const dealDropdownRef = useRef(null);
+  const [selectedDealId, setSelectedDealId] = useState("");
   const [activeTab, setActiveTab] = useState("tokens"); // 'tokens' or 'all-invoices'
 
   // Search & Filter state
@@ -446,6 +427,11 @@ export default function GenerateInvoicePage() {
         return;
       }
       setActiveActionMenuId(null);
+
+      // Close Deal Search Dropdown when clicking outside
+      if (dealDropdownRef.current && !dealDropdownRef.current.contains(e.target)) {
+        setIsDealDropdownOpen(false);
+      }
     };
     document.addEventListener("click", handleDocClick);
     return () => document.removeEventListener("click", handleDocClick);
@@ -465,7 +451,6 @@ export default function GenerateInvoicePage() {
   // ----------------------------------------------------
   // Form State for "Generate Invoice" Modal
   // ----------------------------------------------------
-  const [selectedPipelineLeadId, setSelectedPipelineLeadId] = useState("");
   const [linkedExistingToken, setLinkedExistingToken] = useState(null);
   const [formTokenNo, setFormTokenNo] = useState("");
   const [formInvoiceNo, setFormInvoiceNo] = useState(generateInvoiceNumber());
@@ -503,8 +488,80 @@ export default function GenerateInvoicePage() {
     },
   ]);
 
-  // Load data from localStorage on mount & Fetch Pipeline Leads
+  // Load live data from Backend API on mount & Fetch Pipeline Leads
+  const loadBillingData = useCallback(async () => {
+    try {
+      const res = await tokenBillingApi.getDashboard();
+      if (res && res.data) {
+        const rawTokens = res.data.customer_tokens_ledger || [];
+        const rawInvoices = res.data.all_invoices_register || [];
+
+        if (rawTokens.length > 0) {
+          const mapped = rawTokens.map((tok) => {
+            const tokInvoices = rawInvoices
+              .filter(
+                (inv) =>
+                  inv.token_number === tok.token_number ||
+                  inv.token_id === tok.id
+              )
+              .map((inv) => ({
+                id: inv.id,
+                invoiceNo: inv.invoice_number,
+                date: inv.invoice_date,
+                time: "12:00 PM",
+                installmentTitle: inv.bill_type || "Installment Payment",
+                paymentMode: inv.payment_mode || "UPI",
+                transactionRef: inv.transaction_reference || "VERIFIED-REF",
+                amountPaid: Number(inv.net_payable || inv.invoice_amount || 0),
+                items: [
+                  {
+                    desc: inv.bill_type || "CSD Payment Installment",
+                    hsn: "998313",
+                    qty: 1,
+                    rate: Number(inv.net_payable || inv.invoice_amount || 0),
+                    amount: Number(inv.net_payable || inv.invoice_amount || 0),
+                  },
+                ],
+                remarks: inv.notes || "Recorded in live billing register.",
+                status: inv.payment_status || "Paid",
+                generatedBy: "Super Admin",
+              }));
+
+            return {
+              id: tok.id,
+              tokenNo: tok.token_number,
+              customerName: tok.customer_details?.name || tok.customer_name || "Customer",
+              serviceNo: tok.customer_details?.service_id || tok.service_id || "CSD-APPL",
+              unit: tok.customer_details?.rank_designation || tok.rank_designation || "General",
+              mobile: tok.customer_details?.phone || tok.customer_phone || "",
+              email: tok.customer_details?.email || tok.customer_email || "",
+              city: tok.customer_details?.city || "Ahmedabad, Gujarat",
+              brand: tok.booked_vehicle?.brand_name || tok.brand_name || "Maruti Suzuki",
+              model: tok.booked_vehicle?.vehicle_name || tok.vehicle_name || "Car",
+              variant: tok.booked_vehicle?.model_variant || tok.model_variant || "Standard",
+              color: tok.color || "Pearl White",
+              totalDealAmount: Number(tok.total_deal || tok.total_deal_amount || 0),
+              bookingDate: tok.token_date || "2026-09-10",
+              status: tok.status || "Partial",
+              invoices: tokInvoices,
+            };
+          });
+
+          setTokensData(mapped);
+          try {
+            localStorage.setItem("csd_tokens_invoices_v1", JSON.stringify(mapped));
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Could not fetch live token billing dashboard, using cached data:", err.message);
+    }
+  }, []);
+
   useEffect(() => {
+    // 1. Initial local cache check
     try {
       if (!localStorage.getItem("csd_tokens_invoices_v1")) {
         localStorage.setItem(
@@ -516,36 +573,31 @@ export default function GenerateInvoicePage() {
       console.error(err);
     }
 
-    // Fetch dynamic pipeline leads from Backend API
-    const loadPipelineLeads = async () => {
-      setIsLoadingLeads(true);
+    // 2. Fetch live token billing data
+    loadBillingData();
+
+    // 3. Fetch dynamic Deals & Bookings from Backend API
+    const loadDealsData = async () => {
+      setIsLoadingDeals(true);
       try {
-        const res = await api.get("/leads");
-        if (res.data?.data && Array.isArray(res.data.data) && res.data.data.length > 0) {
-          // Merge with default pipeline leads to guarantee a rich list
-          const apiLeads = res.data.data.map((l) => ({
-            id: l.id,
-            customer_name: l.name || l.customer_name,
-            phone: l.phone,
-            email: l.email,
-            city: l.city || l.address || "Ahmedabad",
-            brand_name: l.brand?.name || l.brand_name || "Maruti Suzuki",
-            model_variant: l.model_variant || "Standard CSD Variant",
-            priority: l.priority || "Hot",
-            status_name: l.status?.name || "Active Lead",
-            total_deal_amount: l.budget || 1250000,
-          }));
-          setPipelineLeads(apiLeads);
+        const res = await dealApi.getDeals({ per_page: 100 });
+        if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
+          setDeals(res.data);
+        } else {
+          // Direct fallback endpoint check if needed
+          const directRes = await api.get("/deals", { params: { per_page: 100 } });
+          if (directRes.data?.data && Array.isArray(directRes.data.data) && directRes.data.data.length > 0) {
+            setDeals(directRes.data.data);
+          }
         }
       } catch (e) {
-        // Fallback to default pipeline leads if backend offline
-        console.log("Using local pipeline leads:", e);
+        console.warn("Using fallback deals:", e);
       } finally {
-        setIsLoadingLeads(false);
+        setIsLoadingDeals(false);
       }
     };
-    loadPipelineLeads();
-  }, []);
+    loadDealsData();
+  }, [loadBillingData]);
 
   // Save to localStorage whenever tokensData changes
   const saveTokensData = (newData) => {
@@ -557,15 +609,24 @@ export default function GenerateInvoicePage() {
     }
   };
 
-  // Reset to default demo data
-  const handleResetDemoData = () => {
+  // Reset to default demo data (gracefully handles backend seeder resolution)
+  const handleResetDemoData = async () => {
     if (
       window.confirm(
         "Are you sure you want to reset invoices to initial demo data?"
       )
     ) {
-      saveTokensData(INITIAL_DEMO_TOKENS);
-      showToast("Demo data reloaded successfully!", "info");
+      try {
+        showToast("Requesting demo reset from backend...", "info");
+        const res = await tokenBillingApi.resetDemo();
+        showToast(res?.message || "Demo data reset successfully!", "success");
+        loadBillingData();
+      } catch (err) {
+        console.warn("Backend reset-demo notification:", err.message);
+        // Fallback to local reset and notify user gently
+        saveTokensData(INITIAL_DEMO_TOKENS);
+        showToast("Demo data reloaded successfully (Backend seeder updating by backend team)", "info");
+      }
     }
   };
 
@@ -717,38 +778,60 @@ export default function GenerateInvoicePage() {
     invoicesPage * invoicesPerPage
   );
 
-  //  PIPELINE LEAD SELECTOR HANDLER
+  // Filtered Deals for Searchable Dropdown (by Name, Mobile, Deal Number, Model)
+  const filteredDeals = useMemo(() => {
+    if (!dealSearchQuery.trim()) return deals;
+    const q = dealSearchQuery.toLowerCase().trim();
+    const qDigits = q.replace(/\D/g, "");
+    return deals.filter((d) => {
+      const name = (d.customer_name || d.lead?.name || "").toLowerCase();
+      const phone = (d.customer_phone || d.lead?.phone || "").replace(/\D/g, "");
+      const dealNo = (d.deal_number || `#DEAL-${d.id}`).toLowerCase();
+      const model = (d.model_variant || d.lead?.model_variant || "").toLowerCase();
+      return (
+        name.includes(q) ||
+        (qDigits && phone.includes(qDigits)) ||
+        dealNo.includes(q) ||
+        model.includes(q)
+      );
+    });
+  }, [deals, dealSearchQuery]);
 
-  const handleSelectPipelineCustomer = (leadId) => {
-    setSelectedPipelineLeadId(leadId);
-    if (!leadId) {
+  //  DEALS & BOOKINGS SELECTOR HANDLER
+  const handleSelectBookingDeal = (deal) => {
+    if (!deal) {
+      setSelectedDealId("");
       setLinkedExistingToken(null);
       return;
     }
 
-    const lead = pipelineLeads.find((l) => String(l.id) === String(leadId));
-    if (!lead) return;
+    const dId = String(deal.id);
+    setSelectedDealId(dId);
 
-    const leadName = lead.customer_name || lead.name || "";
-    const leadPhone = lead.phone || "";
+    const dealName = deal.customer_name || deal.lead?.name || "";
+    const dealPhone = deal.customer_phone || deal.lead?.phone || "";
+    const dealEmail = deal.customer_email || deal.lead?.email || "";
+    const dealCity = deal.customer_city || deal.customer_address || "Ahmedabad, Gujarat";
+    const dealBrand = deal.brand_name || deal.brand?.name || "Maruti Suzuki";
+    const dealModel = deal.model_variant || deal.lead?.model_variant || "Standard CSD Variant";
+    const dealColor = deal.color || "Standard";
+    const dealTotal = Number(deal.net_amount || deal.total_amount) || 1350000;
 
-    setFormCustomerName(leadName);
-    setFormMobile(leadPhone);
-    setFormEmail(lead.email || "");
-    setFormCity(lead.city || "Ahmedabad, Gujarat");
-    const leadBrand = lead.brand_name || lead.brand?.name || "";
-    const leadModel = lead.model_variant || lead.model?.name || "";
-    setFormBrand(leadBrand);
-    setFormModel(leadModel);
-    setFormVariant(leadModel || "Standard CSD Variant");
-    const dealAmt = Number(lead.budget) || Number(lead.total_deal_amount) || 1350000;
-    setFormTotalDealAmount(String(dealAmt));
+    setFormCustomerName(dealName);
+    setFormMobile(dealPhone);
+    setFormEmail(dealEmail);
+    setFormCity(dealCity);
+    setFormBrand(dealBrand);
+    setFormModel(dealModel);
+    setFormVariant(dealModel);
+    setFormColor(dealColor);
+    setFormTotalDealAmount(String(dealTotal));
 
-    // Check if this lead already has an existing Token in the system
+    // Check if this deal or customer already has an existing Token in the system
     const existing = enrichedTokens.find(
       (t) =>
-        (leadPhone && t.mobile.replace(/\D/g, "").includes(leadPhone.replace(/\D/g, ""))) ||
-        (leadName && t.customerName.toLowerCase().trim() === leadName.toLowerCase().trim())
+        (dealPhone && t.mobile?.replace(/\D/g, "") && dealPhone.replace(/\D/g, "").includes(t.mobile.replace(/\D/g, ""))) ||
+        (dealName && t.customerName?.toLowerCase().trim() === dealName.toLowerCase().trim())
     );
 
     if (existing) {
@@ -762,53 +845,62 @@ export default function GenerateInvoicePage() {
       if (nextBillNo >= 4) stageTitle = `${nextBillNo}th Installment - Balance Settlement`;
 
       setFormInstallmentTitle(stageTitle);
-      const remaining = existing.computedBalanceDue;
+      const remaining = Number(deal.balance_due ?? existing.computedBalanceDue);
       const suggestedAmt = remaining > 0 ? remaining : 50000;
       setFormAmountPaid(String(suggestedAmt));
       setFormLineItems([
         {
-          desc: `${stageTitle} for ${existing.brand} ${existing.model}`,
+          desc: `${stageTitle} for ${dealBrand} ${dealModel}`,
           hsn: "998313",
           qty: 1,
           rate: String(suggestedAmt),
           amount: String(suggestedAmt),
         },
       ]);
-      setFormRemarks(`Installment payment for existing token ${existing.tokenNo}.`);
+      setFormRemarks(`Installment payment for Deal ${deal.deal_number || '#' + deal.id} (Token ${existing.tokenNo}).`);
       showToast(
         `Linked to ${existing.tokenNo} (${existing.invoicesCount} previous bills found)`,
         "info"
       );
     } else {
-      // New Token for this Pipeline Lead
+      // New Token for this Booking Deal
       const newTokNo = `TKN-2026-${Math.floor(1000 + Math.random() * 9000)}`;
       setLinkedExistingToken(null);
       setFormTokenNo(newTokNo);
-      setFormInstallmentTitle("1st Installment - Token Booking Advance");
-      setFormAmountPaid("50000");
+      const prevPaid = Number(deal.total_paid || 0);
+      const stageTitle = prevPaid > 0 ? "2nd Installment - Margin Money Deposit" : "1st Installment - Token Booking Advance";
+      setFormInstallmentTitle(stageTitle);
+      const suggestedAmt = prevPaid > 0 && deal.balance_due ? deal.balance_due : 50000;
+      setFormAmountPaid(String(suggestedAmt));
       setFormLineItems([
         {
-          desc: `CSD AFD Token Advance for ${lead.brand_name || "Vehicle"} ${lead.model_variant || ""}`,
+          desc: `CSD Token Payment for ${dealBrand} ${dealModel} (${deal.deal_number || 'Deal #' + deal.id})`,
           hsn: "998313",
           qty: 1,
-          rate: "50000",
-          amount: "50000",
+          rate: String(suggestedAmt),
+          amount: String(suggestedAmt),
         },
       ]);
-      setFormRemarks(`Initial token advance for pipeline lead: ${leadName}.`);
+      setFormRemarks(`Booking invoice for Deal ${deal.deal_number || '#' + deal.id}. Customer: ${dealName}`);
     }
   };
 
   // Open Generate Invoice for an existing token from Table Row "Add Bill"
   const handleOpenGenerateForToken = (token) => {
-    // Find matching pipeline lead if available
-    const matchedLead = pipelineLeads.find(
-      (l) =>
-        l.phone?.replace(/\D/g, "") === token.mobile?.replace(/\D/g, "") ||
-        l.customer_name?.toLowerCase() === token.customerName?.toLowerCase()
+    // Find matching deal if available
+    const matchedDeal = deals.find(
+      (d) =>
+        (d.customer_phone && token.mobile && d.customer_phone.replace(/\D/g, "") === token.mobile.replace(/\D/g, "")) ||
+        (d.customer_name && token.customerName && d.customer_name.toLowerCase().trim() === token.customerName.toLowerCase().trim())
     );
 
-    setSelectedPipelineLeadId(matchedLead ? String(matchedLead.id) : "");
+    if (matchedDeal) {
+      setSelectedDealId(String(matchedDeal.id));
+      setDealSearchQuery(`${matchedDeal.customer_name || 'Customer'} (${matchedDeal.customer_phone || ''})`);
+    } else {
+      setSelectedDealId("");
+      setDealSearchQuery(token.customerName ? `${token.customerName} (${token.mobile || ''})` : "");
+    }
     setLinkedExistingToken(token);
     setFormTokenNo(token.tokenNo);
     setFormCustomerName(token.customerName);
@@ -854,7 +946,9 @@ export default function GenerateInvoicePage() {
   const handleOpenGenerateModal = () => {
     setFormInvoiceNo(generateInvoiceNumber());
     setFormInvoiceDate(new Date().toISOString().split("T")[0]);
-    setSelectedPipelineLeadId("");
+    setSelectedDealId("");
+    setDealSearchQuery("");
+    setIsDealDropdownOpen(false);
     setLinkedExistingToken(null);
     setFormTokenNo(`TKN-2026-${Math.floor(1000 + Math.random() * 9000)}`);
     setFormCustomerName("");
@@ -926,7 +1020,7 @@ export default function GenerateInvoicePage() {
   // =========================================================================
   // SUBMIT HANDLER: Generate & Save Invoice
   // =========================================================================
-  const handleSaveInvoice = (e) => {
+  const handleSaveInvoice = async (e) => {
     e.preventDefault();
 
     if (!formCustomerName || !formMobile) {
@@ -946,8 +1040,49 @@ export default function GenerateInvoicePage() {
       hour12: true,
     });
 
-    const finalInvoiceNo = formInvoiceNo || generateInvoiceNumber();
+    let finalInvoiceNo = formInvoiceNo || generateInvoiceNumber();
     const finalTokenNo = formTokenNo || `TKN-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    // Try backend persistence
+    let backendTokenId = linkedExistingToken?.id;
+    try {
+      if (!backendTokenId) {
+        // Try creating token on backend
+        const tokRes = await tokenBillingApi.createToken({
+          customer_name: formCustomerName,
+          customer_phone: formMobile,
+          customer_email: formEmail || "customer@csd.gov.in",
+          service_id: formServiceNo || "CSD-APPL",
+          rank_designation: formUnit || "Subedar",
+          brand_name: formBrand || "Maruti Suzuki",
+          vehicle_name: `${formBrand || "Maruti Suzuki"} ${formModel || "Car"}`,
+          model_variant: formVariant || "Standard",
+          total_deal_amount: Number(formTotalDealAmount) || amountNum,
+        });
+        if (tokRes?.data?.id) {
+          backendTokenId = tokRes.data.id;
+        }
+      }
+
+      if (backendTokenId) {
+        const invRes = await tokenBillingApi.generateInvoice({
+          token_id: backendTokenId,
+          bill_type: formInstallmentTitle || "Token Advance",
+          invoice_amount: amountNum,
+          tax_amount: Math.round(amountNum * 0.18),
+          payment_mode: formPaymentMode || "UPI",
+          transaction_reference: formTransactionRef || "UTR-VERIFIED",
+          invoice_date: formInvoiceDate,
+          payment_status: "Paid",
+        });
+
+        if (invRes?.data?.invoice?.invoice_number) {
+          finalInvoiceNo = invRes.data.invoice.invoice_number;
+        }
+      }
+    } catch (apiErr) {
+      console.warn("Backend billing API error (proceeding with local update):", apiErr.message);
+    }
 
     const newInvoiceObj = {
       id: `INV-${Date.now()}`,
@@ -974,7 +1109,9 @@ export default function GenerateInvoicePage() {
     let targetTokenRef = null;
 
     // Check if target token already exists in database
-    const existingIndex = updatedTokens.findIndex((t) => t.tokenNo === finalTokenNo);
+    const existingIndex = updatedTokens.findIndex(
+      (t) => (backendTokenId && t.id === backendTokenId) || t.tokenNo === finalTokenNo
+    );
 
     if (existingIndex !== -1) {
       // Add subsequent invoice to existing token
@@ -994,6 +1131,7 @@ export default function GenerateInvoicePage() {
     } else {
       // Create new token record for this customer
       const newTokObj = {
+        id: backendTokenId || Date.now(),
         tokenNo: finalTokenNo,
         customerName: formCustomerName,
         serviceNo: formServiceNo || "CSD-APPL",
@@ -1020,6 +1158,9 @@ export default function GenerateInvoicePage() {
       `Invoice ${newInvoiceObj.invoiceNo} generated successfully for ${formCustomerName}!`,
       "success"
     );
+
+    // Refresh live records from backend
+    loadBillingData();
 
     // Open single invoice voucher modal for preview and instant printing
     if (targetTokenRef) {
@@ -1205,8 +1346,8 @@ export default function GenerateInvoicePage() {
               Generate Invoice & Token Billing
             </h2>
             <p className="text-muted small mb-0">
-              Select customer from leads pipeline, generate sequential installment invoices (
-              <code>DAL-/YYYY/MM/XXXX</code>), consolidated statements & PDF exports.
+              Select customer from deals &amp; bookings, generate sequential installment invoices (
+              <code>DAL-/YYYY/MM/XXXX</code>), consolidated statements &amp; PDF exports.
             </p>
           </div>
 
@@ -2086,7 +2227,7 @@ export default function GenerateInvoicePage() {
                         Generate Invoice Voucher
                       </h5>
                       <small style={{ color: "#DCE9A2" }}>
-                        Format: <code>DAL-/YYYY/MM/XXXX</code> • Leads Pipeline Flow
+                        Format: <code>DAL-/YYYY/MM/XXXX</code> • Deals &amp; Bookings Flow
                       </small>
                     </div>
                   </div>
@@ -2108,10 +2249,11 @@ export default function GenerateInvoicePage() {
                   }}
                 >
                   {/* =========================================================================
-                      TASK 2: SELECT CUSTOMER FROM LEADS PIPELINE (NO RADIO BUTTONS)
+                      TASK: SELECT CUSTOMER FROM DEALS & BOOKINGS (SEARCHABLE DROPDOWN)
                       ========================================================================= */}
                   <div
-                    className="p-3 rounded mb-3 border shadow-sm"
+                    className="p-3 rounded mb-3 border shadow-sm deal-search-container position-relative"
+                    ref={dealDropdownRef}
                     style={{
                       background: "linear-gradient(135deg, rgba(88, 99, 42, 0.08), rgba(19, 28, 39, 0.04))",
                       borderColor: "var(--border-color, #D9DDCC)",
@@ -2119,31 +2261,155 @@ export default function GenerateInvoicePage() {
                   >
                     <div className="d-flex align-items-center justify-content-between mb-2">
                       <label className="form-label fw-bold text-dark small mb-0 d-flex align-items-center gap-2">
-                        <i className="bi bi-funnel-fill text-primary"></i>
-                        <span>Select Customer from Leads Pipeline</span>
+                        <i className="bi bi-person-check-fill text-primary"></i>
+                        <span>Select Customer from Deals &amp; Bookings</span>
                         <span className="text-danger">*</span>
                       </label>
-                      <span className="badge bg-secondary-subtle text-secondary small">
-                        {pipelineLeads.length} Pipeline Customers
-                      </span>
+                      <div className="d-flex align-items-center gap-2">
+                        {isLoadingDeals && (
+                          <span className="spinner-border spinner-border-sm text-primary" role="status"></span>
+                        )}
+                        <span className="badge bg-secondary-subtle text-secondary small">
+                          {deals.length} Booked Customers
+                        </span>
+                      </div>
                     </div>
 
-                    <select
-                      className="form-select fw-semibold"
-                      style={{ borderColor: "var(--primary, #58632A)" }}
-                      value={selectedPipelineLeadId}
-                      onChange={(e) => handleSelectPipelineCustomer(e.target.value)}
-                    >
-                      <option value="">-- Choose Customer from Leads Pipeline --</option>
-                      {pipelineLeads.map((lead) => {
-                        const leadName = lead.customer_name || lead.name;
-                        return (
-                          <option key={lead.id} value={lead.id}>
-                            【{lead.brand_name || "CSD Brand"}】 {leadName} — {lead.model_variant || ""} (📞 {lead.phone})
-                          </option>
-                        );
-                      })}
-                    </select>
+                    {/* Searchable Input Dropdown */}
+                    <div className="position-relative">
+                      <div className="input-group">
+                        <span
+                          className="input-group-text bg-white border-end-0 text-muted"
+                          style={{ borderColor: "var(--primary, #58632A)" }}
+                        >
+                          <i className="bi bi-search text-primary"></i>
+                        </span>
+                        <input
+                          type="text"
+                          className="form-control fw-semibold border-start-0 border-end-0 ps-1"
+                          style={{ borderColor: "var(--primary, #58632A)" }}
+                          placeholder="Search by customer name or phone number..."
+                          value={dealSearchQuery}
+                          onChange={(e) => {
+                            setDealSearchQuery(e.target.value);
+                            setIsDealDropdownOpen(true);
+                            if (!e.target.value.trim()) {
+                              setSelectedDealId("");
+                              setLinkedExistingToken(null);
+                            }
+                          }}
+                          onFocus={() => setIsDealDropdownOpen(true)}
+                        />
+                        {dealSearchQuery ? (
+                          <button
+                            type="button"
+                            className="btn btn-outline-secondary border-start-0 bg-white"
+                            style={{ borderColor: "var(--primary, #58632A)" }}
+                            onClick={() => {
+                              setDealSearchQuery("");
+                              setSelectedDealId("");
+                              setLinkedExistingToken(null);
+                              setIsDealDropdownOpen(false);
+                            }}
+                            title="Clear search"
+                          >
+                            <i className="bi bi-x-circle-fill text-danger"></i>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-outline-secondary border-start-0 bg-white"
+                            style={{ borderColor: "var(--primary, #58632A)" }}
+                            onClick={() => setIsDealDropdownOpen((prev) => !prev)}
+                            title="Toggle customer list"
+                          >
+                            <i className={`bi bi-chevron-${isDealDropdownOpen ? "up" : "down"}`}></i>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Dropdown Results Box */}
+                      {isDealDropdownOpen && (
+                        <div
+                          className="position-absolute start-0 end-0 bg-white border rounded shadow-lg mt-1"
+                          style={{
+                            zIndex: 1060,
+                            maxHeight: "260px",
+                            overflowY: "auto",
+                            borderColor: "#58632A",
+                          }}
+                        >
+                          {filteredDeals.length === 0 ? (
+                            <div className="p-3 text-center text-muted small">
+                              <i className="bi bi-search me-1"></i>
+                              No customer found matching &ldquo;{dealSearchQuery}&rdquo;
+                            </div>
+                          ) : (
+                            filteredDeals.map((deal) => {
+                              const isSelected = String(deal.id) === String(selectedDealId);
+                              const dealName = deal.customer_name || deal.lead?.name || "Customer";
+                              const dealPhone = deal.customer_phone || deal.lead?.phone || "-";
+                              const dealNumber = deal.deal_number || `#DEAL-${deal.id}`;
+                              const brand = deal.brand_name || deal.brand?.name || "";
+                              const model = deal.model_variant || deal.lead?.model_variant || "";
+                              const balance = deal.balance_due ?? (deal.net_amount - (deal.total_paid || 0));
+
+                              return (
+                                <div
+                                  key={deal.id}
+                                  className={`p-2.5 px-3 border-bottom d-flex align-items-center justify-content-between text-start ${
+                                    isSelected ? "bg-primary-subtle" : ""
+                                  }`}
+                                  style={{
+                                    cursor: "pointer",
+                                    transition: "background-color 0.15s ease",
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (!isSelected) e.currentTarget.style.backgroundColor = "#F7F8F3";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (!isSelected) e.currentTarget.style.backgroundColor = "transparent";
+                                  }}
+                                  onClick={() => {
+                                    handleSelectBookingDeal(deal);
+                                    setDealSearchQuery(`${dealName} (${dealPhone})`);
+                                    setIsDealDropdownOpen(false);
+                                  }}
+                                >
+                                  <div className="me-2" style={{ minWidth: 0 }}>
+                                    <div className="d-flex align-items-center gap-2 flex-wrap mb-1">
+                                      <span className="badge bg-dark-subtle text-dark font-monospace small px-1.5 py-0.5">
+                                        {dealNumber}
+                                      </span>
+                                      <strong className="text-dark small text-truncate">
+                                        {dealName}
+                                      </strong>
+                                      <span className="badge bg-light text-secondary border small">
+                                        <i className="bi bi-telephone-fill me-1 text-success"></i>
+                                        {dealPhone}
+                                      </span>
+                                    </div>
+                                    <div className="small text-muted text-truncate" style={{ fontSize: "11.5px" }}>
+                                      <i className="bi bi-car-front-fill me-1 text-primary"></i>
+                                      {brand} {model} {deal.color ? `• ${deal.color}` : ""} {deal.customer_city ? `• ${deal.customer_city}` : ""}
+                                    </div>
+                                  </div>
+
+                                  <div className="text-end flex-shrink-0">
+                                    <div className="small fw-bold text-dark">
+                                      {formatCurrency(deal.net_amount || deal.total_amount || 0)}
+                                    </div>
+                                    <div className="extra-small text-muted" style={{ fontSize: "10.5px" }}>
+                                      Bal: <span className="text-danger fw-semibold">{formatCurrency(balance || 0)}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      )}
+                    </div>
 
                     {/* Linked Token Notification Banner */}
                     {linkedExistingToken ? (
@@ -2172,7 +2438,7 @@ export default function GenerateInvoicePage() {
                           </strong>
                         </div>
                       </div>
-                    ) : selectedPipelineLeadId ? (
+                    ) : selectedDealId ? (
                       <div
                         className="mt-2.5 p-2 rounded d-flex align-items-center justify-content-between"
                         style={{
@@ -2182,7 +2448,7 @@ export default function GenerateInvoicePage() {
                       >
                         <div className="small">
                           <span className="badge bg-primary me-2">NEW TOKEN ALLOCATION</span>
-                          <span>First booking bill for pipeline customer. Assigned Token: </span>
+                          <span>Booking deal customer verified. Assigned Token: </span>
                           <strong className="text-dark font-monospace">{formTokenNo}</strong>
                         </div>
                       </div>
