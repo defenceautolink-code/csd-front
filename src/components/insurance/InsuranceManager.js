@@ -734,6 +734,7 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
                   <th>Customer Info</th>
                   <th>Vehicle & Color</th>
                   <th>Delivery Date</th>
+                  <th>Premium (₹)</th>
                   <th>Insurance Expire</th>
                   <th>Reminder Date</th>
                   <th>Status</th>
@@ -743,7 +744,7 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan="8" className="text-center py-5 text-muted">
+                    <td colSpan="9" className="text-center py-5 text-muted">
                       <div className="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
                       Loading insurance records...
                     </td>

@@ -3,6 +3,7 @@ import { clearAuthSession } from "@/utils/auth";
 
 // Create Axios Instance with default settings
 const api = axios.create({
+
   baseURL:
     process.env.NEXT_PUBLIC_API_URL ||
     process.env.NEXT_PUBLIC_BASE_URL ||

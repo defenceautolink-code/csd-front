@@ -70,11 +70,45 @@ export const priceMasterApi = {
 
   /**
    * GET /api/variants
-   * Fetches variants list with optional brand_id, model_id, search, per_page
+   * Fetches variants list with optional brand_id, model_id, search, per_page.
+   * Includes graceful fallback to /api/price-master if /variants endpoint fails.
    */
   getVariants: async (params = {}) => {
-    const response = await api.get("/variants", { params });
-    return response.data;
+    try {
+      const response = await api.get("/variants", { params });
+      return response.data;
+    } catch (err) {
+      console.warn("[priceMasterApi] /variants failed, attempting fallback to /price-master...", err?.message);
+      try {
+        const pmRes = await api.get("/price-master");
+        const brandsMaster = pmRes.data?.data?.brands_master || [];
+        const extractedVariants = [];
+        brandsMaster.forEach((b) => {
+          (b.models || []).forEach((m) => {
+            (m.variants || []).forEach((v) => {
+              extractedVariants.push({
+                ...v,
+                brand_id: b.id,
+                model_id: m.id,
+                brand: { id: b.id, name: b.name },
+                model: { id: m.id, name: m.name },
+              });
+            });
+          });
+        });
+
+        if (extractedVariants.length > 0) {
+          return {
+            status: true,
+            message: "Variants loaded via price-master fallback",
+            data: extractedVariants,
+          };
+        }
+      } catch (fallbackErr) {
+        console.error("[priceMasterApi] Price master fallback also failed:", fallbackErr);
+      }
+      throw err;
+    }
   },
 
   /**
@@ -109,17 +143,26 @@ export const priceMasterApi = {
   },
 
   /**
-   * PUT /api/variants/:id
-   * Single variant price update
+   * Update Single Variant Price
+   * Uses POST /api/variants/bulk-update-prices for 1 variant so previous_price is automatically updated by backend.
+   * Gracefully falls back to PUT /api/variants/:id (with status) if needed.
    */
   updateSingleVariantPrice: async (variantId, revisedPrice, additionalData = {}) => {
-    const payload = {
-      ...additionalData,
-      price: Number(revisedPrice),
-      ex_showroom_price: Number(revisedPrice),
-    };
-    const response = await api.put(`/variants/${variantId}`, payload);
-    return response.data;
+    try {
+      const response = await api.post("/variants/bulk-update-prices", {
+        variants: [{ id: Number(variantId), revised_price: Number(revisedPrice) }],
+      });
+      return response.data;
+    } catch (bulkErr) {
+      const payload = {
+        ...additionalData,
+        status: additionalData.status || "Active",
+        price: Number(revisedPrice),
+        ex_showroom_price: Number(revisedPrice),
+      };
+      const response = await api.put(`/variants/${variantId}`, payload);
+      return response.data;
+    }
   },
 };
 

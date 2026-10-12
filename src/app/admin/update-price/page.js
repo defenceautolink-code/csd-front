@@ -39,9 +39,9 @@ export default function UpdatePricePage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedBrandId, setSelectedBrandId] = useState("");
   const [selectedModelId, setSelectedModelId] = useState("");
+  const [selectedVariantId, setSelectedVariantId] = useState("");
 
-  // Quick batch adjust popover/inputs (e.g., + ₹5000 or + 2%)
-  const [quickAdjustMode, setQuickAdjustMode] = useState("flat"); // 'flat' or 'percent'
+  // Quick batch price input for selected variants
   const [quickAdjustValue, setQuickAdjustValue] = useState("");
 
   // Pagination states
@@ -52,16 +52,44 @@ export default function UpdatePricePage() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const [variantsRes, brandsRes, modelsRes] = await Promise.all([
+      const [variantsSettled, brandsSettled, modelsSettled] = await Promise.allSettled([
         priceMasterApi.getVariants({ per_page: 100 }),
         api.get("/brands"),
         api.get("/models"),
       ]);
 
+      const variantsRes = variantsSettled.status === "fulfilled" ? variantsSettled.value : null;
+      const brandsRes = brandsSettled.status === "fulfilled" ? brandsSettled.value : null;
+      const modelsRes = modelsSettled.status === "fulfilled" ? modelsSettled.value : null;
+
       const variantsList = variantsRes?.data || [];
+      let brandsList = brandsRes?.data?.data || brandsRes?.data || [];
+      let modelsList = modelsRes?.data?.data || modelsRes?.data || [];
+
+      // If brands or models endpoints failed, fallback to extracting unique brands/models from variants list
+      if ((!brandsList || brandsList.length === 0) && variantsList.length > 0) {
+        const uniqueBrandsMap = new Map();
+        variantsList.forEach((v) => {
+          if (v.brand?.id && !uniqueBrandsMap.has(v.brand.id)) {
+            uniqueBrandsMap.set(v.brand.id, v.brand);
+          }
+        });
+        brandsList = Array.from(uniqueBrandsMap.values());
+      }
+
+      if ((!modelsList || modelsList.length === 0) && variantsList.length > 0) {
+        const uniqueModelsMap = new Map();
+        variantsList.forEach((v) => {
+          if (v.model?.id && !uniqueModelsMap.has(v.model.id)) {
+            uniqueModelsMap.set(v.model.id, v.model);
+          }
+        });
+        modelsList = Array.from(uniqueModelsMap.values());
+      }
+
       setVariants(variantsList);
-      setBrands(brandsRes?.data?.data || brandsRes?.data || []);
-      setModels(modelsRes?.data?.data || modelsRes?.data || []);
+      setBrands(brandsList);
+      setModels(modelsList);
 
       // Initialize revised prices state with current price/ex_showroom_price
       const initialPrices = {};
@@ -69,13 +97,19 @@ export default function UpdatePricePage() {
         initialPrices[v.id] = v.ex_showroom_price || v.price || "";
       });
       setRevisedPrices(initialPrices);
+
+      if (variantsSettled.status === "rejected") {
+        console.error("Variants request rejected:", variantsSettled.reason);
+        showToast("Failed to load vehicle variants from server.", "error");
+      }
     } catch (err) {
       console.error("Failed to load vehicle price master data:", err);
       showToast("Failed to load vehicle price master data.", "error");
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -87,14 +121,49 @@ export default function UpdatePricePage() {
     return models.filter((m) => String(m.brand_id) === String(selectedBrandId));
   }, [models, selectedBrandId]);
 
-  // When brand filter changes, reset model filter if model doesn't belong to new brand
+  // Variants filtered for the currently selected brand and model
+  const filteredVariantsForDropdown = useMemo(() => {
+    let list = variants;
+    if (selectedBrandId) {
+      list = list.filter((v) => {
+        const vBrandId = v.brand_id || v.brand?.id;
+        return String(vBrandId) === String(selectedBrandId);
+      });
+    }
+    if (selectedModelId) {
+      list = list.filter((v) => {
+        const vModelId = v.model_id || v.model?.id;
+        return String(vModelId) === String(selectedModelId);
+      });
+    }
+    return list;
+  }, [variants, selectedBrandId, selectedModelId]);
+
+  // When brand filter changes, reset model and variant filter
   const handleBrandFilterChange = (newBrandId) => {
     setSelectedBrandId(newBrandId);
     setSelectedModelId("");
+    setSelectedVariantId("");
     setCurrentPage(1);
   };
 
-  // Filtered variants based on Search, Brand, and Model
+  // When model filter changes, reset variant filter
+  const handleModelFilterChange = (newModelId) => {
+    setSelectedModelId(newModelId);
+    setSelectedVariantId("");
+    setCurrentPage(1);
+  };
+
+  // Reset all search and dropdown filters
+  const handleClearFilters = () => {
+    setSearchTerm("");
+    setSelectedBrandId("");
+    setSelectedModelId("");
+    setSelectedVariantId("");
+    setCurrentPage(1);
+  };
+
+  // Filtered variants based on Search, Brand, Model, and Variant
   const filteredVariants = useMemo(() => {
     return variants.filter((v) => {
       // 1. Brand filter
@@ -109,7 +178,12 @@ export default function UpdatePricePage() {
         if (String(vModelId) !== String(selectedModelId)) return false;
       }
 
-      // 3. Search filter across Variant Name, Model Name, and Brand Name
+      // 3. Variant filter
+      if (selectedVariantId) {
+        if (String(v.id) !== String(selectedVariantId)) return false;
+      }
+
+      // 4. Search filter across Variant Name, Model Name, and Brand Name
       if (searchTerm.trim()) {
         const q = searchTerm.toLowerCase().trim();
         const vName = (v.name || "").toLowerCase();
@@ -122,12 +196,12 @@ export default function UpdatePricePage() {
 
       return true;
     });
-  }, [variants, selectedBrandId, selectedModelId, searchTerm]);
+  }, [variants, selectedBrandId, selectedModelId, selectedVariantId, searchTerm]);
 
   // Reset page to 1 whenever filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedModelId]);
+  }, [searchTerm, selectedBrandId, selectedModelId, selectedVariantId]);
 
   // Pagination slicing
   const totalRecords = filteredVariants.length;
@@ -171,39 +245,7 @@ export default function UpdatePricePage() {
     }
   };
 
-  // Quick Batch Adjust calculation (e.g. + ₹5,000 or + 2% to all selected)
-  const applyQuickAdjustToSelected = () => {
-    const val = parseFloat(quickAdjustValue);
-    if (isNaN(val) || val === 0) {
-      showToast("Please enter a valid adjustment amount or percentage.", "warning");
-      return;
-    }
-
-    setRevisedPrices((prev) => {
-      const updated = { ...prev };
-      selectedIds.forEach((id) => {
-        const variant = variants.find((v) => v.id === id);
-        const current = Number(prev[id] ?? variant?.price ?? 0);
-        let nextVal = current;
-
-        if (quickAdjustMode === "percent") {
-          nextVal = Math.round(current + (current * val) / 100);
-        } else {
-          nextVal = Math.round(current + val);
-        }
-
-        updated[id] = Math.max(0, nextVal);
-      });
-      return updated;
-    });
-
-    showToast(
-      `Applied adjustment of ${quickAdjustMode === "percent" ? `${val}%` : `₹${val.toLocaleString("en-IN")}`} to ${selectedIds.length} selected variants.`,
-      "info"
-    );
-  };
-
-  // 1. Single Variant Quick Update (Row Save 💾)
+  // 1. Single Variant Quick Update
   const handleSaveSingleRow = async (variant) => {
     const newPriceVal = revisedPrices[variant.id];
     if (newPriceVal === "" || isNaN(newPriceVal) || Number(newPriceVal) <= 0) {
@@ -214,22 +256,25 @@ export default function UpdatePricePage() {
     const numPrice = Number(newPriceVal);
     setSavingRowId(variant.id);
     try {
-      await priceMasterApi.updateSingleVariantPrice(variant.id, numPrice, {
+      const res = await priceMasterApi.updateSingleVariantPrice(variant.id, numPrice, {
         brand_id: variant.brand_id || variant.brand?.id,
         model_id: variant.model_id || variant.model?.id,
         name: variant.name,
+        status: variant.status || "Active",
       });
 
-      // Update state: Set previous_price = old_price, and price = numPrice
+      // Update state: Set previous_price from backend response or old_price
+      const backendUpdated = Array.isArray(res?.data) ? res.data[0] : res?.data;
       setVariants((prev) =>
         prev.map((v) => {
           if (v.id === variant.id) {
             const oldPrice = v.ex_showroom_price || v.price;
             return {
               ...v,
-              previous_price: oldPrice,
+              previous_price: backendUpdated?.previous_price !== undefined ? backendUpdated.previous_price : oldPrice,
               price: numPrice,
               ex_showroom_price: numPrice,
+              calculated_on_road_price: backendUpdated?.on_road_price || v.calculated_on_road_price,
             };
           }
           return v;
@@ -252,11 +297,21 @@ export default function UpdatePricePage() {
       return;
     }
 
+    // Auto-apply top input value to selected variants if user entered a price
+    let workingPrices = { ...revisedPrices };
+    const val = parseFloat(quickAdjustValue);
+    if (!isNaN(val) && val > 0) {
+      selectedIds.forEach((id) => {
+        workingPrices[id] = Math.round(val);
+      });
+      setRevisedPrices(workingPrices);
+    }
+
     // Build payload
     const itemsToUpdate = [];
     for (const id of selectedIds) {
       const v = variants.find((item) => item.id === id);
-      const newPrice = revisedPrices[id];
+      const newPrice = workingPrices[id];
       if (newPrice === "" || isNaN(newPrice) || Number(newPrice) <= 0) {
         showToast(`Invalid price for variant: ${v?.name || id}`, "error");
         return;
@@ -273,17 +328,25 @@ export default function UpdatePricePage() {
         variants: itemsToUpdate,
       });
 
+      // Map backend response by id for accurate previous_price and on_road_price
+      const backendMap = new Map();
+      if (Array.isArray(res?.data)) {
+        res.data.forEach((item) => backendMap.set(item.id, item));
+      }
+
       // Update state locally: previous_price = old_price, price = revised_price
       setVariants((prev) =>
         prev.map((v) => {
           const updatedItem = itemsToUpdate.find((u) => u.id === v.id);
           if (updatedItem) {
+            const backendItem = backendMap.get(v.id);
             const oldPrice = v.ex_showroom_price || v.price;
             return {
               ...v,
-              previous_price: oldPrice,
+              previous_price: backendItem?.previous_price !== undefined ? backendItem.previous_price : oldPrice,
               price: updatedItem.revised_price,
               ex_showroom_price: updatedItem.revised_price,
+              calculated_on_road_price: backendItem?.on_road_price || v.calculated_on_road_price,
             };
           }
           return v;
@@ -291,6 +354,7 @@ export default function UpdatePricePage() {
       );
 
       setSelectedIds([]);
+      setQuickAdjustValue("");
       showToast(
         res?.message || `${itemsToUpdate.length} Variant prices updated successfully!`,
         "success"
@@ -303,25 +367,16 @@ export default function UpdatePricePage() {
     }
   };
 
-  // Clear all filters
-  const handleClearFilters = () => {
-    setSearchTerm("");
-    setSelectedBrandId("");
-    setSelectedModelId("");
-    setCurrentPage(1);
-  };
-
   // Export CSV of Current & Revised Prices
   const handleExportPriceMaster = () => {
     try {
       showToast("Generating vehicle price master sheet...", "info");
       const rows = [
-        ["ID", "Brand", "Model", "Variant Name", "Previous Price (₹)", "Revised Ex-Showroom (₹)", "Net Difference (₹)", "Status"],
+        ["ID", "Brand", "Model", "Variant Name", "Previous Price (₹)", "Revised Ex-Showroom (₹)", "Status"],
         ...filteredVariants.map((v) => {
           const currentPrice = Number(v.ex_showroom_price || v.price || 0);
           const revised = Number(revisedPrices[v.id] ?? currentPrice);
           const prev = v.previous_price ? Number(v.previous_price) : "";
-          const diff = revised - currentPrice;
           return [
             v.id,
             v.brand?.name || v.brand_name || "",
@@ -329,7 +384,6 @@ export default function UpdatePricePage() {
             v.name,
             prev !== "" ? prev : "-",
             revised,
-            diff,
             v.status || "Active",
           ];
         }),
@@ -399,7 +453,7 @@ export default function UpdatePricePage() {
           <div className="card-body p-3">
             <div className="row g-2 align-items-center">
               {/* Search Bar */}
-              <div className="col-12 col-md-4">
+              <div className="col-12 col-md-6 col-lg-3">
                 <div className="input-group">
                   <span className="input-group-text bg-white border-end-0 text-muted">
                     <i className="bi bi-search text-primary"></i>
@@ -407,7 +461,7 @@ export default function UpdatePricePage() {
                   <input
                     type="text"
                     className="form-control border-start-0"
-                    placeholder="Search by Variant, Model, or Brand..."
+                    placeholder="Search variant, model, brand..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
@@ -424,7 +478,7 @@ export default function UpdatePricePage() {
               </div>
 
               {/* Brand Filter */}
-              <div className="col-12 col-sm-6 col-md-3">
+              <div className="col-12 col-sm-6 col-md-3 col-lg-2">
                 <select
                   className="form-select fw-semibold"
                   style={{ borderColor: "var(--border-color, #D9DDCC)" }}
@@ -441,13 +495,13 @@ export default function UpdatePricePage() {
               </div>
 
               {/* Model Filter (Cascading) */}
-              <div className="col-12 col-sm-6 col-md-3">
+              <div className="col-12 col-sm-6 col-md-3 col-lg-2">
                 <select
                   className="form-select fw-semibold"
                   style={{ borderColor: "var(--border-color, #D9DDCC)" }}
                   value={selectedModelId}
-                  onChange={(e) => setSelectedModelId(e.target.value)}
-                  disabled={selectedBrandId && filteredModelsForDropdown.length === 0}
+                  onChange={(e) => handleModelFilterChange(e.target.value)}
+                  disabled={Boolean(selectedBrandId && filteredModelsForDropdown.length === 0)}
                 >
                   <option value="">
                     {selectedBrandId
@@ -462,9 +516,37 @@ export default function UpdatePricePage() {
                 </select>
               </div>
 
-              {/* Clear / Reset Filter Button */}
-              <div className="col-12 col-md-2 d-flex align-items-center justify-content-end gap-2">
-                {(searchTerm || selectedBrandId || selectedModelId) && (
+              {/* Variant Filter (Cascading after Model) */}
+              <div className="col-12 col-sm-6 col-md-3 col-lg-3">
+                <select
+                  className="form-select fw-semibold"
+                  style={{ borderColor: "var(--border-color, #D9DDCC)" }}
+                  value={selectedVariantId}
+                  onChange={(e) => setSelectedVariantId(e.target.value)}
+                  disabled={Boolean(selectedModelId && filteredVariantsForDropdown.length === 0)}
+                >
+                  <option value="">
+                    {selectedModelId
+                      ? `All Variants (${filteredVariantsForDropdown.length})`
+                      : selectedBrandId
+                      ? `All Variants (${filteredVariantsForDropdown.length})`
+                      : `All Variants (${variants.length})`}
+                  </option>
+                  {filteredVariantsForDropdown.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {selectedModelId
+                        ? v.name
+                        : v.model?.name
+                        ? `${v.model.name} - ${v.name}`
+                        : v.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Clear / Reset Filter Button & Count Badge */}
+              <div className="col-12 col-sm-6 col-md-3 col-lg-2 d-flex align-items-center justify-content-end gap-2">
+                {(searchTerm || selectedBrandId || selectedModelId || selectedVariantId) && (
                   <button
                     type="button"
                     className="btn btn-outline-danger btn-sm w-100"
@@ -472,7 +554,7 @@ export default function UpdatePricePage() {
                     title="Reset all filters"
                   >
                     <i className="bi bi-arrow-counterclockwise me-1"></i>
-                    Reset Filters
+                    Reset
                   </button>
                 )}
                 <span className="badge bg-secondary-subtle text-secondary small py-2 px-2.5 flex-shrink-0">
@@ -500,37 +582,28 @@ export default function UpdatePricePage() {
                 {selectedIds.length} Selected
               </span>
               <span className="small text-dark fw-semibold d-none d-sm-inline">
-                Modify prices inline below or apply quick batch adjustment:
+                Enter price above or edit inline below:
               </span>
             </div>
 
-            {/* Quick Batch Increment Tools & Bulk Save Button */}
+            {/* Direct Price Input & Save Button */}
             <div className="d-flex flex-wrap align-items-center gap-2 mt-2 mt-md-0">
-              <div className="input-group input-group-sm" style={{ width: "230px" }}>
-                <select
-                  className="form-select form-select-sm"
-                  style={{ maxWidth: "80px" }}
-                  value={quickAdjustMode}
-                  onChange={(e) => setQuickAdjustMode(e.target.value)}
-                >
-                  <option value="flat">+ ₹</option>
-                  <option value="percent">+ %</option>
-                </select>
+              <div className="input-group input-group-sm" style={{ width: "210px" }}>
+                <span className="input-group-text bg-white fw-bold text-muted border-end-0">₹</span>
                 <input
                   type="number"
-                  className="form-control form-control-sm"
-                  placeholder={quickAdjustMode === "percent" ? "e.g. 2" : "e.g. 10000"}
+                  className="form-control form-control-sm font-monospace fw-bold"
+                  placeholder="Enter price"
                   value={quickAdjustValue}
                   onChange={(e) => setQuickAdjustValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleBulkUpdate();
+                    }
+                  }}
+                  min="0"
                 />
-                <button
-                  type="button"
-                  className="btn btn-outline-primary btn-sm"
-                  onClick={applyQuickAdjustToSelected}
-                  title="Apply adjustment to all selected rows"
-                >
-                  Apply
-                </button>
               </div>
 
               <button
@@ -542,12 +615,12 @@ export default function UpdatePricePage() {
                 {savingBulk ? (
                   <>
                     <span className="spinner-border spinner-border-sm" role="status"></span>
-                    <span>Updating Prices...</span>
+                    <span>Saving...</span>
                   </>
                 ) : (
                   <>
-                    <i className="bi bi-cloud-arrow-up-fill"></i>
-                    <span>Update Selected Prices ({selectedIds.length})</span>
+                    <i className="bi bi-save2-fill"></i>
+                    <span>Save ({selectedIds.length})</span>
                   </>
                 )}
               </button>
@@ -555,7 +628,10 @@ export default function UpdatePricePage() {
               <button
                 type="button"
                 className="btn btn-outline-secondary btn-sm"
-                onClick={() => setSelectedIds([])}
+                onClick={() => {
+                  setSelectedIds([]);
+                  setQuickAdjustValue("");
+                }}
                 title="Deselect all rows"
               >
                 <i className="bi bi-x-lg"></i>
@@ -604,9 +680,6 @@ export default function UpdatePricePage() {
                     Revised Ex-Showroom (₹)
                     <span className="badge bg-primary-subtle text-primary ms-1 small">Editable</span>
                   </th>
-                  <th style={{ minWidth: "140px" }} className="text-center">
-                    Difference
-                  </th>
                   <th style={{ width: "110px" }} className="text-center">
                     Action
                   </th>
@@ -616,14 +689,14 @@ export default function UpdatePricePage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="8" className="text-center py-5 text-muted">
+                    <td colSpan="7" className="text-center py-5 text-muted">
                       <div className="spinner-border text-primary spinner-border-sm me-2" role="status"></div>
                       Loading vehicle variants catalog...
                     </td>
                   </tr>
                 ) : paginatedVariants.length === 0 ? (
                   <tr>
-                    <td colSpan="8" className="text-center py-5 text-muted">
+                    <td colSpan="7" className="text-center py-5 text-muted">
                       <i className="bi bi-search fs-3 d-block mb-2 text-secondary"></i>
                       No variants found matching your search and filter criteria.
                     </td>
@@ -715,9 +788,8 @@ export default function UpdatePricePage() {
                             </span>
                             <input
                               type="number"
-                              className={`form-control font-monospace fw-bold text-dark ${
-                                hasChanged ? "border-warning bg-warning-subtle text-dark" : ""
-                              }`}
+                              className={`form-control font-monospace fw-bold text-dark ${hasChanged ? "border-warning bg-warning-subtle text-dark" : ""
+                                }`}
                               style={{
                                 borderColor: hasChanged ? "#eab308" : "#ced4da",
                                 minWidth: "120px",
@@ -730,32 +802,12 @@ export default function UpdatePricePage() {
                           </div>
                         </td>
 
-                        {/* Net Difference Indicator */}
-                        <td className="text-center">
-                          {hasChanged ? (
-                            <span
-                              className={`badge ${
-                                diff > 0
-                                  ? "bg-danger-subtle text-danger"
-                                  : "bg-success-subtle text-success"
-                              } font-monospace small px-2 py-1`}
-                            >
-                              {diff > 0 ? `+₹${diff.toLocaleString("en-IN")}` : `-₹${Math.abs(diff).toLocaleString("en-IN")}`}
-                            </span>
-                          ) : (
-                            <span className="badge bg-light text-muted border extra-small">
-                              Unchanged
-                            </span>
-                          )}
-                        </td>
-
                         {/* Action: Single Row Save Button */}
                         <td className="text-center">
                           <button
                             type="button"
-                            className={`btn btn-sm ${
-                              hasChanged ? "btn-warning text-dark fw-bold" : "btn-outline-primary"
-                            } px-2.5 py-1 d-inline-flex align-items-center gap-1`}
+                            className={`btn btn-sm ${hasChanged ? "btn-warning text-dark fw-bold" : "btn-outline-primary"
+                              } px-2.5 py-1 d-inline-flex align-items-center gap-1`}
                             onClick={() => handleSaveSingleRow(variant)}
                             disabled={isSavingThis || savingBulk}
                             title="Save new rate for this variant"

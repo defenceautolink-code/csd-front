@@ -72,12 +72,14 @@ export function ToastProvider({ children }) {
   );
 }
 
+const fallbackToast = {
+  showToast: (msg) => console.log(msg),
+};
+
 export function useToast() {
   const context = useContext(ToastContext);
   if (!context) {
-    return {
-      showToast: (msg) => console.log(msg),
-    };
+    return fallbackToast;
   }
   return context;
 }
