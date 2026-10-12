@@ -381,6 +381,16 @@ a:hover {
     gap: 0.75rem;
 }
 
+.avatar {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    max-width: 38px;
+    border-radius: var(--border-radius-pill, 50%);
+    object-fit: cover;
+    display: inline-block;
+}
+
 .sidebar-user-card .avatar {
     width: 38px;
     height: 38px;

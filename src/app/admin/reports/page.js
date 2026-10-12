@@ -31,7 +31,7 @@ export default function ReportsPage() {
     }
   }, []);
 
-  const can = (permission) => hasPermission(permission, currentUser);
+  const can = (permission) => hasPermission(permission, currentUser || undefined);
 
   const fetchAnalytics = useCallback(async () => {
     try {
@@ -191,6 +191,17 @@ export default function ReportsPage() {
                 />
               </div>
             )}
+
+            <button
+              type="button"
+              className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1"
+              onClick={fetchAnalytics}
+              disabled={loading}
+              title="Refresh Analytics"
+            >
+              <i className="bi bi-arrow-clockwise"></i>
+              <span>Refresh</span>
+            </button>
 
             {can("reports.export_pdf") && (
               <button
@@ -470,15 +481,16 @@ export default function ReportsPage() {
                             <td>
                               <div className="d-flex align-items-center gap-2">
                                 <span
-                                  className={`badge ${rankColor} fw-bold rounded-circle p-2`}
-                                  style={{ minWidth: "28px", textAlign: "center" }}
+                                  className={`badge ${rankColor} fw-bold rounded-circle d-inline-flex align-items-center justify-content-center flex-shrink-0`}
+                                  style={{ width: "28px", height: "28px", fontSize: "0.75rem" }}
                                 >
                                   #{rep.rank}
                                 </span>
                                 <img
                                   src={avatarSrc}
-                                  alt={rep.rep_name}
-                                  className="avatar"
+                                  alt={rep.rep_name || "Sales Rep"}
+                                  className="avatar rounded-circle flex-shrink-0 border"
+                                  style={{ width: "36px", height: "36px", minWidth: "36px", maxWidth: "36px", objectFit: "cover" }}
                                   onError={(e) => {
                                     e.target.src = "/image/avatar-1.svg";
                                   }}
