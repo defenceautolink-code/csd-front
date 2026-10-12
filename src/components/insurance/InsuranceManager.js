@@ -751,7 +751,7 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
                   </tr>
                 ) : errorMessage ? (
                   <tr>
-                    <td colSpan="8" className="text-center py-5">
+                    <td colSpan="9" className="text-center py-5">
                       <div className="py-4">
                         <div
                           className="mx-auto rounded-circle bg-danger-subtle d-flex align-items-center justify-content-center mb-3"
@@ -776,7 +776,7 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
                   </tr>
                 ) : insurances.length === 0 ? (
                   <tr>
-                    <td colSpan="8" className="text-center py-5">
+                    <td colSpan="9" className="text-center py-5">
                       <div className="py-4">
                         <div
                           className="mx-auto rounded-circle bg-light d-flex align-items-center justify-content-center mb-3"
@@ -891,6 +891,16 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
                             {item.delivery_date || "-"}
                           </div>
                           <span className="text-muted extra-small">Vehicle Delivered</span>
+                        </td>
+
+                        {/* Premium (₹) */}
+                        <td>
+                          <div className="small fw-bold text-dark">
+                            {item.premium_amount || item.insurance_amount
+                              ? `₹${Number(item.premium_amount || item.insurance_amount).toLocaleString("en-IN")}`
+                              : "-"}
+                          </div>
+                          <span className="text-muted extra-small">Annual Policy</span>
                         </td>
 
                         {/* Insurance Expire Date (+365 days) */}
