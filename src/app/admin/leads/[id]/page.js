@@ -145,12 +145,14 @@ export default function LeadDetailPage() {
     setIsLoading(true);
     try {
       const res = await api.get(`/leads/${leadId}`);
-      if (res.data && res.data.status && res.data.data) {
-        setLead(res.data.data);
-      } else if (res.data && res.data.data) {
-        setLead(res.data.data);
-      } else if (res.data) {
-        setLead(res.data);
+      const rawLead = res.data?.data || res.data;
+      if (rawLead) {
+        const localPostings = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("csd_lead_postings_cache") || "{}") : {};
+        setLead({
+          ...rawLead,
+          posting: rawLead.posting || localPostings[rawLead.id] || "",
+          home_town: rawLead.home_town || rawLead.city || "",
+        });
       }
     } catch (err) {
       console.error("Error fetching lead detail:", err);
@@ -160,7 +162,12 @@ export default function LeadDetailPage() {
         if (fallbackRes.data && fallbackRes.data.data) {
           const found = fallbackRes.data.data.find((item) => String(item.id) === String(leadId));
           if (found) {
-            setLead(found);
+            const localPostings = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("csd_lead_postings_cache") || "{}") : {};
+            setLead({
+              ...found,
+              posting: found.posting || localPostings[found.id] || "",
+              home_town: found.home_town || found.city || "",
+            });
             return;
           }
         }
@@ -312,7 +319,7 @@ export default function LeadDetailPage() {
         <div className="container-fluid py-5 text-center">
           <i className="bi bi-exclamation-triangle text-warning display-4"></i>
           <h4 className="mt-3 text-dark">Lead Record Not Found</h4>
-          <p className="text-muted">The requested lead ID #{leadId} does not exist or has been deleted.</p>
+          {/* <p className="text-muted">The requested lead ID #{leadId} does not exist or has been deleted.</p> */}
           <Link href="/admin/leads" className="btn btn-primary mt-2">
             <i className="bi bi-arrow-left me-1"></i> Back to Leads Pipeline
           </Link>
@@ -422,10 +429,19 @@ export default function LeadDetailPage() {
                     </strong>
                   </div>
                   <div className="col-sm-6">
-                    <span className="text-muted small d-block">Location / City</span>
+                    <span className="text-muted small d-block">Home Town</span>
+                    <div className="text-dark fw-medium mt-1">
+                      <i className="bi bi-house-door-fill text-primary me-1"></i>
+                      {lead.city || lead.home_town
+                        ? `${lead.city || lead.home_town}${lead.state ? `, ${lead.state}` : ""}`
+                        : "Not Specified"}
+                    </div>
+                  </div>
+                  <div className="col-sm-6">
+                    <span className="text-muted small d-block">Posting Location</span>
                     <div className="text-dark fw-medium mt-1">
                       <i className="bi bi-geo-alt-fill text-danger me-1"></i>
-                      {lead.city ? `${lead.city}, ${lead.state || ""}` : "Not Specified"}
+                      {lead.posting || "Not Specified"}
                     </div>
                   </div>
                   <div className="col-sm-6">

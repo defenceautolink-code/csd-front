@@ -201,7 +201,7 @@ function SendQuotationPageContent() {
 
       setClientName(lead.customer_name || lead.name || "");
       setClientMobile(lead.phone || "");
-      setCityJurisdiction(lead.city || lead.address || "Ahmedabad");
+      setCityJurisdiction(lead.posting || lead.city || lead.home_town || lead.address || "Ahmedabad");
       setClientEmail(lead.email || "");
 
       // 1. Identify and select Brand
@@ -669,11 +669,41 @@ function SendQuotationPageContent() {
 
   return (
     <AdminLayout>
+      {/* =========================================================================
+          PRINT-ONLY STYLESHEET: Ensures ONLY inner quotation sheet prints cleanly
+          ========================================================================= */}
+      <style jsx global>{`
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          #printableQuoteCard,
+          #printableQuoteCard * {
+            visibility: visible !important;
+          }
+          #printableQuoteCard {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 15px !important;
+            background: #ffffff !important;
+            box-shadow: none !important;
+            border: none !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}</style>
+
       <div className="page-body pb-5">
         {/* ===================================================================
             TOP HEADER & ACTION BUTTONS (Matching Screenshot)
             =================================================================== */}
-        <div className="page-header-wrapper mb-4">
+        <div className="page-header-wrapper mb-4 no-print">
           <div>
             <ul className="breadcrumb-custom">
               <li className="breadcrumb-item">

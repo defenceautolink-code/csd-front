@@ -482,40 +482,12 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
           <div className="d-flex align-items-center gap-2 flex-wrap">
             <button
               type="button"
-              className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1 shadow-sm bg-white"
-              onClick={() => {
-                loadInsurances();
-                showToast("Refreshed insurance records", "info");
-              }}
-              title="Refresh Data"
-            >
-              <i className="bi bi-arrow-clockwise"></i>
-              <span className="d-none d-sm-inline">Refresh</span>
-            </button>
-
-            <button
-              type="button"
               className="btn btn-outline-success btn-sm d-flex align-items-center gap-1 shadow-sm bg-white"
               onClick={handleExportCSV}
               title="Export Current Table as CSV"
             >
               <i className="bi bi-file-earmark-excel"></i>
               <span className="d-none d-sm-inline">Export CSV</span>
-            </button>
-
-            <button
-              type="button"
-              className="btn btn-sm d-flex align-items-center gap-1 shadow-sm"
-              style={{
-                backgroundColor: "#58632A",
-                color: "#ffffff",
-                border: "none",
-                fontWeight: 600,
-              }}
-              onClick={openAddModal}
-            >
-              <i className="bi bi-plus-circle"></i>
-              <span>Add Insurance Record</span>
             </button>
           </div>
         </div>
@@ -720,10 +692,6 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
                 {pagination.total} records
               </span>
             </div>
-            <div className="text-muted small">
-              <i className="bi bi-info-circle me-1 text-primary"></i>
-              Calculated exactly: Expire = Delivery + 365 days | Reminder = Expire - 15 days
-            </div>
           </div>
 
           <div className="table-responsive">
@@ -734,7 +702,6 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
                   <th>Customer Info</th>
                   <th>Vehicle & Color</th>
                   <th>Delivery Date</th>
-                  <th>Premium (₹)</th>
                   <th>Insurance Expire</th>
                   <th>Reminder Date</th>
                   <th>Status</th>
@@ -744,14 +711,14 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan="9" className="text-center py-5 text-muted">
+                    <td colSpan="8" className="text-center py-5 text-muted">
                       <div className="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
                       Loading insurance records...
                     </td>
                   </tr>
                 ) : errorMessage ? (
                   <tr>
-                    <td colSpan="9" className="text-center py-5">
+                    <td colSpan="8" className="text-center py-5">
                       <div className="py-4">
                         <div
                           className="mx-auto rounded-circle bg-danger-subtle d-flex align-items-center justify-content-center mb-3"
@@ -776,7 +743,7 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
                   </tr>
                 ) : insurances.length === 0 ? (
                   <tr>
-                    <td colSpan="9" className="text-center py-5">
+                    <td colSpan="8" className="text-center py-5">
                       <div className="py-4">
                         <div
                           className="mx-auto rounded-circle bg-light d-flex align-items-center justify-content-center mb-3"
@@ -788,24 +755,15 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
                         <p className="text-muted small mb-3">
                           {searchTerm || fromDate || toDate
                             ? "No records matched your search filters. Try clearing the filters."
-                            : "Click 'Add Insurance Record' to create your first vehicle policy."}
+                            : "No insurance records available."}
                         </p>
-                        {searchTerm || fromDate || toDate ? (
+                        {(searchTerm || fromDate || toDate) && (
                           <button
                             type="button"
                             className="btn btn-outline-secondary btn-sm"
                             onClick={handleResetFilters}
                           >
                             Reset Filters
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="btn btn-sm"
-                            style={{ backgroundColor: "#58632A", color: "#fff" }}
-                            onClick={openAddModal}
-                          >
-                            Add Insurance Record
                           </button>
                         )}
                       </div>
@@ -824,11 +782,6 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
                           <div>
                             <div className="fw-bold text-dark d-flex align-items-center gap-1">
                               <span>{item.customer_name || "Unknown Customer"}</span>
-                              {item.deal_id && (
-                                <span className="badge bg-light text-muted border extra-small px-1 py-0">
-                                  Deal #{item.deal_id}
-                                </span>
-                              )}
                             </div>
                             <div className="d-flex align-items-center gap-2 mt-1">
                               <a
@@ -868,14 +821,14 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
                                       item.color?.toLowerCase() === "white"
                                         ? "#dee2e6"
                                         : item.color?.toLowerCase() === "black"
-                                        ? "#212529"
-                                        : item.color?.toLowerCase() === "blue"
-                                        ? "#0d6efd"
-                                        : item.color?.toLowerCase() === "red"
-                                        ? "#dc3545"
-                                        : item.color?.toLowerCase() === "grey" || item.color?.toLowerCase() === "silver"
-                                        ? "#6c757d"
-                                        : "#58632A",
+                                          ? "#212529"
+                                          : item.color?.toLowerCase() === "blue"
+                                            ? "#0d6efd"
+                                            : item.color?.toLowerCase() === "red"
+                                              ? "#dc3545"
+                                              : item.color?.toLowerCase() === "grey" || item.color?.toLowerCase() === "silver"
+                                                ? "#6c757d"
+                                                : "#58632A",
                                     border: "1px solid rgba(0,0,0,0.15)",
                                   }}
                                 ></span>
@@ -891,16 +844,6 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
                             {item.delivery_date || "-"}
                           </div>
                           <span className="text-muted extra-small">Vehicle Delivered</span>
-                        </td>
-
-                        {/* Premium (₹) */}
-                        <td>
-                          <div className="small fw-bold text-dark">
-                            {item.premium_amount || item.insurance_amount
-                              ? `₹${Number(item.premium_amount || item.insurance_amount).toLocaleString("en-IN")}`
-                              : "-"}
-                          </div>
-                          <span className="text-muted extra-small">Annual Policy</span>
                         </td>
 
                         {/* Insurance Expire Date (+365 days) */}
@@ -935,19 +878,6 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
                               <i className="bi bi-arrow-repeat"></i>
                               <span>Renew</span>
                             </button>
-
-                            {/* WhatsApp Direct Reminder */}
-                            {(item.customer_number || item.customer_phone) && (
-                              <a
-                                href={generateWhatsAppLink(item)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="btn btn-sm btn-outline-success px-2 py-1"
-                                title="Send WhatsApp Renewal Alert"
-                              >
-                                <i className="bi bi-whatsapp"></i>
-                              </a>
-                            )}
 
                             {/* View Detail Modal */}
                             <button
@@ -1525,19 +1455,7 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
                 </div>
 
                 <div className="modal-footer bg-light py-2 px-4 border-top d-flex justify-content-between">
-                  <div>
-                    {(selectedInsurance.customer_number || selectedInsurance.customer_phone) && (
-                      <a
-                        href={generateWhatsAppLink(selectedInsurance)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn btn-outline-success btn-sm d-inline-flex align-items-center gap-1"
-                      >
-                        <i className="bi bi-whatsapp"></i>
-                        <span>WhatsApp Reminder</span>
-                      </a>
-                    )}
-                  </div>
+
                   <div className="d-flex gap-2">
                     <button
                       type="button"
@@ -1546,17 +1464,7 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
                     >
                       Close
                     </button>
-                    <button
-                      type="button"
-                      className="btn btn-success btn-sm d-inline-flex align-items-center gap-1"
-                      onClick={() => {
-                        setShowDetailModal(false);
-                        openRenewModal(selectedInsurance);
-                      }}
-                    >
-                      <i className="bi bi-arrow-repeat"></i>
-                      <span>Renew Policy</span>
-                    </button>
+
                   </div>
                 </div>
               </div>

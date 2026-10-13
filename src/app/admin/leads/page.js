@@ -135,6 +135,7 @@ export default function LeadsPage() {
     email: "",
     phone: "",
     city: "",
+    posting: "",
     state: "",
     birth_date: "",
     anniversary_date: "",
@@ -152,6 +153,31 @@ export default function LeadsPage() {
   });
   const [isTriggeringWishes, setIsTriggeringWishes] = useState(false);
 
+  // Helper to persist posting locally if backend migration is not yet deployed on live server
+  const getLocalPostings = () => {
+    if (typeof window === "undefined") return {};
+    try {
+      return JSON.parse(localStorage.getItem("csd_lead_postings_cache") || "{}");
+    } catch {
+      return {};
+    }
+  };
+
+  const saveLocalPosting = (leadId, posting) => {
+    if (typeof window === "undefined" || !leadId) return;
+    try {
+      const cur = getLocalPostings();
+      if (posting) {
+        cur[leadId] = String(posting).trim();
+      } else {
+        delete cur[leadId];
+      }
+      localStorage.setItem("csd_lead_postings_cache", JSON.stringify(cur));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   // 2. Fetch Leads & Master Dropdowns from Laravel backend
   const fetchLeads = async (from = startDate, to = endDate) => {
     setIsLoading(true);
@@ -167,7 +193,16 @@ export default function LeadsPage() {
       }
       const response = await axios.get(`${API_URL}/leads`, { params });
       if (response.data && response.data.status) {
-        setLeads(response.data.data);
+        const localPostings = getLocalPostings();
+        const merged = (response.data.data || []).map((item) => ({
+          ...item,
+          posting:
+            item.posting !== undefined && item.posting !== null && item.posting !== ""
+              ? item.posting
+              : localPostings[item.id] || "",
+          home_town: item.home_town || item.city || "",
+        }));
+        setLeads(merged);
       }
     } catch (error) {
       console.log("Error fetching leads:", error);
@@ -334,6 +369,8 @@ export default function LeadsPage() {
         email: formData.email.trim(),
         phone: cleanPhone,
         city: formData.city.trim(),
+        home_town: formData.city.trim(),
+        posting: formData.posting ? formData.posting.trim() : null,
         state: formData.state.trim(),
         birth_date: formData.birth_date || null,
         anniversary_date: formData.anniversary_date || null,
@@ -353,12 +390,17 @@ export default function LeadsPage() {
       });
 
       if (response.data && response.data.status) {
+        const newLeadId = response.data.data?.id || response.data.id;
+        if (newLeadId && formData.posting) {
+          saveLocalPosting(newLeadId, formData.posting);
+        }
         showToast(`Lead created for "${formData.name}"!`, "success");
         setFormData({
           name: "",
           email: "",
           phone: "",
           city: "",
+          posting: "",
           state: "",
           birth_date: "",
           anniversary_date: "",
@@ -424,6 +466,8 @@ export default function LeadsPage() {
         email: editLead.email ? editLead.email.trim() : "",
         phone: cleanEditPhone,
         city: editLead.city ? editLead.city.trim() : "",
+        home_town: editLead.city ? editLead.city.trim() : "",
+        posting: editLead.posting ? editLead.posting.trim() : "",
         state: editLead.state ? editLead.state.trim() : "",
         birth_date: editLead.birth_date || null,
         anniversary_date: editLead.anniversary_date || null,
@@ -441,6 +485,9 @@ export default function LeadsPage() {
       });
 
       if (response.data && response.data.status) {
+        if (editLead?.id && editLead.posting) {
+          saveLocalPosting(editLead.id, editLead.posting);
+        }
         showToast(`Lead for "${editLead.name}" updated!`, "success");
         setEditLead(null);
         fetchLeads(); // Refresh list
@@ -538,7 +585,9 @@ export default function LeadsPage() {
         item.phone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.model_variant?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.city?.toLowerCase().includes(searchTerm.toLowerCase());
+        item.city?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.home_town?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.posting?.toLowerCase().includes(searchTerm.toLowerCase());
 
       const matchesPriority = !priorityFilter || item.priority === priorityFilter;
       const matchesSegment = !segmentFilter || item.vehicle_segment === segmentFilter;
@@ -1011,7 +1060,8 @@ export default function LeadsPage() {
       "Customer Name",
       "Phone",
       "Email",
-      "City",
+      "Home Town",
+      "Posting",
       "State",
       "Vehicle Segment",
       "Brand",
@@ -1033,7 +1083,8 @@ export default function LeadsPage() {
           `"${(item.name || "").replace(/"/g, '""')}"`,
           `"${(item.phone || "").replace(/"/g, '""')}"`,
           `"${(item.email || "").replace(/"/g, '""')}"`,
-          `"${(item.city || "").replace(/"/g, '""')}"`,
+          `"${(item.city || item.home_town || "").replace(/"/g, '""')}"`,
+          `"${(item.posting || "").replace(/"/g, '""')}"`,
           `"${(item.state || "").replace(/"/g, '""')}"`,
           `"${(item.vehicle_segment || "").replace(/"/g, '""')}"`,
           `"${(item.brand?.name || item.brand_name || "").replace(/"/g, '""')}"`,
@@ -1458,7 +1509,7 @@ export default function LeadsPage() {
                   placeholder="Search name, phone..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  title="Search leads by name, phone, email, model, city"
+                  title="Search leads by name, phone, email, model, home town, posting"
                 />
                 {searchTerm && (
                   <button
@@ -1690,7 +1741,8 @@ export default function LeadsPage() {
                                         name: lead.name,
                                         email: lead.email || "",
                                         phone: lead.phone ? String(lead.phone).replace(/\D/g, "").slice(-10) : "",
-                                        city: lead.city || "",
+                                        city: lead.city || lead.home_town || "",
+                                        posting: lead.posting || "",
                                         state: lead.state || "",
                                         birth_date: lead.birth_date ? lead.birth_date.split("T")[0] : "",
                                         anniversary_date: lead.anniversary_date ? lead.anniversary_date.split("T")[0] : "",
@@ -1765,10 +1817,16 @@ export default function LeadsPage() {
                                 <i className="bi bi-telephone me-1"></i>
                                 {lead.phone}
                               </span>
-                              {lead.city && (
-                                <span className="text-muted small">
-                                  <i className="bi bi-geo-alt me-1"></i>
-                                  {lead.city}
+                              {(lead.city || lead.home_town) && (
+                                <span className="text-muted small" title="Home Town">
+                                  <i className="bi bi-house-door me-1 text-primary"></i>
+                                  {lead.city || lead.home_town}
+                                </span>
+                              )}
+                              {lead.posting && (
+                                <span className="badge bg-light text-dark border px-1.5 py-0.5" style={{ fontSize: "11px" }} title="Posting Location">
+                                  <i className="bi bi-geo-alt-fill text-danger me-1"></i>
+                                  {lead.posting}
                                 </span>
                               )}
                             </div>
@@ -1953,13 +2011,28 @@ export default function LeadsPage() {
                     </div>
 
                     <div className="col-md-4">
-                      <label className="form-label text-dark fw-bold small">City</label>
+                      <label className="form-label text-dark fw-bold small">
+                        <i className="bi bi-house-door me-1 text-primary"></i> Home Town
+                      </label>
                       <input
                         type="text"
                         className="form-control"
                         placeholder="e.g. Pune, Delhi, Jaipur"
                         value={formData.city}
                         onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="col-md-4">
+                      <label className="form-label text-dark fw-bold small">
+                        <i className="bi bi-geo-alt me-1 text-danger"></i> Posting
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. Leh, Srinagar, Pune Cantonment"
+                        value={formData.posting}
+                        onChange={(e) => setFormData({ ...formData, posting: e.target.value })}
                       />
                     </div>
 
@@ -2240,7 +2313,7 @@ export default function LeadsPage() {
 
                     <div className="col-md-6">
                       <label className="form-label text-dark fw-bold small">
-                        Total Deal Price / Budget (₹)
+                        Budget (₹)
                       </label>
                       <div className="input-group">
                         <span className="input-group-text bg-light fw-bold">₹</span>
@@ -2407,12 +2480,28 @@ export default function LeadsPage() {
                     </div>
 
                     <div className="col-md-4">
-                      <label className="form-label text-dark fw-bold small">City</label>
+                      <label className="form-label text-dark fw-bold small">
+                        <i className="bi bi-house-door me-1 text-primary"></i> Home Town
+                      </label>
                       <input
                         type="text"
                         className="form-control"
-                        value={editLead.city}
+                        placeholder="e.g. Pune, Delhi, Jaipur"
+                        value={editLead.city || ""}
                         onChange={(e) => setEditLead({ ...editLead, city: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="col-md-4">
+                      <label className="form-label text-dark fw-bold small">
+                        <i className="bi bi-geo-alt me-1 text-danger"></i> Posting
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. Leh, Srinagar, Pune Cantonment"
+                        value={editLead.posting || ""}
+                        onChange={(e) => setEditLead({ ...editLead, posting: e.target.value })}
                       />
                     </div>
 
@@ -2421,6 +2510,7 @@ export default function LeadsPage() {
                       <input
                         type="text"
                         className="form-control"
+                        placeholder="e.g. Maharashtra, Rajasthan"
                         value={editLead.state || ""}
                         onChange={(e) => setEditLead({ ...editLead, state: e.target.value })}
                       />
@@ -2644,7 +2734,7 @@ export default function LeadsPage() {
 
                     <div className="col-md-6">
                       <label className="form-label text-dark fw-bold small">
-                        Total Deal Price / Budget (₹)
+                        Budget (₹)
                       </label>
                       <div className="input-group">
                         <span className="input-group-text bg-light fw-bold">₹</span>
@@ -2757,7 +2847,18 @@ export default function LeadsPage() {
                 <div className="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom border-secondary">
                   <div>
                     <h5 className="text-dark fw-bold mb-0">{viewLead.name}</h5>
-                    <span className="text-muted small">{viewLead.city ? `${viewLead.city}, ${viewLead.state || ""}` : "Location not specified"}</span>
+                    <div className="d-flex align-items-center gap-2 mt-1">
+                      <span className="text-muted small">
+                        <i className="bi bi-house-door me-1 text-primary"></i>
+                        {viewLead.city || viewLead.home_town ? `${viewLead.city || viewLead.home_town}${viewLead.state ? `, ${viewLead.state}` : ""}` : "Home Town not specified"}
+                      </span>
+                      {viewLead.posting && (
+                        <span className="badge bg-light text-dark border extra-small">
+                          <i className="bi bi-geo-alt-fill text-danger me-1"></i>
+                          Posting: {viewLead.posting}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <span
                     className={`badge ${viewLead.priority === "Hot"
@@ -2779,6 +2880,14 @@ export default function LeadsPage() {
                   <div className="col-6">
                     <span className="text-muted small d-block">Email Address</span>
                     <strong className="text-dark">{viewLead.email || "N/A"}</strong>
+                  </div>
+                  <div className="col-6 mt-2">
+                    <span className="text-muted small d-block">Home Town</span>
+                    <strong className="text-dark">{viewLead.city || viewLead.home_town || "N/A"}</strong>
+                  </div>
+                  <div className="col-6 mt-2">
+                    <span className="text-muted small d-block">Posting Location</span>
+                    <strong className="text-dark">{viewLead.posting || "N/A"}</strong>
                   </div>
                   <div className="col-6 mt-2">
                     <span className="text-muted small d-block">Vehicle Inquired</span>

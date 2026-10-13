@@ -251,7 +251,7 @@ export default function FollowUpPage() {
           setLeadsList(res.data.data);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   // Real CSV Export Handler (Exports all records respecting filters directly from backend)
@@ -358,7 +358,7 @@ export default function FollowUpPage() {
               </li>
               <li className="breadcrumb-item active">Follow-Ups</li>
             </ul>
-            <h1 className="page-title mt-1">Follow-Ups & Call Notes Hub123</h1>
+            <h1 className="page-title mt-1">Follow-Ups & Call Notes Hub</h1>
           </div>
 
           <div className="page-header-actions d-flex align-items-center gap-2">
@@ -482,8 +482,8 @@ export default function FollowUpPage() {
                       <span>{tab.label}</span>
                       <span
                         className={`badge px-2 py-0.5 rounded-pill ${isActive
-                            ? "bg-white text-dark fw-bold"
-                            : "bg-light text-secondary border"
+                          ? "bg-white text-dark fw-bold"
+                          : "bg-light text-secondary border"
                           }`}
                         style={{ fontSize: "0.72rem" }}
                       >

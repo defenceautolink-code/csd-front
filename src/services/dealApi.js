@@ -115,8 +115,14 @@ export function normalizeDeal(d) {
     has_insurance:
       d.has_insurance === true ||
       d.has_insurance === 1 ||
+      d.has_insurance === "Yes" ||
       d.insurance === "Yes" ||
-      (typeof d.notes === "string" && d.notes.toLowerCase().includes("insurance: yes"))
+      d.insurance === true ||
+      (typeof d.notes === "string" &&
+        (d.notes.toLowerCase().includes("insurance included: yes") ||
+         d.notes.toLowerCase().includes("insurance: yes") ||
+         d.notes.toLowerCase().includes("insurance:yes") ||
+         /insurance.*yes/i.test(d.notes)))
         ? "Yes"
         : "No",
     insurance_amount: Number(d.insurance_amount || 0),

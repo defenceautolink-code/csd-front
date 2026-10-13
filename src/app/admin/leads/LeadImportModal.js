@@ -72,10 +72,13 @@ const FIELD_GROUPS = [
       },
       {
         key: "city",
-        label: "City",
+        label: "Home Town",
         required: false,
         placeholder: "e.g. Pune, Delhi, Jaipur",
         aliases: [
+          "home town",
+          "hometown",
+          "home city",
           "city",
           "ads",
           "address",
@@ -85,6 +88,21 @@ const FIELD_GROUPS = [
           "district",
           "area",
           "place",
+        ],
+      },
+      {
+        key: "posting",
+        label: "Posting",
+        required: false,
+        placeholder: "e.g. Leh, Srinagar, Pune Cantonment",
+        aliases: [
+          "posting",
+          "posting location",
+          "posting place",
+          "posting station",
+          "current posting",
+          "station",
+          "unit",
         ],
       },
       {
@@ -174,7 +192,7 @@ const FIELD_GROUPS = [
       },
       {
         key: "budget",
-        label: "Total Deal Price / Budget (₹)",
+        label: "Budget (₹)",
         required: false,
         placeholder: "e.g. 1450000",
         aliases: [
@@ -582,6 +600,7 @@ export default function LeadImportModal({
       const rawPhone = getVal("phone");
       const rawEmail = getVal("email");
       const city = getVal("city") ? String(getVal("city")).trim() : "";
+      const posting = getVal("posting") ? String(getVal("posting")).trim() : "";
       const state = getVal("state") ? String(getVal("state")).trim() : "";
       const rawBirthDate = getVal("birth_date");
       const rawAnniversaryDate = getVal("anniversary_date");
@@ -636,6 +655,8 @@ export default function LeadImportModal({
         raw_email: rawEmail,
         email: email || null,
         city: city,
+        home_town: city,
+        posting: posting,
         state: state,
         birth_date: birthDate || null,
         anniversary_date: anniversaryDate || null,
@@ -667,7 +688,8 @@ export default function LeadImportModal({
       "Customer Full Name",
       "Phone Number",
       "Email Address",
-      "City",
+      "Home Town",
+      "Posting",
       "State",
       "Birth Date",
       "Anniversary Date",
@@ -685,6 +707,7 @@ export default function LeadImportModal({
         "+91 98765 43210",
         "vikram.rathore@defmail.com",
         "Pune",
+        "Pune Cantonment",
         "Maharashtra",
         "1990-05-15",
         "2018-12-10",
@@ -701,6 +724,7 @@ export default function LeadImportModal({
         "+91 98123 45678",
         "anita.roy@example.com",
         "Delhi",
+        "Base Hospital Cantt",
         "Delhi",
         "1995-08-20",
         "",
@@ -1251,7 +1275,8 @@ export default function LeadImportModal({
                       <th>Customer Name</th>
                       <th>Phone</th>
                       <th>Email</th>
-                      <th>City</th>
+                      <th>Home Town</th>
+                      <th>Posting</th>
                       <th>Segment</th>
                       <th>Model / Variant</th>
                       <th>Priority</th>
@@ -1276,7 +1301,8 @@ export default function LeadImportModal({
                             "-"
                           )}
                         </td>
-                        <td>{lead.city || "-"}</td>
+                        <td>{lead.city || lead.home_town || "-"}</td>
+                        <td>{lead.posting || "-"}</td>
                         <td>
                           <span className="badge bg-light text-dark border">
                             {lead.vehicle_segment}

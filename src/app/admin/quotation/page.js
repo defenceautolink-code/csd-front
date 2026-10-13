@@ -10,6 +10,7 @@ import api from "@/lib/axios";
 import { useToast } from "@/app/components/Toast";
 import { hasPermission } from "@/utils/auth";
 import Pagination from "@/components/common/Pagination";
+import * as XLSX from "xlsx";
 
 export default function QuotationMainPage() {
   const router = useRouter();
@@ -217,7 +218,7 @@ export default function QuotationMainPage() {
 
       setClientName(lead.customer_name || lead.name || "");
       setClientMobile(lead.phone || "");
-      setCityJurisdiction(lead.city || lead.address || "Ahmedabad");
+      setCityJurisdiction(lead.posting || lead.city || lead.home_town || lead.address || "Ahmedabad");
       setClientEmail(lead.email || "");
 
       // 1. Identify and select Brand
@@ -462,6 +463,72 @@ export default function QuotationMainPage() {
   const handlePrintPdf = () => {
     if (typeof window !== "undefined") {
       window.print();
+    }
+  };
+
+  // Export Saved Quotations Archive to Excel
+  const handleExportExcel = async () => {
+    try {
+      let dataToExport = quotations;
+      if (pagination.total > quotations.length) {
+        showToast("Fetching all quotations for Excel export...", "info");
+        try {
+          const allRes = await quotationApi.getQuotations({
+            per_page: 500,
+            search: searchTerm || undefined,
+            status: statusFilter && statusFilter !== "all" ? statusFilter : undefined,
+            from_date: startDate || undefined,
+            to_date: endDate || undefined,
+          });
+          if (allRes && allRes.status && Array.isArray(allRes.data)) {
+            dataToExport = allRes.data;
+          }
+        } catch (fetchErr) {
+          console.warn("Could not fetch all records, exporting current list:", fetchErr);
+        }
+      }
+
+      if (!dataToExport || dataToExport.length === 0) {
+        showToast("No quotation records found to export.", "warning");
+        return;
+      }
+
+      const rows = dataToExport.map((q, idx) => ({
+        "Sr No": idx + 1,
+        "Quotation Number": q.quotation_number || `QT-${q.id}`,
+        "Customer Name": q.customer_name || q.client_name || "-",
+        "Mobile Number": q.customer_phone || q.client_phone || "-",
+        "Email": q.customer_email || q.client_email || "-",
+        "City / Address": q.customer_address || "-",
+        "Subject / Vehicle": q.subject || q.car_name || "-",
+        "Date": q.quotation_date || "-",
+        "Grand Total (₹)": Number(q.grand_total || q.total_amount || q.total || 0),
+        "Status": (q.status || "draft").toUpperCase(),
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Saved Quotations");
+
+      worksheet["!cols"] = [
+        { wch: 8 },
+        { wch: 18 },
+        { wch: 22 },
+        { wch: 15 },
+        { wch: 25 },
+        { wch: 20 },
+        { wch: 35 },
+        { wch: 14 },
+        { wch: 16 },
+        { wch: 14 },
+      ];
+
+      const today = new Date().toISOString().split("T")[0];
+      XLSX.writeFile(workbook, `Saved_Quotations_Archive_${today}.xlsx`);
+      showToast("Quotation records exported to Excel successfully!", "success");
+    } catch (err) {
+      console.error("Excel export error:", err);
+      showToast("Failed to export Excel file.", "error");
     }
   };
 
@@ -742,11 +809,41 @@ export default function QuotationMainPage() {
 
   return (
     <AdminLayout>
+      {/* =========================================================================
+          PRINT-ONLY STYLESHEET: Ensures ONLY inner quotation sheet prints cleanly
+          ========================================================================= */}
+      <style jsx global>{`
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          #printableQuoteCard,
+          #printableQuoteCard * {
+            visibility: visible !important;
+          }
+          #printableQuoteCard {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 15px !important;
+            background: #ffffff !important;
+            box-shadow: none !important;
+            border: none !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}</style>
+
       <div className="page-body pb-5">
         {/* ===================================================================
             TOP HEADER & ACTION BUTTONS (Matching Screenshot)
             =================================================================== */}
-        <div className="page-header-wrapper mb-3">
+        <div className="page-header-wrapper mb-3 no-print">
           <div>
             <ul className="breadcrumb-custom">
               <li className="breadcrumb-item">
@@ -759,43 +856,63 @@ export default function QuotationMainPage() {
           </div>
 
           <div className="page-header-actions d-flex align-items-center gap-2 flex-wrap">
-            {can("quotation.reset") && <button
-              type="button"
-              className="btn btn-outline-custom d-flex align-items-center gap-1"
-              onClick={handleResetSheet}
-            >
-              <i className="bi bi-arrow-clockwise"></i>
-              <span>Reset Sheet</span>
-            </button>}
+            {can("quotation.reset") && activeTab === "maker" && (
+              <button
+                type="button"
+                className="btn btn-outline-custom d-flex align-items-center gap-1"
+                onClick={handleResetSheet}
+              >
+                <i className="bi bi-arrow-clockwise"></i>
+                <span>Reset Sheet</span>
+              </button>
+            )}
 
-            {can("quotation.print_pdf") && <button
-              type="button"
-              className="btn btn-outline-custom d-flex align-items-center gap-1"
-              onClick={handlePrintPdf}
-            >
-              <i className="bi bi-printer-fill"></i>
-              <span>Print / PDF</span>
-            </button>}
+            {activeTab === "maker" ? (
+              can("quotation.print_pdf") && (
+                <button
+                  type="button"
+                  className="btn btn-outline-custom d-flex align-items-center gap-1"
+                  onClick={handlePrintPdf}
+                >
+                  <i className="bi bi-printer-fill"></i>
+                  <span>Print / PDF</span>
+                </button>
+              )
+            ) : (
+              <button
+                type="button"
+                className="btn btn-outline-success d-flex align-items-center gap-1 shadow-sm bg-white"
+                onClick={handleExportExcel}
+                title="Export Saved Quotations Archive to Excel"
+              >
+                <i className="bi bi-file-earmark-excel-fill text-success"></i>
+                <span className="text-dark fw-medium">Export to Excel</span>
+              </button>
+            )}
 
-            {can("quotation.email") && <button
-              type="button"
-              className="btn btn-outline-custom d-flex align-items-center gap-1"
-              style={{ color: "#facc15", borderColor: "rgba(234, 179, 8, 0.4)" }}
-              onClick={handleOpenEmailModal}
-            >
-              <i className="bi bi-envelope-fill"></i>
-              <span>Email Client</span>
-            </button>}
+            {can("quotation.email") && activeTab === "maker" && (
+              <button
+                type="button"
+                className="btn btn-outline-custom d-flex align-items-center gap-1"
+                style={{ color: "#facc15", borderColor: "rgba(234, 179, 8, 0.4)" }}
+                onClick={handleOpenEmailModal}
+              >
+                <i className="bi bi-envelope-fill"></i>
+                <span>Email Client</span>
+              </button>
+            )}
 
             {/* Tab switch between Live Generator and All Saved Quotes */}
-            {can("quotation.saved_view") && <button
-              type="button"
-              className={`btn btn-sm ${activeTab === "maker" ? "btn-outline-primary" : "btn-primary"} d-flex align-items-center gap-1`}
-              onClick={() => setActiveTab(activeTab === "maker" ? "records" : "maker")}
-            >
-              <i className={activeTab === "maker" ? "bi bi-folder2-open" : "bi bi-file-earmark-spreadsheet-fill"}></i>
-              <span>{activeTab === "maker" ? "Saved Quotes Pipeline" : "Back to Quotation Maker"}</span>
-            </button>}
+            {can("quotation.saved_view") && (
+              <button
+                type="button"
+                className={`btn btn-sm ${activeTab === "maker" ? "btn-outline-primary" : "btn-primary"} d-flex align-items-center gap-1`}
+                onClick={() => setActiveTab(activeTab === "maker" ? "records" : "maker")}
+              >
+                <i className={activeTab === "maker" ? "bi bi-folder2-open" : "bi bi-file-earmark-spreadsheet-fill"}></i>
+                <span>{activeTab === "maker" ? "Saved Quotes Pipeline" : "Back to Quotation Maker"}</span>
+              </button>
+            )}
           </div>
         </div>
 

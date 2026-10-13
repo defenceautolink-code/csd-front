@@ -240,7 +240,7 @@ export default function SalesExecutiveLeadsPage() {
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="Search by lead name, phone, email, model, city..."
+                  placeholder="Search by lead name, phone, email, model, home town, posting..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -387,11 +387,17 @@ export default function SalesExecutiveLeadsPage() {
                             </a>
                             {lead.email && <span className="ms-2">• {lead.email}</span>}
                           </div>
-                          {lead.city && (
+                          {(lead.city || lead.home_town) && (
                             <div className="text-muted small" style={{ fontSize: "0.75rem" }}>
-                              <i className="bi bi-geo-alt-fill me-1"></i>
-                              {lead.city}
+                              <i className="bi bi-house-door-fill me-1 text-primary"></i>
+                              {lead.city || lead.home_town}
                               {lead.state ? `, ${lead.state}` : ""}
+                            </div>
+                          )}
+                          {lead.posting && (
+                            <div className="text-muted small mt-0.5" style={{ fontSize: "0.75rem" }}>
+                              <i className="bi bi-geo-alt-fill me-1 text-danger"></i>
+                              Posting: {lead.posting}
                             </div>
                           )}
                         </td>
@@ -490,11 +496,17 @@ export default function SalesExecutiveLeadsPage() {
                     <div className="d-flex align-items-start justify-content-between gap-2 mb-2">
                       <div>
                         <h5 className="fw-bold mb-0" style={{ color: "var(--text-primary)" }}>{lead.name}</h5>
-                        {lead.city && (
-                          <span className="text-secondary small">
-                            <i className="bi bi-geo-alt-fill me-1"></i>
-                            {lead.city}
+                        {(lead.city || lead.home_town) && (
+                          <span className="text-secondary small d-block">
+                            <i className="bi bi-house-door-fill me-1 text-primary"></i>
+                            {lead.city || lead.home_town}
                             {lead.state ? `, ${lead.state}` : ""}
+                          </span>
+                        )}
+                        {lead.posting && (
+                          <span className="badge bg-light text-dark border extra-small mt-1">
+                            <i className="bi bi-geo-alt-fill me-1 text-danger"></i>
+                            Posting: {lead.posting}
                           </span>
                         )}
                       </div>

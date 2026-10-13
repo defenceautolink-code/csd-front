@@ -266,9 +266,23 @@ export default function ConvertDealModal({
               <div>
                 <span className="text-muted small fw-semibold text-uppercase">Customer Prospect</span>
                 <h6 className="mb-0 text-dark fw-bold">{lead.name}</h6>
-                <div className="small text-muted">
-                  <i className="bi bi-telephone me-1"></i>
-                  {lead.phone} {lead.city ? `• ${lead.city}` : ""}
+                <div className="small text-muted d-flex flex-wrap align-items-center gap-2 mt-0.5">
+                  <span>
+                    <i className="bi bi-telephone me-1"></i>
+                    {lead.phone}
+                  </span>
+                  {(lead.city || lead.home_town) && (
+                    <span>
+                      <i className="bi bi-house-door me-1 text-primary"></i>
+                      {lead.city || lead.home_town}
+                    </span>
+                  )}
+                  {lead.posting && (
+                    <span className="badge bg-light text-dark border extra-small">
+                      <i className="bi bi-geo-alt-fill text-danger me-1"></i>
+                      {lead.posting}
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="text-end">
