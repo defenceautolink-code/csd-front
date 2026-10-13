@@ -1,16 +1,14 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo, useRef, useSyncExternalStore } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
 import Pagination from "@/components/common/Pagination";
-import api from "@/lib/axios";
-import tokenBillingApi from "@/services/tokenBillingApi";
 import dealApi from "@/services/dealApi";
+import { formatIndianCurrency, numberToWords } from "@/utils/numberToWords";
 
-// Helper to generate Invoice Number in exact required format:
-
+// Helper to generate Invoice Number in exact required format: DAL-/YYYY/MM/XXXX
 export const generateInvoiceNumber = () => {
   const now = new Date();
   const year = now.getFullYear();
@@ -19,463 +17,63 @@ export const generateInvoiceNumber = () => {
   return `DAL-/${year}/${month}/${random4}`;
 };
 
-// Helper to format currency in Indian format: ₹1,50,000
-export const formatCurrency = (amount) => {
-  const num = Number(amount) || 0;
-  return "₹" + num.toLocaleString("en-IN");
+// Stage badge styling matching Vehicle Deals & Bookings
+export const getStageBadgeClass = (stage) => {
+  const s = String(stage || "").toLowerCase();
+  if (s.includes("delivered")) return "bg-success text-white";
+  if (s.includes("ready")) return "bg-primary text-white";
+  if (s.includes("transit")) return "bg-info text-dark";
+  if (s.includes("cancel")) return "bg-danger text-white";
+  return "bg-secondary text-white";
 };
-
-// Default Fallback Deals from CRM Deals & Bookings
-const DEFAULT_FALLBACK_DEALS = [
-  {
-    id: 102,
-    deal_number: "DEAL-2026-0001",
-    customer_name: "Major Vikramaditya Singh",
-    customer_phone: "9825123456",
-    customer_email: "vikram.singh@army.nic.in",
-    customer_city: "Gandhinagar, Gujarat",
-    brand_name: "Hyundai",
-    model_variant: "New Venue 1.0 Turbo DCT HX5",
-    color: "Titan Grey",
-    total_amount: 1095000,
-    net_amount: 1095000,
-    total_paid: 50000,
-    balance_due: 1045000,
-    deal_status: "booking_confirmed",
-  },
-  {
-    id: 103,
-    deal_number: "DEAL-2026-0002",
-    customer_name: "Havildar Amit Deshmukh",
-    customer_phone: "9421098765",
-    customer_email: "amit.deshmukh@gmail.com",
-    customer_city: "Vadodara, Gujarat",
-    brand_name: "Tata",
-    model_variant: "Nexon Fearless Plus S 1.2 Turbo",
-    color: "Daytona Grey",
-    total_amount: 1320000,
-    net_amount: 1320000,
-    total_paid: 50000,
-    balance_due: 1270000,
-    deal_status: "booking_confirmed",
-  },
-  {
-    id: 104,
-    deal_number: "DEAL-2026-0003",
-    customer_name: "Captain Sunita Rawat",
-    customer_phone: "9898011223",
-    customer_email: "sunita.rawat@nic.in",
-    customer_city: "Ahmedabad, Gujarat",
-    brand_name: "Mahindra",
-    model_variant: "XUV700 AX7 Diesel AT Luxury Pack",
-    color: "Midnight Black",
-    total_amount: 2180000,
-    net_amount: 2180000,
-    total_paid: 100000,
-    balance_due: 2080000,
-    deal_status: "booking_confirmed",
-  },
-];
-
-// Initial Realistic CSD Demo Data (Token-based multi-invoice flow)
-const INITIAL_DEMO_TOKENS = [
-  {
-    tokenNo: "TKN-2026-1042",
-    customerName: "Subedar Rajesh Sharma",
-    serviceNo: "JC-458921X",
-    unit: "14 Rajputana Rifles, Ahmedabad Cantt",
-    mobile: "98765 43210",
-    email: "rajesh.sharma@gov.in",
-    city: "Ahmedabad, Gujarat",
-    brand: "Maruti Suzuki",
-    model: "Grand Vitara",
-    variant: "Zeta 1.5L Smart Hybrid Petrol",
-    color: "Nexa Blue",
-    totalDealAmount: 1450000,
-    bookingDate: "2026-09-10",
-    status: "Partial",
-    invoices: [
-      {
-        id: "INV-1042-1",
-        invoiceNo: "DAL-/2026/09/1042",
-        date: "2026-09-10",
-        time: "11:30 AM",
-        installmentTitle: "1st Installment - Booking Token Advance",
-        paymentMode: "UPI / GPay",
-        transactionRef: "UPI/625371928341",
-        amountPaid: 50000,
-        items: [
-          {
-            desc: "CSD AFD Portal Registration & Token Booking Advance",
-            hsn: "998313",
-            qty: 1,
-            rate: 50000,
-            amount: 50000,
-          },
-        ],
-        remarks: "Initial token advance received for vehicle allocation & CSD file opening.",
-        status: "Paid",
-        generatedBy: "Super Admin",
-      },
-      {
-        id: "INV-1042-2",
-        invoiceNo: "DAL-/2026/09/3914",
-        date: "2026-09-18",
-        time: "03:45 PM",
-        installmentTitle: "2nd Installment - Margin Money Deposit",
-        paymentMode: "NEFT / NetBanking",
-        transactionRef: "NEFT/SBIN20260918002",
-        amountPaid: 350000,
-        items: [
-          {
-            desc: "Customer Margin Money / Part Payment for Dealer Billing",
-            hsn: "998313",
-            qty: 1,
-            rate: 350000,
-            amount: 350000,
-          },
-        ],
-        remarks: "Part payment received towards showroom ex-dealership billing.",
-        status: "Paid",
-        generatedBy: "Super Admin",
-      },
-      {
-        id: "INV-1042-3",
-        invoiceNo: "DAL-/2026/09/7821",
-        date: "2026-09-24",
-        time: "02:15 PM",
-        installmentTitle: "3rd Installment - RTO, Insurance & Accessories",
-        paymentMode: "Cheque",
-        transactionRef: "CHQ-882910 (SBI)",
-        amountPaid: 150000,
-        items: [
-          {
-            desc: "Gujarat RTO Registration & HSRP Number Plate",
-            hsn: "998314",
-            qty: 1,
-            rate: 85000,
-            amount: 85000,
-          },
-          {
-            desc: "Comprehensive Zero-Dep Insurance (1+3 Years)",
-            hsn: "997133",
-            qty: 1,
-            rate: 45000,
-            amount: 45000,
-          },
-          {
-            desc: "CSD Premium Essential Accessories Kit",
-            hsn: "8708",
-            qty: 1,
-            rate: 20000,
-            amount: 20000,
-          },
-        ],
-        remarks: "RTO documentation & Insurance premium settled via cheque.",
-        status: "Paid",
-        generatedBy: "Super Admin",
-      },
-    ],
-  },
-  {
-    tokenNo: "TKN-2026-1088",
-    customerName: "Major Vikramaditya Singh",
-    serviceNo: "IC-672109M",
-    unit: "HQ Golden Katar Division, Gandhinagar",
-    mobile: "98251 23456",
-    email: "vikram.singh@army.nic.in",
-    city: "Gandhinagar, Gujarat",
-    brand: "Hyundai",
-    model: "New Venue",
-    variant: "1.0 Turbo DCT HX5 Petrol",
-    color: "Titan Grey",
-    totalDealAmount: 1095000,
-    bookingDate: "2026-09-12",
-    status: "Partial",
-    invoices: [
-      {
-        id: "INV-1088-1",
-        invoiceNo: "DAL-/2026/09/2180",
-        date: "2026-09-12",
-        time: "10:15 AM",
-        installmentTitle: "1st Installment - Token Advance",
-        paymentMode: "UPI / PhonePe",
-        transactionRef: "UPI/992144872110",
-        amountPaid: 25000,
-        items: [
-          {
-            desc: "Token Booking Deposit for Hyundai New Venue CSD Allocation",
-            hsn: "998313",
-            qty: 1,
-            rate: 25000,
-            amount: 25000,
-          },
-        ],
-        remarks: "Booking token received. CSD Indent initiated.",
-        status: "Paid",
-        generatedBy: "Super Admin",
-      },
-      {
-        id: "INV-1088-2",
-        invoiceNo: "DAL-/2026/09/5432",
-        date: "2026-09-21",
-        time: "04:30 PM",
-        installmentTitle: "2nd Installment - Defence Car Loan Disbursement",
-        paymentMode: "Bank DD / Cheque",
-        transactionRef: "DD-901842 (PNB Defence)",
-        amountPaid: 800000,
-        items: [
-          {
-            desc: "CSD Vehicle Loan Disbursement from PNB Defence Branch",
-            hsn: "998313",
-            qty: 1,
-            rate: 800000,
-            amount: 800000,
-          },
-        ],
-        remarks: "Direct bank loan demand draft cleared.",
-        status: "Paid",
-        generatedBy: "Super Admin",
-      },
-    ],
-  },
-  {
-    tokenNo: "TKN-2026-1120",
-    customerName: "Havildar Amit Deshmukh",
-    serviceNo: "15482910K",
-    unit: "Bombay Sappers (Engineers)",
-    mobile: "94210 98765",
-    email: "amit.deshmukh@gmail.com",
-    city: "Vadodara, Gujarat",
-    brand: "Tata",
-    model: "Nexon",
-    variant: "Fearless Plus S 1.2 Turbo Petrol",
-    color: "Daytona Grey",
-    totalDealAmount: 1320000,
-    bookingDate: "2026-09-22",
-    status: "Partial",
-    invoices: [
-      {
-        id: "INV-1120-1",
-        invoiceNo: "DAL-/2026/09/8109",
-        date: "2026-09-22",
-        time: "01:20 PM",
-        installmentTitle: "1st Installment - Token Advance & File Charges",
-        paymentMode: "Cash",
-        transactionRef: "CASH-REC-0091",
-        amountPaid: 50000,
-        items: [
-          {
-            desc: "Initial Token Deposit & CSD Document Scrutiny Fee",
-            hsn: "998313",
-            qty: 1,
-            rate: 50000,
-            amount: 50000,
-          },
-        ],
-        remarks: "Cash payment received at front desk against receipt.",
-        status: "Paid",
-        generatedBy: "Super Admin",
-      },
-    ],
-  },
-  {
-    tokenNo: "TKN-2026-0955",
-    customerName: "Captain Sunita Rawat",
-    serviceNo: "MS-18492P",
-    unit: "Military Hospital, Ahmedabad",
-    mobile: "98980 11223",
-    email: "sunita.rawat@nic.in",
-    city: "Ahmedabad, Gujarat",
-    brand: "Mahindra",
-    model: "XUV700",
-    variant: "AX7 Diesel AT Luxury Pack",
-    color: "Midnight Black",
-    totalDealAmount: 2180000,
-    bookingDate: "2026-08-28",
-    status: "Fully Paid",
-    invoices: [
-      {
-        id: "INV-0955-1",
-        invoiceNo: "DAL-/2026/08/4120",
-        date: "2026-08-28",
-        time: "12:00 PM",
-        installmentTitle: "1st Installment - Token Booking Deposit",
-        paymentMode: "UPI / GPay",
-        transactionRef: "UPI/551928374619",
-        amountPaid: 100000,
-        items: [
-          {
-            desc: "Booking token amount for Mahindra XUV700 priority allocation",
-            hsn: "998313",
-            qty: 1,
-            rate: 100000,
-            amount: 100000,
-          },
-        ],
-        remarks: "Token confirmed. Vehicle queued for CSD dispatch.",
-        status: "Paid",
-        generatedBy: "Super Admin",
-      },
-      {
-        id: "INV-0955-2",
-        invoiceNo: "DAL-/2026/09/0411",
-        date: "2026-09-08",
-        time: "02:40 PM",
-        installmentTitle: "2nd Installment - CSD Demand Draft Transfer",
-        paymentMode: "NEFT / RTGS",
-        transactionRef: "RTGS/HDFC20260908129",
-        amountPaid: 1000000,
-        items: [
-          {
-            desc: "CSD Purchase Order Base Payment",
-            hsn: "998313",
-            qty: 1,
-            rate: 1000000,
-            amount: 1000000,
-          },
-        ],
-        remarks: "RTGS cleared into Defence Autolink CSD Escrow account.",
-        status: "Paid",
-        generatedBy: "Super Admin",
-      },
-      {
-        id: "INV-0955-3",
-        invoiceNo: "DAL-/2026/09/6329",
-        date: "2026-09-19",
-        time: "05:10 PM",
-        installmentTitle: "3rd & Final Installment - Complete Balance Settlement",
-        paymentMode: "NEFT / RTGS",
-        transactionRef: "RTGS/HDFC20260919984",
-        amountPaid: 1080000,
-        items: [
-          {
-            desc: "Remaining Vehicle Ex-Showroom Balance Settlement",
-            hsn: "998313",
-            qty: 1,
-            rate: 920000,
-            amount: 920000,
-          },
-          {
-            desc: "BH-Series RTO Registration & Road Tax",
-            hsn: "998314",
-            qty: 1,
-            rate: 98000,
-            amount: 98000,
-          },
-          {
-            desc: "Ceramic Coating & Luxury Teflon Shield",
-            hsn: "8708",
-            qty: 1,
-            rate: 62000,
-            amount: 62000,
-          },
-        ],
-        remarks: "Full and final settlement received. Gate pass & delivery cleared.",
-        status: "Paid",
-        generatedBy: "Super Admin",
-      },
-    ],
-  },
-];
 
 export default function GenerateInvoicePage() {
   const { showToast } = useToast();
-  const mounted = useSyncExternalStore(
-    () => () => { },
-    () => true,
-    () => false
-  );
-  const [tokensData, setTokensData] = useState(() => {
-    if (typeof window === "undefined") return [];
 
-    try {
-      const stored = localStorage.getItem("csd_tokens_invoices_v1");
-      return stored ? JSON.parse(stored) : INITIAL_DEMO_TOKENS;
-    } catch (err) {
-      console.error(err);
-      return INITIAL_DEMO_TOKENS;
-    }
-  });
-  const [deals, setDeals] = useState(DEFAULT_FALLBACK_DEALS);
-  const [isLoadingDeals, setIsLoadingDeals] = useState(false);
-  const [dealSearchQuery, setDealSearchQuery] = useState("");
-  const [isDealDropdownOpen, setIsDealDropdownOpen] = useState(false);
-  const dealDropdownRef = useRef(null);
-  const [selectedDealId, setSelectedDealId] = useState("");
-  const [activeTab, setActiveTab] = useState("tokens"); // 'tokens' or 'all-invoices'
+  // Active Deals from CRM Vehicle Deals & Bookings API
+  const [deals, setDeals] = useState([]);
+  const [isLoadingDeals, setIsLoadingDeals] = useState(true);
 
-  // Search & Filter state
+  // Tab State: 'deals' (Customer / Deal Wise) or 'all-invoices' (Date-wise Flat Register)
+  const [activeTab, setActiveTab] = useState("deals");
+
+  // Filters & Search (Exact same filters as Deals page)
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [stageFilter, setStageFilter] = useState("All");
+  const [paymentFilter, setPaymentFilter] = useState("All");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
   // Pagination states
-  const [tokensPage, setTokensPage] = useState(1);
-  const [tokensPerPage, setTokensPerPage] = useState(10);
+  const [dealsPage, setDealsPage] = useState(1);
+  const [dealsPerPage, setDealsPerPage] = useState(10);
   const [invoicesPage, setInvoicesPage] = useState(1);
   const [invoicesPerPage, setInvoicesPerPage] = useState(10);
 
-  // 3-Dots Action Dropdown Menu state
-  const [activeActionMenuId, setActiveActionMenuId] = useState(null);
-
-  // Close dropdown on click outside
-  useEffect(() => {
-    const handleDocClick = (e) => {
-      if (e.target && e.target.closest && e.target.closest(".action-menu-container")) {
-        return;
-      }
-      setActiveActionMenuId(null);
-
-      // Close Deal Search Dropdown when clicking outside
-      if (dealDropdownRef.current && !dealDropdownRef.current.contains(e.target)) {
-        setIsDealDropdownOpen(false);
-      }
-    };
-    document.addEventListener("click", handleDocClick);
-    return () => document.removeEventListener("click", handleDocClick);
-  }, []);
-
-  // Reset pagination to page 1 when any filter or tab changes
-  useEffect(() => {
-    setTokensPage(1);
-    setInvoicesPage(1);
-  }, [searchQuery, statusFilter, startDate, endDate, activeTab]);
-
   // Modals state
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
-  const [selectedTokenForMultiView, setSelectedTokenForMultiView] = useState(null);
+  const [selectedDealForMultiView, setSelectedDealForMultiView] = useState(null);
   const [selectedInvoiceForSingleView, setSelectedInvoiceForSingleView] = useState(null);
 
-  // ----------------------------------------------------
-  // Form State for "Generate Invoice" Modal
-  // ----------------------------------------------------
-  const [linkedExistingToken, setLinkedExistingToken] = useState(null);
-  const [formTokenNo, setFormTokenNo] = useState("");
+  // Deal Selector Dropdown inside "Generate Invoice" Modal
+  const [selectedDealId, setSelectedDealId] = useState("");
+  const [dealSearchQuery, setDealSearchQuery] = useState("");
+  const [isDealDropdownOpen, setIsDealDropdownOpen] = useState(false);
+  const dealDropdownRef = useRef(null);
+  const [selectedDealObject, setSelectedDealObject] = useState(null);
+
+  // Form State for "Generate / Add Invoice" Modal
   const [formInvoiceNo, setFormInvoiceNo] = useState(generateInvoiceNumber());
   const [formInvoiceDate, setFormInvoiceDate] = useState(() => {
-    const today = new Date();
-    return today.toISOString().split("T")[0];
+    return new Date().toISOString().split("T")[0];
   });
-  const [formInstallmentTitle, setFormInstallmentTitle] = useState("1st Installment - Token Advance");
+  const [formInstallmentTitle, setFormInstallmentTitle] = useState("1st Installment - Token Booking Advance");
   const [formPaymentMode, setFormPaymentMode] = useState("UPI / GPay");
   const [formTransactionRef, setFormTransactionRef] = useState("");
+  const [formBankName, setFormBankName] = useState("HDFC Bank");
+  const [formReceivedBy, setFormReceivedBy] = useState("");
   const [formAmountPaid, setFormAmountPaid] = useState("50000");
   const [formRemarks, setFormRemarks] = useState("");
-
-  // Customer & Vehicle fields (Auto-populated from selected pipeline lead)
-  const [formCustomerName, setFormCustomerName] = useState("");
-  const [formServiceNo, setFormServiceNo] = useState("");
-  const [formUnit, setFormUnit] = useState("");
-  const [formMobile, setFormMobile] = useState("");
-  const [formEmail, setFormEmail] = useState("");
-  const [formCity, setFormCity] = useState("Ahmedabad, Gujarat");
-  const [formBrand, setFormBrand] = useState("");
-  const [formModel, setFormModel] = useState("");
-  const [formVariant, setFormVariant] = useState("");
-  const [formColor, setFormColor] = useState("Pearl White");
-  const [formTotalDealAmount, setFormTotalDealAmount] = useState("1350000");
 
   // Dynamic Line Items in Invoice
   const [formLineItems, setFormLineItems] = useState([
@@ -487,255 +85,192 @@ export default function GenerateInvoicePage() {
       amount: "50000",
     },
   ]);
+  const [isSubmittingInvoice, setIsSubmittingInvoice] = useState(false);
 
-  // Load live data from Backend API on mount & Fetch Pipeline Leads
-  const loadBillingData = useCallback(async () => {
-    try {
-      const res = await tokenBillingApi.getDashboard();
-      if (res && res.data) {
-        const rawTokens = res.data.customer_tokens_ledger || [];
-        const rawInvoices = res.data.all_invoices_register || [];
-
-        if (rawTokens.length > 0) {
-          const mapped = rawTokens.map((tok) => {
-            const tokInvoices = rawInvoices
-              .filter(
-                (inv) =>
-                  inv.token_number === tok.token_number ||
-                  inv.token_id === tok.id
-              )
-              .map((inv) => ({
-                id: inv.id,
-                invoiceNo: inv.invoice_number,
-                date: inv.invoice_date,
-                time: "12:00 PM",
-                installmentTitle: inv.bill_type || "Installment Payment",
-                paymentMode: inv.payment_mode || "UPI",
-                transactionRef: inv.transaction_reference || "VERIFIED-REF",
-                amountPaid: Number(inv.net_payable || inv.invoice_amount || 0),
-                items: [
-                  {
-                    desc: inv.bill_type || "CSD Payment Installment",
-                    hsn: "998313",
-                    qty: 1,
-                    rate: Number(inv.net_payable || inv.invoice_amount || 0),
-                    amount: Number(inv.net_payable || inv.invoice_amount || 0),
-                  },
-                ],
-                remarks: inv.notes || "Recorded in live billing register.",
-                status: inv.payment_status || "Paid",
-                generatedBy: "Super Admin",
-              }));
-
-            return {
-              id: tok.id,
-              tokenNo: tok.token_number,
-              customerName: tok.customer_details?.name || tok.customer_name || "Customer",
-              serviceNo: tok.customer_details?.service_id || tok.service_id || "CSD-APPL",
-              unit: tok.customer_details?.rank_designation || tok.rank_designation || "General",
-              mobile: tok.customer_details?.phone || tok.customer_phone || "",
-              email: tok.customer_details?.email || tok.customer_email || "",
-              city: tok.customer_details?.city || "Ahmedabad, Gujarat",
-              brand: tok.booked_vehicle?.brand_name || tok.brand_name || "Maruti Suzuki",
-              model: tok.booked_vehicle?.vehicle_name || tok.vehicle_name || "Car",
-              variant: tok.booked_vehicle?.model_variant || tok.model_variant || "Standard",
-              color: tok.color || "Pearl White",
-              totalDealAmount: Number(tok.total_deal || tok.total_deal_amount || 0),
-              bookingDate: tok.token_date || "2026-09-10",
-              status: tok.status || "Partial",
-              invoices: tokInvoices,
-            };
-          });
-
-          setTokensData(mapped);
-          try {
-            localStorage.setItem("csd_tokens_invoices_v1", JSON.stringify(mapped));
-          } catch (e) {
-            console.error(e);
-          }
-        }
-      }
-    } catch (err) {
-      console.warn("Could not fetch live token billing dashboard, using cached data:", err.message);
-    }
-  }, []);
-
+  // Close dropdown on click outside
   useEffect(() => {
-    // 1. Initial local cache check
-    try {
-      if (!localStorage.getItem("csd_tokens_invoices_v1")) {
-        localStorage.setItem(
-          "csd_tokens_invoices_v1",
-          JSON.stringify(INITIAL_DEMO_TOKENS)
-        );
-      }
-    } catch (err) {
-      console.error(err);
-    }
-
-    // 2. Fetch live token billing data
-    loadBillingData();
-
-    // 3. Fetch dynamic Deals & Bookings from Backend API
-    const loadDealsData = async () => {
-      setIsLoadingDeals(true);
-      try {
-        const res = await dealApi.getDeals({ per_page: 100 });
-        if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
-          setDeals(res.data);
-        } else {
-          // Direct fallback endpoint check if needed
-          const directRes = await api.get("/deals", { params: { per_page: 100 } });
-          if (directRes.data?.data && Array.isArray(directRes.data.data) && directRes.data.data.length > 0) {
-            setDeals(directRes.data.data);
-          }
-        }
-      } catch (e) {
-        console.warn("Using fallback deals:", e);
-      } finally {
-        setIsLoadingDeals(false);
+    const handleDocClick = (e) => {
+      if (dealDropdownRef.current && !dealDropdownRef.current.contains(e.target)) {
+        setIsDealDropdownOpen(false);
       }
     };
-    loadDealsData();
-  }, [loadBillingData]);
+    document.addEventListener("click", handleDocClick);
+    return () => document.removeEventListener("click", handleDocClick);
+  }, []);
 
-  // Save to localStorage whenever tokensData changes
-  const saveTokensData = (newData) => {
-    setTokensData(newData);
+  // Reset pagination to page 1 when any filter or tab changes
+  useEffect(() => {
+    setDealsPage(1);
+    setInvoicesPage(1);
+  }, [searchQuery, stageFilter, paymentFilter, startDate, endDate, activeTab]);
+
+  // Load Live Deals & Payments from Backend API
+  const loadDealsData = useCallback(async () => {
+    setIsLoadingDeals(true);
     try {
-      localStorage.setItem("csd_tokens_invoices_v1", JSON.stringify(newData));
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  // Reset to default demo data (gracefully handles backend seeder resolution)
-  const handleResetDemoData = async () => {
-    if (
-      window.confirm(
-        "Are you sure you want to reset invoices to initial demo data?"
-      )
-    ) {
-      try {
-        showToast("Requesting demo reset from backend...", "info");
-        const res = await tokenBillingApi.resetDemo();
-        showToast(res?.message || "Demo data reset successfully!", "success");
-        loadBillingData();
-      } catch (err) {
-        console.warn("Backend reset-demo notification:", err.message);
-        // Fallback to local reset and notify user gently
-        saveTokensData(INITIAL_DEMO_TOKENS);
-        showToast("Demo data reloaded successfully (Backend seeder updating by backend team)", "info");
+      const res = await dealApi.getDeals({ per_page: 200 });
+      if (res && res.status && Array.isArray(res.data)) {
+        setDeals(res.data);
       }
+    } catch (err) {
+      console.error("Error loading deals for invoice page:", err);
+      showToast("Could not load vehicle deals. Please refresh.", "error");
+    } finally {
+      setIsLoadingDeals(false);
     }
-  };
+  }, [showToast]);
 
-  // Calculate Token Summaries (Total Paid, Remaining Balance, Progress %)
-  const enrichedTokens = useMemo(() => {
-    return tokensData.map((tok) => {
-      const totalPaid = (tok.invoices || []).reduce(
-        (sum, inv) => sum + Number(inv.amountPaid || 0),
-        0
-      );
-      const dealAmount = Number(tok.totalDealAmount) || 0;
-      const balanceDue = Math.max(0, dealAmount - totalPaid);
-      const isSettled = balanceDue <= 0 && dealAmount > 0;
-      const percentPaid =
-        dealAmount > 0
-          ? Math.min(100, Math.round((totalPaid / dealAmount) * 100))
-          : 0;
+  useEffect(() => {
+    loadDealsData();
+
+    // Listen to global CRM deal update events
+    const handleUpdate = () => loadDealsData();
+    window.addEventListener("csd_deals_updated", handleUpdate);
+    return () => window.removeEventListener("csd_deals_updated", handleUpdate);
+  }, [loadDealsData]);
+
+  // Enrich deals with formatted invoices from their payments array
+  const enrichedDeals = useMemo(() => {
+    return deals.map((d) => {
+      const rawPayments = Array.isArray(d.payments) ? d.payments : [];
+
+      const dealInvoices = rawPayments
+        .filter((p) => p.status !== "rejected")
+        .map((p, idx) => {
+          const invDate = p.payment_date || (p.created_at ? p.created_at.split("T")[0] : new Date().toISOString().split("T")[0]);
+          const invNo = p.invoice_no || `DAL-/${new Date(invDate).getFullYear()}/${String(new Date(invDate).getMonth() + 1).padStart(2, "0")}/${String(1000 + (p.id || idx + 1))}`;
+
+          let installmentTitle = "Installment Payment";
+          if (p.payment_type) {
+            installmentTitle = p.payment_type
+              .replace(/_/g, " ")
+              .replace(/\b\w/g, (c) => c.toUpperCase());
+          }
+
+          const amt = Number(p.amount) || 0;
+
+          return {
+            id: p.id || `INV-${d.id}-${idx + 1}`,
+            paymentId: p.id,
+            dealId: d.id,
+            invoiceNo: invNo,
+            date: invDate,
+            time: p.created_at ? new Date(p.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "12:00 PM",
+            installmentTitle: installmentTitle,
+            paymentMode: (p.payment_mode || "UPI").toUpperCase(),
+            transactionRef: p.transaction_reference || p.reference_no || "VERIFIED-REF",
+            bankName: p.bank_name || "HDFC Bank",
+            receivedBy: p.received_by || "Accounts",
+            amountPaid: amt,
+            items: [
+              {
+                desc: `${installmentTitle} for ${d.model_variant || "Vehicle"}`,
+                hsn: "998313",
+                qty: 1,
+                rate: amt,
+                amount: amt,
+              },
+            ],
+            remarks: p.notes || `Installment payment for Deal ${d.deal_number}.`,
+            status: "Paid",
+            parentDeal: d,
+          };
+        });
+
+      const totalPaid = Number(d.paid_amount ?? d.total_paid ?? 0);
+      const netAmount = Number(d.net_amount ?? d.total_amount ?? 0);
+      const balanceDue = Math.max(0, netAmount - totalPaid);
+      const pctPaid = Math.min(100, Math.round(((totalPaid || 0) / (netAmount || 1)) * 100));
 
       return {
-        ...tok,
+        ...d,
         computedTotalPaid: totalPaid,
         computedBalanceDue: balanceDue,
-        computedStatus: isSettled ? "Fully Paid" : "Partial",
-        computedPercentPaid: percentPaid,
-        invoicesCount: (tok.invoices || []).length,
+        computedPercentPaid: pctPaid,
+        invoices: dealInvoices,
+        invoicesCount: dealInvoices.length,
       };
     });
-  }, [tokensData]);
+  }, [deals]);
 
-  // Flattened list of ALL invoices across all tokens
+  // Flattened Master List of ALL Invoices across all deals (Sorted newest first)
   const allInvoicesList = useMemo(() => {
     const list = [];
-    enrichedTokens.forEach((tok) => {
-      (tok.invoices || []).forEach((inv) => {
+    enrichedDeals.forEach((d) => {
+      (d.invoices || []).forEach((inv) => {
         list.push({
           ...inv,
-          tokenNo: tok.tokenNo,
-          customerName: tok.customerName,
-          mobile: tok.mobile,
-          vehicle: `${tok.brand} ${tok.model} (${tok.variant})`,
-          totalDealAmount: tok.totalDealAmount,
-          parentToken: tok,
+          dealNumber: d.deal_number,
+          customerName: d.customer_name,
+          mobile: d.customer_phone,
+          email: d.customer_email,
+          city: d.customer_city,
+          vehicle: d.model_variant,
+          color: d.color,
+          vin: d.vin_chassis_number,
+          regNo: d.registration_number,
+          has_insurance: d.has_insurance,
+          deal_status: d.deal_status,
+          totalDealAmount: d.net_amount || d.total_amount,
+          parentDeal: d,
         });
       });
     });
-    // Sort newest first
+    // Sort newest date first
     return list.sort((a, b) => new Date(b.date) - new Date(a.date));
-  }, [enrichedTokens]);
+  }, [enrichedDeals]);
 
-  // Overall KPIs
+  // Overall KPI Metrics
   const metrics = useMemo(() => {
     const totalInvoicesCount = allInvoicesList.length;
-    const totalCollected = allInvoicesList.reduce(
-      (sum, i) => sum + Number(i.amountPaid || 0),
-      0
-    );
-    const totalDealVolume = enrichedTokens.reduce(
-      (sum, t) => sum + Number(t.totalDealAmount || 0),
-      0
-    );
+    const totalCollected = allInvoicesList.reduce((sum, i) => sum + Number(i.amountPaid || 0), 0);
+    const totalDealVolume = enrichedDeals.reduce((sum, d) => sum + Number(d.net_amount || d.total_amount || 0), 0);
     const totalPending = Math.max(0, totalDealVolume - totalCollected);
-    const totalTokensCount = enrichedTokens.length;
+    const totalDealsCount = enrichedDeals.length;
 
     return {
       totalInvoicesCount,
       totalCollected,
       totalDealVolume,
       totalPending,
-      totalTokensCount,
+      totalDealsCount,
     };
-  }, [allInvoicesList, enrichedTokens]);
+  }, [allInvoicesList, enrichedDeals]);
 
-  // Filtered Tokens for Tab 1 (Search + Status + Date Range)
-  const filteredTokens = useMemo(() => {
-    return enrichedTokens.filter((tok) => {
+  // Filtered Deals for Tab 1 (Search + Stage Filter + Payment Filter + Date Range)
+  const filteredDeals = useMemo(() => {
+    return enrichedDeals.filter((d) => {
       const q = searchQuery.toLowerCase().trim();
       const matchQuery =
         !q ||
-        tok.tokenNo.toLowerCase().includes(q) ||
-        tok.customerName.toLowerCase().includes(q) ||
-        tok.mobile.toLowerCase().includes(q) ||
-        tok.brand.toLowerCase().includes(q) ||
-        tok.model.toLowerCase().includes(q);
+        (d.deal_number && d.deal_number.toLowerCase().includes(q)) ||
+        (d.customer_name && d.customer_name.toLowerCase().includes(q)) ||
+        (d.customer_phone && d.customer_phone.toLowerCase().includes(q)) ||
+        (d.customer_city && d.customer_city.toLowerCase().includes(q)) ||
+        (d.vin_chassis_number && d.vin_chassis_number.toLowerCase().includes(q)) ||
+        (d.model_variant && d.model_variant.toLowerCase().includes(q));
 
-      const matchStatus =
-        statusFilter === "all" ||
-        (statusFilter === "paid" && tok.computedStatus === "Fully Paid") ||
-        (statusFilter === "partial" && tok.computedStatus === "Partial");
+      const matchStage =
+        stageFilter === "All" ||
+        (d.deal_status && d.deal_status.toLowerCase() === stageFilter.toLowerCase());
 
-      // Date Range Filter (checks bookingDate or any invoice date within token)
+      const matchPayment =
+        paymentFilter === "All" ||
+        d.payment_status === paymentFilter;
+
       const matchDate = (() => {
         if (!startDate && !endDate) return true;
-        const bDate = tok.bookingDate || "";
-        const anyInvMatch = (tok.invoices || []).some((inv) => {
+        const anyInvMatch = (d.invoices || []).some((inv) => {
           if (startDate && inv.date < startDate) return false;
           if (endDate && inv.date > endDate) return false;
           return true;
         });
-        if (bDate) {
-          if (startDate && bDate < startDate) return anyInvMatch;
-          if (endDate && bDate > endDate) return anyInvMatch;
-          return true;
-        }
         return anyInvMatch;
       })();
 
-      return matchQuery && matchStatus && matchDate;
+      return matchQuery && matchStage && matchPayment && matchDate;
     });
-  }, [enrichedTokens, searchQuery, statusFilter, startDate, endDate]);
+  }, [enrichedDeals, searchQuery, stageFilter, paymentFilter, startDate, endDate]);
 
   // Filtered All Invoices for Tab 2 (Search + Date Range)
   const filteredAllInvoices = useMemo(() => {
@@ -743,18 +278,17 @@ export default function GenerateInvoicePage() {
       const q = searchQuery.toLowerCase().trim();
       const matchQuery =
         !q ||
-        inv.invoiceNo.toLowerCase().includes(q) ||
-        inv.tokenNo.toLowerCase().includes(q) ||
-        inv.customerName.toLowerCase().includes(q) ||
-        inv.installmentTitle.toLowerCase().includes(q) ||
-        inv.vehicle.toLowerCase().includes(q);
+        (inv.invoiceNo && inv.invoiceNo.toLowerCase().includes(q)) ||
+        (inv.dealNumber && inv.dealNumber.toLowerCase().includes(q)) ||
+        (inv.customerName && inv.customerName.toLowerCase().includes(q)) ||
+        (inv.mobile && inv.mobile.toLowerCase().includes(q)) ||
+        (inv.installmentTitle && inv.installmentTitle.toLowerCase().includes(q)) ||
+        (inv.vehicle && inv.vehicle.toLowerCase().includes(q));
 
-      // Date Range Filter
       const matchDate = (() => {
         if (!startDate && !endDate) return true;
-        const invDate = inv.date || "";
-        if (startDate && invDate < startDate) return false;
-        if (endDate && invDate > endDate) return false;
+        if (startDate && inv.date < startDate) return false;
+        if (endDate && inv.date > endDate) return false;
         return true;
       })();
 
@@ -762,183 +296,57 @@ export default function GenerateInvoicePage() {
     });
   }, [allInvoicesList, searchQuery, startDate, endDate]);
 
-  // Paginated data for Tab 1 (Tokens)
-  const totalTokens = filteredTokens.length;
-  const lastTokensPage = Math.max(1, Math.ceil(totalTokens / tokensPerPage));
-  const paginatedTokens = filteredTokens.slice(
-    (tokensPage - 1) * tokensPerPage,
-    tokensPage * tokensPerPage
-  );
+  // Paginated Data
+  const paginatedDeals = useMemo(() => {
+    const start = (dealsPage - 1) * dealsPerPage;
+    return filteredDeals.slice(start, start + dealsPerPage);
+  }, [filteredDeals, dealsPage, dealsPerPage]);
 
-  // Paginated data for Tab 2 (Invoices)
-  const totalInvoices = filteredAllInvoices.length;
-  const lastInvoicesPage = Math.max(1, Math.ceil(totalInvoices / invoicesPerPage));
-  const paginatedInvoices = filteredAllInvoices.slice(
-    (invoicesPage - 1) * invoicesPerPage,
-    invoicesPage * invoicesPerPage
-  );
+  const paginatedInvoices = useMemo(() => {
+    const start = (invoicesPage - 1) * invoicesPerPage;
+    return filteredAllInvoices.slice(start, start + invoicesPerPage);
+  }, [filteredAllInvoices, invoicesPage, invoicesPerPage]);
 
-  // Filtered Deals for Searchable Dropdown (by Name, Mobile, Deal Number, Model)
-  const filteredDeals = useMemo(() => {
-    if (!dealSearchQuery.trim()) return deals;
-    const q = dealSearchQuery.toLowerCase().trim();
-    const qDigits = q.replace(/\D/g, "");
-    return deals.filter((d) => {
-      const name = (d.customer_name || d.lead?.name || "").toLowerCase();
-      const phone = (d.customer_phone || d.lead?.phone || "").replace(/\D/g, "");
-      const dealNo = (d.deal_number || `#DEAL-${d.id}`).toLowerCase();
-      const model = (d.model_variant || d.lead?.model_variant || "").toLowerCase();
-      return (
-        name.includes(q) ||
-        (qDigits && phone.includes(qDigits)) ||
-        dealNo.includes(q) ||
-        model.includes(q)
-      );
-    });
-  }, [deals, dealSearchQuery]);
+  // Handle Deal Selection from Dropdown in Modal
+  const handleSelectDeal = (deal) => {
+    if (!deal) return;
+    setSelectedDealId(String(deal.id));
+    setSelectedDealObject(deal);
+    setDealSearchQuery(`${deal.customer_name} (${deal.deal_number})`);
+    setIsDealDropdownOpen(false);
 
-  //  DEALS & BOOKINGS SELECTOR HANDLER
-  const handleSelectBookingDeal = (deal) => {
-    if (!deal) {
-      setSelectedDealId("");
-      setLinkedExistingToken(null);
-      return;
-    }
+    const netVal = Number(deal.net_amount || deal.total_amount || 0);
+    const nextCount = (deal.invoices || []).length + 1;
+    let stageTitle = `${nextCount}th Installment`;
+    if (nextCount === 1) stageTitle = "1st Installment - Token Booking Advance";
+    else if (nextCount === 2) stageTitle = "2nd Installment - Margin Money Deposit";
+    else if (nextCount === 3) stageTitle = "3rd Installment - RTO, Insurance & CSD Tax";
+    else if (nextCount >= 4) stageTitle = `${nextCount}th Installment - Balance Settlement`;
 
-    const dId = String(deal.id);
-    setSelectedDealId(dId);
+    setFormInstallmentTitle(stageTitle);
 
-    const dealName = deal.customer_name || deal.lead?.name || "";
-    const dealPhone = deal.customer_phone || deal.lead?.phone || "";
-    const dealEmail = deal.customer_email || deal.lead?.email || "";
-    const dealCity = deal.customer_city || deal.customer_address || "Ahmedabad, Gujarat";
-    const dealBrand = deal.brand_name || deal.brand?.name || "Maruti Suzuki";
-    const dealModel = deal.model_variant || deal.lead?.model_variant || "Standard CSD Variant";
-    const dealColor = deal.color || "Standard";
-    const dealTotal = Number(deal.net_amount || deal.total_amount) || 1350000;
+    const remaining = Number(deal.balance_due ?? (netVal - Number(deal.paid_amount || 0)));
+    const suggestedAmt = remaining > 0 ? remaining : 50000;
+    setFormAmountPaid(String(suggestedAmt));
 
-    setFormCustomerName(dealName);
-    setFormMobile(dealPhone);
-    setFormEmail(dealEmail);
-    setFormCity(dealCity);
-    setFormBrand(dealBrand);
-    setFormModel(dealModel);
-    setFormVariant(dealModel);
-    setFormColor(dealColor);
-    setFormTotalDealAmount(String(dealTotal));
-
-    // Check if this deal or customer already has an existing Token in the system
-    const existing = enrichedTokens.find(
-      (t) =>
-        (dealPhone && t.mobile?.replace(/\D/g, "") && dealPhone.replace(/\D/g, "").includes(t.mobile.replace(/\D/g, ""))) ||
-        (dealName && t.customerName?.toLowerCase().trim() === dealName.toLowerCase().trim())
-    );
-
-    if (existing) {
-      setLinkedExistingToken(existing);
-      setFormTokenNo(existing.tokenNo);
-
-      const nextBillNo = (existing.invoices || []).length + 1;
-      let stageTitle = `${nextBillNo}th Installment`;
-      if (nextBillNo === 2) stageTitle = "2nd Installment - Margin Money Deposit";
-      if (nextBillNo === 3) stageTitle = "3rd Installment - RTO, Insurance & CSD Tax";
-      if (nextBillNo >= 4) stageTitle = `${nextBillNo}th Installment - Balance Settlement`;
-
-      setFormInstallmentTitle(stageTitle);
-      const remaining = Number(deal.balance_due ?? existing.computedBalanceDue);
-      const suggestedAmt = remaining > 0 ? remaining : 50000;
-      setFormAmountPaid(String(suggestedAmt));
-      setFormLineItems([
-        {
-          desc: `${stageTitle} for ${dealBrand} ${dealModel}`,
-          hsn: "998313",
-          qty: 1,
-          rate: String(suggestedAmt),
-          amount: String(suggestedAmt),
-        },
-      ]);
-      setFormRemarks(`Installment payment for Deal ${deal.deal_number || '#' + deal.id} (Token ${existing.tokenNo}).`);
-      showToast(
-        `Linked to ${existing.tokenNo} (${existing.invoicesCount} previous bills found)`,
-        "info"
-      );
-    } else {
-      // New Token for this Booking Deal
-      const newTokNo = `TKN-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-      setLinkedExistingToken(null);
-      setFormTokenNo(newTokNo);
-      const prevPaid = Number(deal.total_paid || 0);
-      const stageTitle = prevPaid > 0 ? "2nd Installment - Margin Money Deposit" : "1st Installment - Token Booking Advance";
-      setFormInstallmentTitle(stageTitle);
-      const suggestedAmt = prevPaid > 0 && deal.balance_due ? deal.balance_due : 50000;
-      setFormAmountPaid(String(suggestedAmt));
-      setFormLineItems([
-        {
-          desc: `CSD Token Payment for ${dealBrand} ${dealModel} (${deal.deal_number || 'Deal #' + deal.id})`,
-          hsn: "998313",
-          qty: 1,
-          rate: String(suggestedAmt),
-          amount: String(suggestedAmt),
-        },
-      ]);
-      setFormRemarks(`Booking invoice for Deal ${deal.deal_number || '#' + deal.id}. Customer: ${dealName}`);
-    }
-  };
-
-  // Open Generate Invoice for an existing token from Table Row "Add Bill"
-  const handleOpenGenerateForToken = (token) => {
-    // Find matching deal if available
-    const matchedDeal = deals.find(
-      (d) =>
-        (d.customer_phone && token.mobile && d.customer_phone.replace(/\D/g, "") === token.mobile.replace(/\D/g, "")) ||
-        (d.customer_name && token.customerName && d.customer_name.toLowerCase().trim() === token.customerName.toLowerCase().trim())
-    );
-
-    if (matchedDeal) {
-      setSelectedDealId(String(matchedDeal.id));
-      setDealSearchQuery(`${matchedDeal.customer_name || 'Customer'} (${matchedDeal.customer_phone || ''})`);
-    } else {
-      setSelectedDealId("");
-      setDealSearchQuery(token.customerName ? `${token.customerName} (${token.mobile || ''})` : "");
-    }
-    setLinkedExistingToken(token);
-    setFormTokenNo(token.tokenNo);
-    setFormCustomerName(token.customerName);
-    setFormMobile(token.mobile);
-    setFormEmail(token.email || "");
-    setFormCity(token.city || "Ahmedabad, Gujarat");
-    setFormServiceNo(token.serviceNo || "");
-    setFormUnit(token.unit || "");
-    setFormBrand(token.brand);
-    setFormModel(token.model);
-    setFormVariant(token.variant);
-    setFormTotalDealAmount(String(token.totalDealAmount));
-
-    setFormInvoiceNo(generateInvoiceNumber());
-    setFormInvoiceDate(new Date().toISOString().split("T")[0]);
-
-    const nextCount = (token.invoices || []).length + 1;
-    let titlePreset = `${nextCount}th Installment`;
-    if (nextCount === 2) titlePreset = "2nd Installment - Margin Money Deposit";
-    if (nextCount === 3) titlePreset = "3rd Installment - RTO, Insurance & CSD Tax";
-    if (nextCount >= 4) titlePreset = `${nextCount}th Installment - Balance Settlement`;
-    setFormInstallmentTitle(titlePreset);
-
-    const remaining = token.computedBalanceDue;
-    const suggested = remaining > 0 ? remaining : 50000;
-    setFormAmountPaid(String(suggested));
-    setFormTransactionRef("");
-    setFormRemarks(`Installment payment for CSD booking ${token.tokenNo}.`);
     setFormLineItems([
       {
-        desc: `${titlePreset} for ${token.brand} ${token.model}`,
+        desc: `${stageTitle} for ${deal.model_variant || "Vehicle"} (${deal.deal_number})`,
         hsn: "998313",
         qty: 1,
-        rate: String(suggested),
-        amount: String(suggested),
+        rate: String(suggestedAmt),
+        amount: String(suggestedAmt),
       },
     ]);
+    setFormRemarks(`Installment payment for Deal ${deal.deal_number}. Customer: ${deal.customer_name}`);
+  };
 
+  // Open Generate Invoice for an existing Deal
+  const handleOpenGenerateForDeal = (deal) => {
+    handleSelectDeal(deal);
+    setFormInvoiceNo(generateInvoiceNumber());
+    setFormInvoiceDate(new Date().toISOString().split("T")[0]);
+    setFormTransactionRef("");
     setIsGenerateModalOpen(true);
   };
 
@@ -947,28 +355,17 @@ export default function GenerateInvoicePage() {
     setFormInvoiceNo(generateInvoiceNumber());
     setFormInvoiceDate(new Date().toISOString().split("T")[0]);
     setSelectedDealId("");
+    setSelectedDealObject(null);
     setDealSearchQuery("");
     setIsDealDropdownOpen(false);
-    setLinkedExistingToken(null);
-    setFormTokenNo(`TKN-2026-${Math.floor(1000 + Math.random() * 9000)}`);
-    setFormCustomerName("");
-    setFormServiceNo("");
-    setFormUnit("");
-    setFormMobile("");
-    setFormEmail("");
-    setFormCity("Ahmedabad, Gujarat");
-    setFormBrand("");
-    setFormModel("");
-    setFormVariant("");
-    setFormColor("Pearl White");
-    setFormTotalDealAmount("1350000");
-    setFormInstallmentTitle("1st Installment - Token Advance");
+
+    setFormInstallmentTitle("1st Installment - Token Booking Advance");
     setFormAmountPaid("50000");
     setFormTransactionRef("");
-    setFormRemarks("Initial booking token amount received for CSD file opening.");
+    setFormRemarks("Vehicle booking installment payment recorded.");
     setFormLineItems([
       {
-        desc: "CSD AFD Portal Registration & Token Booking Advance",
+        desc: "Token Booking Deposit / Installment Payment",
         hsn: "998313",
         qty: 1,
         rate: "50000",
@@ -976,13 +373,6 @@ export default function GenerateInvoicePage() {
       },
     ]);
     setIsGenerateModalOpen(true);
-  };
-
-  // Regnerate invoice number with current year/month/random4
-  const handleRegenerateInvoiceNo = () => {
-    const newNo = generateInvoiceNumber();
-    setFormInvoiceNo(newNo);
-    showToast(`Generated new invoice no: ${newNo}`, "info");
   };
 
   // Line item helpers
@@ -1018,13 +408,13 @@ export default function GenerateInvoicePage() {
   };
 
   // =========================================================================
-  // SUBMIT HANDLER: Generate & Save Invoice
+  // SUBMIT HANDLER: Generate & Save Invoice via dealApi.addPayment
   // =========================================================================
   const handleSaveInvoice = async (e) => {
     e.preventDefault();
 
-    if (!formCustomerName || !formMobile) {
-      showToast("Customer Name and Mobile number are required.", "warning");
+    if (!selectedDealId) {
+      showToast("Please select a Vehicle Deal from the dropdown.", "warning");
       return;
     }
 
@@ -1034,145 +424,85 @@ export default function GenerateInvoicePage() {
       return;
     }
 
-    const nowTime = new Date().toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
+    setIsSubmittingInvoice(true);
+    const finalInvoiceNo = formInvoiceNo || generateInvoiceNumber();
 
-    let finalInvoiceNo = formInvoiceNo || generateInvoiceNumber();
-    const finalTokenNo = formTokenNo || `TKN-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+    // Map payment mode into standard slug
+    let modeSlug = "upi";
+    const lowerMode = formPaymentMode.toLowerCase();
+    if (lowerMode.includes("cash")) modeSlug = "cash";
+    else if (lowerMode.includes("cheque")) modeSlug = "cheque";
+    else if (lowerMode.includes("neft") || lowerMode.includes("rtgs")) modeSlug = "neft_rtgs";
+    else modeSlug = "upi";
 
-    // Try backend persistence
-    let backendTokenId = linkedExistingToken?.id;
-    try {
-      if (!backendTokenId) {
-        // Try creating token on backend
-        const tokRes = await tokenBillingApi.createToken({
-          customer_name: formCustomerName,
-          customer_phone: formMobile,
-          customer_email: formEmail || "customer@csd.gov.in",
-          service_id: formServiceNo || "CSD-APPL",
-          rank_designation: formUnit || "Subedar",
-          brand_name: formBrand || "Maruti Suzuki",
-          vehicle_name: `${formBrand || "Maruti Suzuki"} ${formModel || "Car"}`,
-          model_variant: formVariant || "Standard",
-          total_deal_amount: Number(formTotalDealAmount) || amountNum,
-        });
-        if (tokRes?.data?.id) {
-          backendTokenId = tokRes.data.id;
-        }
-      }
+    // Map installment title into standard payment type slug
+    let typeSlug = "part_payment";
+    const lowerTitle = formInstallmentTitle.toLowerCase();
+    if (lowerTitle.includes("token") || lowerTitle.includes("advance")) typeSlug = "token_advance";
+    else if (lowerTitle.includes("margin") || lowerTitle.includes("down")) typeSlug = "down_payment";
+    else typeSlug = "part_payment";
 
-      if (backendTokenId) {
-        const invRes = await tokenBillingApi.generateInvoice({
-          token_id: backendTokenId,
-          bill_type: formInstallmentTitle || "Token Advance",
-          invoice_amount: amountNum,
-          tax_amount: Math.round(amountNum * 0.18),
-          payment_mode: formPaymentMode || "UPI",
-          transaction_reference: formTransactionRef || "UTR-VERIFIED",
-          invoice_date: formInvoiceDate,
-          payment_status: "Paid",
-        });
-
-        if (invRes?.data?.invoice?.invoice_number) {
-          finalInvoiceNo = invRes.data.invoice.invoice_number;
-        }
-      }
-    } catch (apiErr) {
-      console.warn("Backend billing API error (proceeding with local update):", apiErr.message);
-    }
-
-    const newInvoiceObj = {
-      id: `INV-${Date.now()}`,
-      invoiceNo: finalInvoiceNo,
-      date: formInvoiceDate || new Date().toISOString().split("T")[0],
-      time: nowTime,
-      installmentTitle: formInstallmentTitle || "Installment Payment",
-      paymentMode: formPaymentMode,
-      transactionRef: formTransactionRef || "VERIFIED-REF",
-      amountPaid: amountNum,
-      items: formLineItems.map((item) => ({
-        desc: item.desc || "CSD Payment Installment",
-        hsn: item.hsn || "998313",
-        qty: Number(item.qty) || 1,
-        rate: Number(item.rate) || amountNum,
-        amount: Number(item.amount) || amountNum,
-      })),
-      remarks: formRemarks || "Payment received and recorded.",
-      status: "Paid",
-      generatedBy: "Super Admin",
+    const payload = {
+      deal_id: Number(selectedDealId),
+      amount: amountNum,
+      payment_type: typeSlug,
+      payment_mode: modeSlug,
+      payment_date: formInvoiceDate,
+      transaction_reference: formTransactionRef,
+      bank_name: formBankName,
+      received_by: formReceivedBy,
+      notes: `${formInstallmentTitle} • ${formRemarks || 'Recorded via Invoice Module'}`,
+      invoice_no: finalInvoiceNo,
     };
 
-    let updatedTokens = [...tokensData];
-    let targetTokenRef = null;
+    try {
+      await dealApi.addPayment(payload);
+      showToast(`Invoice ${finalInvoiceNo} created and linked to Deal #${selectedDealId}!`, "success");
 
-    // Check if target token already exists in database
-    const existingIndex = updatedTokens.findIndex(
-      (t) => (backendTokenId && t.id === backendTokenId) || t.tokenNo === finalTokenNo
-    );
+      setIsGenerateModalOpen(false);
 
-    if (existingIndex !== -1) {
-      // Add subsequent invoice to existing token
-      const existingTok = updatedTokens[existingIndex];
-      const newInvoices = [...(existingTok.invoices || []), newInvoiceObj];
-      const updatedTok = {
-        ...existingTok,
-        invoices: newInvoices,
-        customerName: formCustomerName,
-        mobile: formMobile,
-        brand: formBrand || existingTok.brand,
-        model: formModel || existingTok.model,
-        totalDealAmount: Number(formTotalDealAmount) || existingTok.totalDealAmount,
-      };
-      updatedTokens[existingIndex] = updatedTok;
-      targetTokenRef = updatedTok;
-    } else {
-      // Create new token record for this customer
-      const newTokObj = {
-        id: backendTokenId || Date.now(),
-        tokenNo: finalTokenNo,
-        customerName: formCustomerName,
-        serviceNo: formServiceNo || "CSD-APPL",
-        unit: formUnit || "General Defence",
-        mobile: formMobile,
-        email: formEmail || "customer@csd.gov.in",
-        city: formCity || "Ahmedabad, Gujarat",
-        brand: formBrand || "Maruti Suzuki",
-        model: formModel || "Grand Vitara",
-        variant: formVariant || "Zeta 1.5L",
-        color: formColor || "Pearl White",
-        totalDealAmount: Number(formTotalDealAmount) || amountNum,
-        bookingDate: formInvoiceDate,
-        status: "Partial",
-        invoices: [newInvoiceObj],
-      };
-      updatedTokens.unshift(newTokObj);
-      targetTokenRef = newTokObj;
-    }
+      // Find selected deal to render instant preview voucher
+      const targetDeal = enrichedDeals.find((d) => String(d.id) === String(selectedDealId));
+      if (targetDeal) {
+        setSelectedInvoiceForSingleView({
+          invoiceNo: finalInvoiceNo,
+          date: formInvoiceDate,
+          time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+          dealNumber: targetDeal.deal_number,
+          customerName: targetDeal.customer_name,
+          mobile: targetDeal.customer_phone,
+          email: targetDeal.customer_email,
+          city: targetDeal.customer_city,
+          vehicle: targetDeal.model_variant,
+          color: targetDeal.color,
+          vin: targetDeal.vin_chassis_number,
+          regNo: targetDeal.registration_number,
+          installmentTitle: formInstallmentTitle,
+          paymentMode: formPaymentMode,
+          transactionRef: formTransactionRef || "UTR-VERIFIED",
+          bankName: formBankName,
+          amountPaid: amountNum,
+          totalDealAmount: targetDeal.net_amount || targetDeal.total_amount,
+          items: formLineItems.map((item) => ({
+            desc: item.desc || formInstallmentTitle,
+            hsn: item.hsn || "998313",
+            qty: Number(item.qty) || 1,
+            rate: Number(item.rate) || amountNum,
+            amount: Number(item.amount) || amountNum,
+          })),
+          remarks: formRemarks,
+          status: "Paid",
+          parentDeal: targetDeal,
+        });
+      }
 
-    saveTokensData(updatedTokens);
-    setIsGenerateModalOpen(false);
-    showToast(
-      `Invoice ${newInvoiceObj.invoiceNo} generated successfully for ${formCustomerName}!`,
-      "success"
-    );
-
-    // Refresh live records from backend
-    loadBillingData();
-
-    // Open single invoice voucher modal for preview and instant printing
-    if (targetTokenRef) {
-      setSelectedInvoiceForSingleView({
-        ...newInvoiceObj,
-        tokenNo: targetTokenRef.tokenNo,
-        customerName: targetTokenRef.customerName,
-        mobile: targetTokenRef.mobile,
-        vehicle: `${targetTokenRef.brand} ${targetTokenRef.model} (${targetTokenRef.variant})`,
-        totalDealAmount: targetTokenRef.totalDealAmount,
-        parentToken: targetTokenRef,
-      });
+      // Reload live data
+      loadDealsData();
+    } catch (err) {
+      console.error("Error saving invoice payment:", err);
+      showToast(err.response?.data?.message || "Failed to save invoice. Please try again.", "error");
+    } finally {
+      setIsSubmittingInvoice(false);
     }
   };
 
@@ -1186,7 +516,7 @@ export default function GenerateInvoicePage() {
     const headers = [
       "Invoice No",
       "Date",
-      "Token No",
+      "Deal No",
       "Customer Name",
       "Mobile",
       "Vehicle",
@@ -1198,186 +528,84 @@ export default function GenerateInvoicePage() {
     ];
 
     const rows = allInvoicesList.map((i) => [
-      `"${i.invoiceNo}"`,
-      `"${i.date}"`,
-      `"${i.tokenNo}"`,
-      `"${i.customerName}"`,
-      `"${i.mobile}"`,
-      `"${i.vehicle}"`,
-      `"${i.installmentTitle}"`,
-      `"${i.paymentMode}"`,
-      `"${i.transactionRef}"`,
-      i.amountPaid,
-      `"${i.status}"`,
+      `"${i.invoiceNo || ""}"`,
+      `"${i.date || ""}"`,
+      `"${i.dealNumber || ""}"`,
+      `"${i.customerName || ""}"`,
+      `"${i.mobile || ""}"`,
+      `"${i.vehicle || ""}"`,
+      `"${i.installmentTitle || ""}"`,
+      `"${i.paymentMode || ""}"`,
+      `"${i.transactionRef || ""}"`,
+      i.amountPaid || 0,
+      `"${i.status || "Paid"}"`,
     ]);
 
-    const csvContent =
-      "data:text/csv;charset=utf-8," +
-      [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
-
-    const encodedUri = encodeURI(csvContent);
+    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute(
-      "download",
-      `CSD_All_Invoices_${new Date().toISOString().split("T")[0]}.csv`
-    );
-    document.body.appendChild(link);
+    link.href = url;
+    link.download = `DAL_All_Invoices_${new Date().toISOString().split("T")[0]}.csv`;
     link.click();
-    document.body.removeChild(link);
-
-    showToast("Exported all invoices to CSV successfully!", "success");
+    URL.revokeObjectURL(url);
+    showToast("All invoices exported to CSV!", "success");
   };
 
-  // Export Token-wise Statement to CSV
-  const handleExportTokenLedgerCSV = (token) => {
-    if (!token || !token.invoices) return;
-
-    const headers = [
-      "Token No",
-      "Customer Name",
-      "Vehicle",
-      "Invoice No",
-      "Date",
-      "Payment Stage",
-      "Payment Mode",
-      "Ref No",
-      "Amount Paid (INR)",
-    ];
-
-    const rows = token.invoices.map((inv) => [
-      `"${token.tokenNo}"`,
-      `"${token.customerName}"`,
-      `"${token.brand} ${token.model}"`,
-      `"${inv.invoiceNo}"`,
-      `"${inv.date}"`,
-      `"${inv.installmentTitle}"`,
-      `"${inv.paymentMode}"`,
-      `"${inv.transactionRef}"`,
-      inv.amountPaid,
-    ]);
-
-    const csvContent =
-      "data:text/csv;charset=utf-8," +
-      [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Ledger_${token.tokenNo}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    showToast(`Exported statement for ${token.tokenNo}`, "success");
-  };
-
-  // Print Invoice
+  // Print Invoice Handler
   const handlePrintInvoice = () => {
     window.print();
   };
 
-  if (!mounted) {
-    return (
-      <AdminLayout>
-        <div className="p-4 text-center text-muted">
-          <div className="spinner-border text-primary me-2" role="status"></div>
-          Loading Invoice Management System...
-        </div>
-      </AdminLayout>
-    );
-  }
-
   return (
     <AdminLayout>
-      {/* =========================================================================
-          PRINT-ONLY STYLESHEET: Ensures invoice prints on clean A4 sheet
-          ========================================================================= */}
-      <style jsx global>{`
-        @media print {
-          body * {
-            visibility: hidden !important;
-          }
-          #printableInvoiceArea,
-          #printableInvoiceArea * {
-            visibility: visible !important;
-          }
-          #printableInvoiceArea {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            margin: 0 !important;
-            padding: 20px !important;
-            background: #ffffff !important;
-            box-shadow: none !important;
-          }
-          .no-print {
-            display: none !important;
-          }
-        }
-      `}</style>
-
-      <div className="container-fluid px-3 px-lg-4 py-3">
-        {/* =====================================================================
-            PAGE HEADER & QUICK ACTIONS
-            ===================================================================== */}
+      <div className="container-fluid px-4 py-4" style={{ backgroundColor: "#F7F7F5", minHeight: "100vh" }}>
+        {/* Page Top Header */}
         <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
           <div>
-            <div className="d-flex align-items-center gap-2">
-              <span
-                className="badge rounded-pill"
-                style={{
-                  background: "rgba(88, 99, 42, 0.15)",
-                  color: "var(--primary, #58632A)",
-                  fontWeight: 700,
-                  fontSize: "0.75rem",
-                  letterSpacing: "0.5px",
-                }}
-              >
-                SUPER ADMIN BILLING DESK
+            <div className="d-flex align-items-center gap-2 mb-1">
+              <span className="badge bg-primary-subtle text-primary fw-bold px-2 py-1" style={{ fontSize: "0.75rem" }}>
+                <i className="bi bi-shield-check me-1"></i>Official CSD AFD Billing
               </span>
-              <span className="text-muted small">• Pipeline Customer Multi-Bill Flow</span>
+              <span className="badge bg-success-subtle text-success fw-bold px-2 py-1" style={{ fontSize: "0.75rem" }}>
+                <i className="bi bi-link-45deg me-1"></i>Live Deal Sync Active
+              </span>
             </div>
-            <h2
-              className="fw-bold mb-1 mt-1"
-              style={{ color: "#131C27", letterSpacing: "-0.5px" }}
-            >
-              Generate Invoice & Token Billing
-            </h2>
+            <h3 className="fw-bold text-dark mb-0 d-flex align-items-center gap-2">
+              <i className="bi bi-receipt-cutoff text-primary"></i>
+              Vehicle Deals & Invoices Register
+            </h3>
             <p className="text-muted small mb-0">
-              Select customer from deals &amp; bookings, generate sequential installment invoices (
-              <code>DAL-/YYYY/MM/XXXX</code>), consolidated statements &amp; PDF exports.
+              Manage locked deals, generate sequential tax invoices (`DAL-/YYYY/MM/XXXX`), and track payment receipts.
             </p>
           </div>
 
           <div className="d-flex flex-wrap align-items-center gap-2">
             <button
               type="button"
-              className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-2 shadow-sm"
-              onClick={handleResetDemoData}
-              title="Reload initial demo data"
+              className="btn btn-outline-secondary d-flex align-items-center gap-1.5 shadow-sm"
+              onClick={loadDealsData}
+              disabled={isLoadingDeals}
             >
-              <i className="bi bi-arrow-counterclockwise"></i>
-              <span>Reset Demo</span>
+              <i className={`bi bi-arrow-clockwise ${isLoadingDeals ? "spin-animation" : ""}`}></i>
+              <span>Refresh</span>
             </button>
 
             <button
               type="button"
-              className="btn btn-outline-dark btn-sm d-flex align-items-center gap-2 shadow-sm"
+              className="btn btn-outline-dark d-flex align-items-center gap-1.5 shadow-sm"
               onClick={handleExportAllInvoicesCSV}
             >
               <i className="bi bi-file-earmark-spreadsheet-fill text-success"></i>
-              <span>Export Invoices CSV</span>
+              <span>Export CSV</span>
             </button>
 
             <button
               type="button"
-              className="btn d-flex align-items-center gap-2 shadow-sm text-white"
+              className="btn text-white fw-bold shadow d-flex align-items-center gap-2"
               style={{
                 backgroundColor: "var(--primary, #58632A)",
                 borderColor: "var(--primary, #58632A)",
-                fontWeight: 600,
               }}
               onClick={handleOpenGenerateModal}
             >
@@ -1387,559 +615,428 @@ export default function GenerateInvoicePage() {
           </div>
         </div>
 
-        {/* =====================================================================
-            KPI SUMMARY METRIC CARDS
-            ===================================================================== */}
+        {/* Financial KPI Cards (Exact same metrics as Deals page) */}
         <div className="row g-3 mb-4">
-          {/* Card 1: Total Invoices */}
           <div className="col-12 col-sm-6 col-xl-3">
-            <div
-              className="card border-0 shadow-sm h-100 p-3"
-              style={{
-                borderRadius: "12px",
-                background: "linear-gradient(135deg, #131C27, #1e2d3d)",
-                color: "#ffffff",
-              }}
-            >
-              <div className="d-flex align-items-center justify-content-between">
-                <div>
-                  <span className="text-uppercase small text-light opacity-75 fw-semibold">
-                    Invoices Issued
-                  </span>
-                  <h3 className="fw-bold my-1 text-white">
-                    {metrics.totalInvoicesCount}
-                  </h3>
-                  <span className="small text-light opacity-75">
-                    Across {metrics.totalTokensCount} Customer Tokens
-                  </span>
-                </div>
-                <div
-                  className="rounded-circle d-flex align-items-center justify-content-center"
-                  style={{
-                    width: "48px",
-                    height: "48px",
-                    background: "rgba(220, 233, 162, 0.15)",
-                    color: "#DCE9A2",
-                    fontSize: "1.4rem",
-                  }}
-                >
-                  <i className="bi bi-receipt-cutoff"></i>
-                </div>
+            <div className="card border-0 shadow-sm rounded-3 p-3 bg-white h-100">
+              <div className="d-flex align-items-center justify-content-between mb-2">
+                <span className="small text-muted text-uppercase fw-bold">Total Deal Pipeline</span>
+                <span className="p-2 rounded-circle bg-primary-subtle text-primary">
+                  <i className="bi bi-currency-rupee fs-5"></i>
+                </span>
               </div>
+              <h3 className="fw-bold text-dark mb-1">₹{formatIndianCurrency(metrics.totalDealVolume)}</h3>
+              <span className="text-muted small">{metrics.totalDealsCount} Active Deals Booked</span>
             </div>
           </div>
 
-          {/* Card 2: Total Collected */}
           <div className="col-12 col-sm-6 col-xl-3">
-            <div
-              className="card border-0 shadow-sm h-100 p-3"
-              style={{
-                borderRadius: "12px",
-                background: "linear-gradient(135deg, #58632A, #3F4912)",
-                color: "#ffffff",
-              }}
-            >
-              <div className="d-flex align-items-center justify-content-between">
-                <div>
-                  <span className="text-uppercase small text-light opacity-75 fw-semibold">
-                    Total Collected
-                  </span>
-                  <h3 className="fw-bold my-1 text-white">
-                    {formatCurrency(metrics.totalCollected)}
-                  </h3>
-                  <span className="small text-light opacity-75">
-                    Realized payments received
-                  </span>
-                </div>
-                <div
-                  className="rounded-circle d-flex align-items-center justify-content-center"
-                  style={{
-                    width: "48px",
-                    height: "48px",
-                    background: "rgba(255, 255, 255, 0.2)",
-                    color: "#ffffff",
-                    fontSize: "1.4rem",
-                  }}
-                >
-                  <i className="bi bi-wallet2"></i>
-                </div>
+            <div className="card border-0 shadow-sm rounded-3 p-3 bg-white h-100">
+              <div className="d-flex align-items-center justify-content-between mb-2">
+                <span className="small text-muted text-uppercase fw-bold">Payments Collected</span>
+                <span className="p-2 rounded-circle bg-success-subtle text-success">
+                  <i className="bi bi-check2-circle fs-5"></i>
+                </span>
               </div>
+              <h3 className="fw-bold text-success mb-1">₹{formatIndianCurrency(metrics.totalCollected)}</h3>
+              <span className="text-muted small">Cleared via Verified Invoices</span>
             </div>
           </div>
 
-          {/* Card 3: Total Pending Balance */}
           <div className="col-12 col-sm-6 col-xl-3">
-            <div
-              className="card border-0 shadow-sm h-100 p-3"
-              style={{
-                borderRadius: "12px",
-                background: "linear-gradient(135deg, #EE6800, #C25400)",
-                color: "#ffffff",
-              }}
-            >
-              <div className="d-flex align-items-center justify-content-between">
-                <div>
-                  <span className="text-uppercase small text-light opacity-75 fw-semibold">
-                    Outstanding Balance
-                  </span>
-                  <h3 className="fw-bold my-1 text-white">
-                    {formatCurrency(metrics.totalPending)}
-                  </h3>
-                  <span className="small text-light opacity-75">
-                    To be collected via next bills
-                  </span>
-                </div>
-                <div
-                  className="rounded-circle d-flex align-items-center justify-content-center"
-                  style={{
-                    width: "48px",
-                    height: "48px",
-                    background: "rgba(255, 255, 255, 0.2)",
-                    color: "#ffffff",
-                    fontSize: "1.4rem",
-                  }}
-                >
-                  <i className="bi bi-hourglass-split"></i>
-                </div>
+            <div className="card border-0 shadow-sm rounded-3 p-3 bg-white h-100">
+              <div className="d-flex align-items-center justify-content-between mb-2">
+                <span className="small text-muted text-uppercase fw-bold">Pending Receivables</span>
+                <span className="p-2 rounded-circle bg-warning-subtle text-warning">
+                  <i className="bi bi-clock-history fs-5"></i>
+                </span>
               </div>
+              <h3 className="fw-bold text-danger mb-1">₹{formatIndianCurrency(metrics.totalPending)}</h3>
+              <span className="text-muted small">Remaining Balance across Deals</span>
             </div>
           </div>
 
-          {/* Card 4: Total Deal Volume */}
           <div className="col-12 col-sm-6 col-xl-3">
-            <div
-              className="card border-0 shadow-sm h-100 p-3"
-              style={{
-                borderRadius: "12px",
-                background: "linear-gradient(135deg, #000080, #131C27)",
-                color: "#ffffff",
-              }}
-            >
-              <div className="d-flex align-items-center justify-content-between">
-                <div>
-                  <span className="text-uppercase small text-light opacity-75 fw-semibold">
-                    Total Deal Value
-                  </span>
-                  <h3 className="fw-bold my-1 text-white">
-                    {formatCurrency(metrics.totalDealVolume)}
-                  </h3>
-                  <span className="small text-light opacity-75">
-                    Active CSD bookings volume
-                  </span>
-                </div>
-                <div
-                  className="rounded-circle d-flex align-items-center justify-content-center"
-                  style={{
-                    width: "48px",
-                    height: "48px",
-                    background: "rgba(255, 255, 255, 0.2)",
-                    color: "#ffffff",
-                    fontSize: "1.4rem",
-                  }}
-                >
-                  <i className="bi bi-shield-check"></i>
-                </div>
+            <div className="card border-0 shadow-sm rounded-3 p-3 bg-white h-100">
+              <div className="d-flex align-items-center justify-content-between mb-2">
+                <span className="small text-muted text-uppercase fw-bold">Sequential Invoices</span>
+                <span className="p-2 rounded-circle bg-info-subtle text-info">
+                  <i className="bi bi-receipt fs-5"></i>
+                </span>
               </div>
+              <h3 className="fw-bold text-primary mb-1">{metrics.totalInvoicesCount}</h3>
+              <span className="text-muted small">Issued DAL Tax Invoices</span>
             </div>
           </div>
         </div>
 
-        {/* =====================================================================
-            FILTER TABS & SEARCH BAR
-            ===================================================================== */}
-        <div
-          className="card border-0 shadow-sm mb-4"
-          style={{ borderRadius: "12px" }}
-        >
-          <div className="card-body p-3">
-            <div className="d-flex flex-wrap align-items-center justify-content-between gap-3">
-              {/* Tab Selector */}
-              <ul className="nav nav-pills" role="tablist">
-                <li className="nav-item">
-                  <button
-                    className={`nav-link d-flex align-items-center gap-2 py-2 px-3 fw-semibold ${activeTab === "tokens" ? "active" : ""
-                      }`}
-                    style={
-                      activeTab === "tokens"
-                        ? {
-                          backgroundColor: "var(--primary, #58632A)",
-                          color: "#fff",
-                          borderRadius: "8px",
-                        }
-                        : { color: "#4B5563" }
-                    }
-                    onClick={() => setActiveTab("tokens")}
-                  >
-                    <i className="bi bi-collection-fill"></i>
-                    <span>Customer Tokens (Multi-Bill Ledgers)</span>
-                    <span
-                      className={`badge rounded-pill ${activeTab === "tokens" ? "bg-light text-dark" : "bg-secondary text-white"
-                        }`}
-                    >
-                      {enrichedTokens.length}
-                    </span>
-                  </button>
-                </li>
-                <li className="nav-item">
-                  <button
-                    className={`nav-link d-flex align-items-center gap-2 py-2 px-3 fw-semibold ${activeTab === "all-invoices" ? "active" : ""
-                      }`}
-                    style={
-                      activeTab === "all-invoices"
-                        ? {
-                          backgroundColor: "var(--primary, #58632A)",
-                          color: "#fff",
-                          borderRadius: "8px",
-                        }
-                        : { color: "#4B5563" }
-                    }
-                    onClick={() => setActiveTab("all-invoices")}
-                  >
-                    <i className="bi bi-file-earmark-ruled-fill"></i>
-                    <span>All Invoices Master Register</span>
-                    <span
-                      className={`badge rounded-pill ${activeTab === "all-invoices"
-                        ? "bg-light text-dark"
-                        : "bg-secondary text-white"
-                        }`}
-                    >
-                      {allInvoicesList.length}
-                    </span>
-                  </button>
-                </li>
-              </ul>
-
-              {/* Search & Filters */}
-              <div className="d-flex flex-wrap align-items-center gap-2 flex-grow-1 justify-content-end">
-                <div
-                  className="input-group input-group-sm"
-                  style={{ maxWidth: "340px" }}
+        {/* Tab Navigation: Tab 1 (Deals / Customer Wise) vs Tab 2 (Date-wise All Invoices) */}
+        <div className="card border-0 shadow-sm rounded-3 mb-4 bg-white">
+          <div className="card-header bg-white border-bottom p-0">
+            <ul className="nav nav-tabs border-0 px-3 pt-2">
+              <li className="nav-item">
+                <button
+                  type="button"
+                  className={`nav-link border-0 py-3 px-4 fw-bold position-relative ${
+                    activeTab === "deals" ? "active text-primary" : "text-secondary"
+                  }`}
+                  style={{
+                    backgroundColor: "transparent",
+                    borderBottom: activeTab === "deals" ? "3px solid var(--primary, #58632A)" : "none",
+                  }}
+                  onClick={() => setActiveTab("deals")}
                 >
+                  <i className="bi bi-people-fill me-2"></i>
+                  Customer & Deal Invoices Register
+                  <span className="badge bg-primary-subtle text-primary rounded-pill ms-2">
+                    {filteredDeals.length} Deals
+                  </span>
+                </button>
+              </li>
+
+              <li className="nav-item">
+                <button
+                  type="button"
+                  className={`nav-link border-0 py-3 px-4 fw-bold position-relative ${
+                    activeTab === "all-invoices" ? "active text-primary" : "text-secondary"
+                  }`}
+                  style={{
+                    backgroundColor: "transparent",
+                    borderBottom: activeTab === "all-invoices" ? "3px solid var(--primary, #58632A)" : "none",
+                  }}
+                  onClick={() => setActiveTab("all-invoices")}
+                >
+                  <i className="bi bi-journal-text me-2"></i>
+                  All Invoices (Date-wise Master)
+                  <span className="badge bg-success-subtle text-success rounded-pill ms-2">
+                    {filteredAllInvoices.length} Invoices
+                  </span>
+                </button>
+              </li>
+            </ul>
+          </div>
+
+          {/* Filters & Search Bar (Exact same filters as Deals page) */}
+          <div className="card-body p-3 bg-light border-bottom">
+            <div className="d-flex flex-wrap align-items-center gap-2 justify-content-between">
+              <div className="d-flex flex-wrap align-items-center gap-2">
+                {/* Stage Filter */}
+                <div className="input-group input-group-sm" style={{ width: "165px" }}>
+                  <span className="input-group-text bg-light text-muted px-2" title="Delivery Stage">
+                    <i className="bi bi-truck me-1"></i>
+                    <span style={{ fontSize: "11px", fontWeight: "600" }}>Stage</span>
+                  </span>
+                  <select
+                    className="form-select form-select-sm px-1"
+                    value={stageFilter}
+                    onChange={(e) => setStageFilter(e.target.value)}
+                  >
+                    <option value="All">All Stages</option>
+                    <option value="booking_confirmed">Booked</option>
+                    <option value="in_transit">In Transit</option>
+                    <option value="ready_for_delivery">Ready for Delivery</option>
+                    <option value="delivered">Delivered</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+
+                {/* Payment Status Filter */}
+                <div className="input-group input-group-sm" style={{ width: "160px" }}>
+                  <span className="input-group-text bg-light text-muted px-2" title="Payment Status">
+                    <i className="bi bi-credit-card me-1"></i>
+                    <span style={{ fontSize: "11px", fontWeight: "600" }}>Payment</span>
+                  </span>
+                  <select
+                    className="form-select form-select-sm px-1"
+                    value={paymentFilter}
+                    onChange={(e) => setPaymentFilter(e.target.value)}
+                  >
+                    <option value="All">All Payments</option>
+                    <option value="Fully Paid">Fully Paid</option>
+                    <option value="Partially Paid">Partially Paid</option>
+                    <option value="Pending">Pending</option>
+                  </select>
+                </div>
+
+                {/* Date From */}
+                <div className="input-group input-group-sm" style={{ width: "155px" }}>
+                  <span className="input-group-text bg-light text-muted px-2">
+                    <i className="bi bi-calendar-event me-1"></i>
+                    <span style={{ fontSize: "11px", fontWeight: "600" }}>From</span>
+                  </span>
+                  <input
+                    type="date"
+                    className="form-control form-control-sm px-1"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                  />
+                </div>
+
+                {/* Date To */}
+                <div className="input-group input-group-sm" style={{ width: "155px" }}>
+                  <span className="input-group-text bg-light text-muted px-2">
+                    <i className="bi bi-calendar-event me-1"></i>
+                    <span style={{ fontSize: "11px", fontWeight: "600" }}>To</span>
+                  </span>
+                  <input
+                    type="date"
+                    className="form-control form-control-sm px-1"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                  />
+                </div>
+
+                {/* Reset Filters */}
+                {(startDate || endDate || stageFilter !== "All" || paymentFilter !== "All" || searchQuery) && (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary px-2 d-flex align-items-center gap-1"
+                    onClick={() => {
+                      setStartDate("");
+                      setEndDate("");
+                      setStageFilter("All");
+                      setPaymentFilter("All");
+                      setSearchQuery("");
+                    }}
+                    title="Clear Filters"
+                  >
+                    <i className="bi bi-x-circle"></i>
+                    <span>Reset</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Search */}
+              <div style={{ width: "230px" }}>
+                <div className="input-group input-group-sm">
                   <span className="input-group-text bg-white border-end-0">
                     <i className="bi bi-search text-muted"></i>
                   </span>
                   <input
                     type="text"
-                    className="form-control border-start-0 ps-0"
-                    placeholder={
-                      activeTab === "tokens"
-                        ? "Search Token, Customer, Phone, Car..."
-                        : "Search Invoice No, Token, Customer..."
-                    }
+                    className="form-control border-start-0"
+                    placeholder="Search name, phone, VIN, deal..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                   {searchQuery && (
                     <button
-                      className="btn btn-outline-secondary border-start-0"
+                      className="btn btn-outline-secondary border-start-0 bg-white"
+                      type="button"
                       onClick={() => setSearchQuery("")}
                     >
                       <i className="bi bi-x"></i>
                     </button>
                   )}
                 </div>
-
-                {activeTab === "tokens" && (
-                  <select
-                    className="form-select form-select-sm"
-                    style={{ maxWidth: "160px" }}
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                  >
-                    <option value="all">All Status</option>
-                    <option value="partial">Partial Payment</option>
-                    <option value="paid">Fully Settled</option>
-                  </select>
-                )}
-              </div>
-            </div>
-
-            {/* Date Range Filter Row - Positioned directly under Search Bar */}
-            <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 pt-2.5 mt-2 border-top">
-              <div className="d-flex flex-wrap align-items-center gap-2">
-                <span className="text-dark small fw-bold d-inline-flex align-items-center gap-1">
-                  <i className="bi bi-calendar-range text-primary"></i> Date Filter:
-                </span>
-                <div className="d-flex align-items-center gap-1">
-                  <span className="small text-muted">From:</span>
-                  <input
-                    type="date"
-                    className="form-control form-control-sm"
-                    style={{ width: "145px" }}
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                  />
-                </div>
-                <div className="d-flex align-items-center gap-1">
-                  <span className="small text-muted">To:</span>
-                  <input
-                    type="date"
-                    className="form-control form-control-sm"
-                    style={{ width: "145px" }}
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                  />
-                </div>
-                {(startDate || endDate) && (
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1 py-1 px-2"
-                    onClick={() => {
-                      setStartDate("");
-                      setEndDate("");
-                    }}
-                    title="Clear Date Filter"
-                  >
-                    <i className="bi bi-x-circle"></i> Clear Dates
-                  </button>
-                )}
-              </div>
-              <div className="text-muted small">
-                Showing <strong>{activeTab === "tokens" ? filteredTokens.length : filteredAllInvoices.length}</strong> {activeTab === "tokens" ? "token ledgers" : "invoices"}
-                {(startDate || endDate) && (
-                  <span className="badge bg-primary-subtle text-primary ms-2">
-                    Filtered by Date
-                  </span>
-                )}
               </div>
             </div>
           </div>
-        </div>
 
-        {/* =====================================================================
-            TAB 1: CUSTOMER TOKENS (MULTI-INVOICE GROUPED VIEW)
-            ===================================================================== */}
-        {activeTab === "tokens" && (
-          <div
-            className="card border-0 shadow-sm"
-            style={{ borderRadius: "12px" }}
-          >
-            <div className="table-responsive" style={{ minHeight: "360px" }}>
+          {/* =========================================================================
+              TAB 1 CONTENT: CUSTOMER & DEAL INVOICES REGISTER
+              (EXACT SAME COLUMNS AND FIELDS AS VEHICLE DEALS & BOOKINGS PAGE)
+              ========================================================================= */}
+          {activeTab === "deals" && (
+            <div className="table-responsive">
               <table className="table align-middle mb-0 table-hover">
-                <thead
-                  style={{
-                    backgroundColor: "#131C27",
-                    color: "#DCE9A2",
-                    fontSize: "0.85rem",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.5px",
-                  }}
-                >
+                <thead className="table-light small text-uppercase">
                   <tr>
-                    <th className="py-3 px-3" style={{ width: "50px" }}>#</th>
-                    <th className="py-3 text-center" style={{ width: "80px" }}>Actions</th>
-                    <th className="py-3">Token No & Date</th>
-                    <th className="py-3">Customer Details</th>
-                    <th className="py-3">Booked Vehicle</th>
-                    <th className="py-3 text-end">Total Deal</th>
-                    <th className="py-3 text-end">Paid (Invoices Sum)</th>
-                    <th className="py-3 text-end">Remaining Balance</th>
-                    <th className="py-3 text-center">Invoices</th>
-                    <th className="py-3 text-center">Status</th>
+                    <th style={{ width: "110px" }}># Deal</th>
+                    <th>Customer</th>
+                    <th>Vehicle & Spec</th>
+                    <th>Deal Financials</th>
+                    <th style={{ width: "180px" }}>Payment Status</th>
+                    <th>Delivery Stage</th>
+                    <th>Delivery Date</th>
+                    <th className="text-center" style={{ width: "120px" }}>Invoices</th>
+                    <th className="text-end px-3" style={{ width: "160px" }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody style={{ fontSize: "0.9rem" }}>
-                  {filteredTokens.length === 0 ? (
+                  {isLoadingDeals ? (
                     <tr>
-                      <td colSpan="10" className="text-center py-5 text-muted">
+                      <td colSpan="9" className="text-center py-5 text-muted">
+                        <div className="spinner-border spinner-border-sm me-2" role="status"></div>
+                        Loading vehicle deals & invoices...
+                      </td>
+                    </tr>
+                  ) : filteredDeals.length === 0 ? (
+                    <tr>
+                      <td colSpan="9" className="text-center py-5 text-muted">
                         <i className="bi bi-inbox fs-1 d-block mb-2 text-secondary opacity-50"></i>
-                        No matching customer tokens found. Click{" "}
-                        <strong>&quot;Generate New Invoice&quot;</strong> to add one!
+                        No vehicle deals found matching criteria.
                       </td>
                     </tr>
                   ) : (
-                    paginatedTokens.map((tok, index) => {
-                      const isComplete = tok.computedStatus === "Fully Paid";
+                    paginatedDeals.map((deal) => {
+                      const pctPaid = deal.computedPercentPaid || 0;
                       return (
-                        <tr key={tok.tokenNo}>
-                          {/* 1. Sr. No */}
-                          <td className="px-3 text-muted small">
-                            {(tokensPage - 1) * tokensPerPage + index + 1}
+                        <tr key={deal.id || deal.deal_number}>
+                          {/* 1. Deal ID Badge */}
+                          <td>
+                            <span className="badge bg-light text-primary border font-monospace px-2 py-1">
+                              {deal.deal_number || `#${deal.id}`}
+                            </span>
                           </td>
 
-                          {/* 2. Actions (3-Dots Dropdown Menu) */}
-                          <td className="text-center" onClick={(e) => e.stopPropagation()}>
-                            <div className="dropdown position-relative d-inline-block action-menu-container">
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-light border rounded-circle shadow-none p-0 d-inline-flex align-items-center justify-content-center"
-                                style={{ width: "32px", height: "32px", cursor: "pointer" }}
-                                title="Actions"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveActionMenuId(
-                                    activeActionMenuId === tok.tokenNo ? null : tok.tokenNo
-                                  );
-                                }}
-                              >
-                                <i className="bi bi-three-dots-vertical fs-6 text-dark"></i>
-                              </button>
-
-                              {activeActionMenuId === tok.tokenNo && (
-                                <div
-                                  className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute text-start"
-                                  style={{
-                                    minWidth: "200px",
-                                    zIndex: 1050,
-                                    top: "100%",
-                                    left: 0,
-                                    backgroundColor: "#FFFFFF",
-                                  }}
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  {/* View Invoices Ledger */}
-                                  <button
-                                    type="button"
-                                    className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small rounded-2 text-dark"
-                                    onClick={() => {
-                                      setActiveActionMenuId(null);
-                                      setSelectedTokenForMultiView(tok);
-                                    }}
-                                  >
-                                    <i className="bi bi-eye-fill text-primary"></i>
-                                    <span>View Invoices Ledger</span>
-                                  </button>
-
-                                  {/* Add Next Installment Bill */}
-                                  <button
-                                    type="button"
-                                    className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small rounded-2 fw-semibold text-success"
-                                    style={{ backgroundColor: "rgba(21, 128, 61, 0.06)" }}
-                                    onClick={() => {
-                                      setActiveActionMenuId(null);
-                                      handleOpenGenerateForToken(tok);
-                                    }}
-                                  >
-                                    <i className="bi bi-plus-circle-fill text-success"></i>
-                                    <span>Add Next Bill</span>
-                                  </button>
-
-                                  {/* Export Token Ledger CSV */}
-                                  <button
-                                    type="button"
-                                    className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small rounded-2 text-secondary"
-                                    onClick={() => {
-                                      setActiveActionMenuId(null);
-                                      handleExportTokenLedgerCSV(tok);
-                                    }}
-                                  >
-                                    <i className="bi bi-file-earmark-spreadsheet text-info"></i>
-                                    <span>Export Ledger (CSV)</span>
-                                  </button>
+                          {/* 2. Customer Particulars */}
+                          <td>
+                            <div>
+                              <h6 className="mb-0 text-dark fw-bold">{deal.customer_name}</h6>
+                              <div className="small text-muted">
+                                <i className="bi bi-telephone me-1"></i>
+                                {deal.customer_phone || "-"}
+                              </div>
+                              {deal.customer_city && (
+                                <div className="small text-secondary" style={{ fontSize: "11px" }}>
+                                  <i className="bi bi-geo-alt me-1"></i>{deal.customer_city}
                                 </div>
                               )}
                             </div>
                           </td>
 
-                          {/* Token & Date */}
+                          {/* 3. Vehicle & Spec Particulars */}
                           <td>
-                            <div className="fw-bold text-dark font-monospace">
-                              {tok.tokenNo}
+                            <div>
+                              <div className="fw-semibold text-dark">{deal.model_variant}</div>
+                              <div className="small text-muted d-flex align-items-center gap-1.5 mt-1 flex-wrap">
+                                <span className="badge bg-light text-dark border">
+                                  <i className="bi bi-palette me-1"></i>
+                                  {deal.color || "Standard"}
+                                </span>
+                                {deal.vin_chassis_number && (
+                                  <span className="badge bg-light text-secondary border font-monospace" title="VIN/Chassis">
+                                    {deal.vin_chassis_number}
+                                  </span>
+                                )}
+                                {deal.has_insurance === "Yes" ? (
+                                  <span className="badge bg-success-subtle text-success border border-success-subtle" title="Insurance Included">
+                                    <i className="bi bi-shield-check me-1"></i>Insurance: Yes
+                                  </span>
+                                ) : (
+                                  <span className="badge bg-light text-muted border" title="Insurance Not Included">
+                                    Insurance: No
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            <small className="text-muted">
-                              <i className="bi bi-calendar3 me-1"></i>
-                              {tok.bookingDate}
-                            </small>
                           </td>
 
-                          {/* Customer */}
+                          {/* 4. Deal Financials */}
                           <td>
-                            <div className="fw-semibold text-dark">
-                              {tok.customerName}
+                            <div>
+                              <div className="fw-bold text-dark fs-6">
+                                ₹{formatIndianCurrency(deal.net_amount || deal.total_amount)}
+                              </div>
+                              {deal.discount_amount > 0 && (
+                                <div className="small text-success" style={{ fontSize: "11px" }}>
+                                  Incl. ₹{formatIndianCurrency(deal.discount_amount)} disc.
+                                </div>
+                              )}
                             </div>
-                            <small className="text-muted d-block">
-                              <i className="bi bi-telephone me-1"></i>
-                              {tok.mobile}
-                            </small>
-                            {tok.serviceNo && (
-                              <span
-                                className="badge bg-light text-dark border px-2 py-0.5 mt-1"
-                                style={{ fontSize: "0.7rem" }}
-                              >
-                                {tok.serviceNo}
-                              </span>
-                            )}
                           </td>
 
-                          {/* Vehicle */}
+                          {/* 5. Payment Status & Progress */}
                           <td>
-                            <div className="fw-semibold text-dark">
-                              {tok.brand} {tok.model}
+                            <div style={{ maxWidth: "170px" }}>
+                              <div className="d-flex justify-content-between align-items-center small mb-1">
+                                <span className="fw-semibold text-success" style={{ fontSize: "11px" }}>
+                                  Paid: ₹{formatIndianCurrency(deal.computedTotalPaid || 0)}
+                                </span>
+                                <span className="fw-semibold text-danger" style={{ fontSize: "11px" }}>
+                                  Due: ₹{formatIndianCurrency(deal.computedBalanceDue || 0)}
+                                </span>
+                              </div>
+                              <div className="progress" style={{ height: "5px" }}>
+                                <div
+                                  className={`progress-bar ${pctPaid === 100 ? "bg-success" : "bg-warning"}`}
+                                  role="progressbar"
+                                  style={{ width: `${pctPaid}%` }}
+                                  aria-valuenow={pctPaid}
+                                  aria-valuemin="0"
+                                  aria-valuemax="100"
+                                ></div>
+                              </div>
+                              <div className="d-flex justify-content-between align-items-center mt-1">
+                                <span
+                                  className={`badge ${
+                                    deal.payment_status === "Fully Paid" || deal.computedBalanceDue === 0
+                                      ? "bg-success text-white"
+                                      : "bg-warning text-dark"
+                                  } px-2 py-0.5`}
+                                  style={{ fontSize: "10px" }}
+                                >
+                                  {deal.computedBalanceDue === 0 && deal.computedTotalPaid > 0 ? "Fully Paid" : deal.payment_status || "Partially Paid"}
+                                </span>
+                                <span className="text-muted" style={{ fontSize: "10px" }}>
+                                  {pctPaid}%
+                                </span>
+                              </div>
                             </div>
-                            <small className="text-muted d-block">
-                              {tok.variant}
-                            </small>
                           </td>
 
-                          {/* Deal Amount */}
-                          <td className="text-end fw-semibold">
-                            {formatCurrency(tok.totalDealAmount)}
+                          {/* 6. Delivery Stage */}
+                          <td>
+                            <span className={`badge text-capitalize px-2 py-1 ${getStageBadgeClass(deal.deal_status)}`}>
+                              {deal.deal_status?.replace(/_/g, " ") || "Booking Confirmed"}
+                            </span>
                           </td>
 
-                          {/* Total Paid (Sum of all invoices) */}
-                          <td className="text-end">
-                            <div className="fw-bold text-success">
-                              {formatCurrency(tok.computedTotalPaid)}
-                            </div>
-                            <div
-                              className="progress mt-1"
-                              style={{ height: "4px" }}
+                          {/* 7. Delivery Date */}
+                          <td>
+                            <span className="small text-dark fw-semibold">
+                              <i className="bi bi-calendar-event text-primary me-1"></i>
+                              {deal.expected_delivery_date
+                                ? new Date(deal.expected_delivery_date).toLocaleDateString("en-IN", {
+                                    day: "2-digit",
+                                    month: "short",
+                                    year: "numeric",
+                                  })
+                                : "Pending"}
+                            </span>
+                          </td>
+
+                          {/* 8. Invoices Count */}
+                          <td className="text-center">
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-primary px-2.5 py-1 d-inline-flex align-items-center gap-1 shadow-none"
+                              onClick={() => setSelectedDealForMultiView(deal)}
+                              title="View all invoices issued for this deal"
                             >
-                              <div
-                                className={`progress-bar ${isComplete ? "bg-success" : "bg-warning"
-                                  }`}
-                                role="progressbar"
+                              <i className="bi bi-receipt"></i>
+                              <span className="fw-bold">{deal.invoicesCount} Bills</span>
+                            </button>
+                          </td>
+
+                          {/* 9. Actions */}
+                          <td className="text-end px-3">
+                            <div className="d-flex justify-content-end gap-1.5">
+                              <button
+                                type="button"
+                                className="btn btn-sm text-white fw-bold d-inline-flex align-items-center gap-1 shadow-sm px-2.5"
                                 style={{
-                                  width: `${tok.computedPercentPaid}%`,
+                                  backgroundColor: "var(--primary, #58632A)",
+                                  borderColor: "var(--primary, #58632A)",
+                                  fontSize: "0.8rem",
                                 }}
-                              ></div>
+                                onClick={() => handleOpenGenerateForDeal(deal)}
+                                title="Add next invoice installment"
+                              >
+                                <i className="bi bi-plus-circle"></i>
+                                <span>Add Bill</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-light border d-inline-flex align-items-center shadow-none px-2"
+                                onClick={() => setSelectedDealForMultiView(deal)}
+                                title="View Deal Ledger"
+                              >
+                                <i className="bi bi-eye"></i>
+                              </button>
                             </div>
-                            <small
-                              className="text-muted"
-                              style={{ fontSize: "0.72rem" }}
-                            >
-                              {tok.computedPercentPaid}% Paid
-                            </small>
-                          </td>
-
-                          {/* Remaining Balance */}
-                          <td className="text-end">
-                            <span
-                              className={`fw-bold ${tok.computedBalanceDue > 0
-                                ? "text-danger"
-                                : "text-muted"
-                                }`}
-                            >
-                              {formatCurrency(tok.computedBalanceDue)}
-                            </span>
-                          </td>
-
-                          {/* Invoices Count Badge */}
-                          <td className="text-center">
-                            <span
-                              className="badge rounded-pill px-2.5 py-1.5"
-                              style={{
-                                background: "rgba(0, 0, 128, 0.1)",
-                                color: "#000080",
-                                fontWeight: 700,
-                              }}
-                            >
-                              <i className="bi bi-receipt me-1"></i>
-                              {tok.invoicesCount} {tok.invoicesCount === 1 ? "Bill" : "Bills"}
-                            </span>
-                          </td>
-
-                          {/* Status */}
-                          <td className="text-center">
-                            <span
-                              className={`badge rounded-pill px-2.5 py-1 ${isComplete
-                                ? "bg-success-subtle text-success"
-                                : "bg-warning-subtle text-warning"
-                                }`}
-                              style={{ fontWeight: 600 }}
-                            >
-                              {isComplete ? "Settled" : "Partial"}
-                            </span>
                           </td>
                         </tr>
                       );
@@ -1947,137 +1044,58 @@ export default function GenerateInvoicePage() {
                   )}
                 </tbody>
               </table>
+
+              {filteredDeals.length > dealsPerPage && (
+                <div className="p-3 border-top d-flex justify-content-between align-items-center bg-white">
+                  <span className="text-muted small">
+                    Showing {(dealsPage - 1) * dealsPerPage + 1} to{" "}
+                    {Math.min(dealsPage * dealsPerPage, filteredDeals.length)} of{" "}
+                    {filteredDeals.length} Deals
+                  </span>
+                  <Pagination
+                    currentPage={dealsPage}
+                    totalPages={Math.ceil(filteredDeals.length / dealsPerPage)}
+                    onPageChange={(p) => setDealsPage(p)}
+                  />
+                </div>
+              )}
             </div>
+          )}
 
-            {/* Pagination Controls for Tokens */}
-            {filteredTokens.length > 0 && (
-              <div className="p-3 border-top bg-white">
-                <Pagination
-                  currentPage={tokensPage}
-                  lastPage={lastTokensPage}
-                  total={totalTokens}
-                  perPage={tokensPerPage}
-                  onPageChange={(page) => setTokensPage(page)}
-                  onPerPageChange={(newPerPage) => {
-                    setTokensPerPage(newPerPage);
-                    setTokensPage(1);
-                  }}
-                  perPageOptions={[10, 20, 50, 100]}
-                  itemName="token ledgers"
-                />
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* =====================================================================
-            TAB 2: ALL INVOICES MASTER REGISTER (INDIVIDUAL BILLS)
-            ===================================================================== */}
-        {activeTab === "all-invoices" && (
-          <div
-            className="card border-0 shadow-sm"
-            style={{ borderRadius: "12px" }}
-          >
-            <div className="table-responsive" style={{ minHeight: "360px" }}>
+          {/* =========================================================================
+              TAB 2 CONTENT: ALL INVOICES REGISTER (DATE-WISE FLAT TABLE)
+              ========================================================================= */}
+          {activeTab === "all-invoices" && (
+            <div className="table-responsive">
               <table className="table align-middle mb-0 table-hover">
-                <thead
-                  style={{
-                    backgroundColor: "#131C27",
-                    color: "#DCE9A2",
-                    fontSize: "0.85rem",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.5px",
-                  }}
-                >
+                <thead className="table-light small text-uppercase">
                   <tr>
-                    <th className="py-3 px-3" style={{ width: "50px" }}>#</th>
-                    <th className="py-3 text-center" style={{ width: "80px" }}>Actions</th>
+                    <th className="py-3 px-3">#</th>
                     <th className="py-3">Invoice No</th>
                     <th className="py-3">Date & Time</th>
-                    <th className="py-3">Token Ref</th>
-                    <th className="py-3">Customer & Vehicle</th>
-                    <th className="py-3">Installment / Purpose</th>
+                    <th className="py-3">Deal Number</th>
+                    <th className="py-3">Customer</th>
+                    <th className="py-3">Vehicle & Spec</th>
+                    <th className="py-3">Installment Stage</th>
                     <th className="py-3 text-end">Amount Paid</th>
                     <th className="py-3">Payment Mode & Ref</th>
                     <th className="py-3 text-center">Status</th>
+                    <th className="py-3 text-end px-3">Action</th>
                   </tr>
                 </thead>
                 <tbody style={{ fontSize: "0.9rem" }}>
                   {filteredAllInvoices.length === 0 ? (
                     <tr>
-                      <td colSpan="10" className="text-center py-5 text-muted">
+                      <td colSpan="11" className="text-center py-5 text-muted">
                         <i className="bi bi-receipt fs-1 d-block mb-2 text-secondary opacity-50"></i>
-                        No invoices found.
+                        No invoices found matching criteria.
                       </td>
                     </tr>
                   ) : (
                     paginatedInvoices.map((inv, index) => (
                       <tr key={inv.id || inv.invoiceNo}>
-                        {/* 1. Sr. No */}
                         <td className="px-3 text-muted small">
                           {(invoicesPage - 1) * invoicesPerPage + index + 1}
-                        </td>
-
-                        {/* 2. Actions (3-Dots Dropdown Menu) */}
-                        <td className="text-center" onClick={(e) => e.stopPropagation()}>
-                          <div className="dropdown position-relative d-inline-block action-menu-container">
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-light border rounded-circle shadow-none p-0 d-inline-flex align-items-center justify-content-center"
-                              style={{ width: "32px", height: "32px", cursor: "pointer" }}
-                              title="Actions"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveActionMenuId(
-                                  activeActionMenuId === inv.invoiceNo ? null : inv.invoiceNo
-                                );
-                              }}
-                            >
-                              <i className="bi bi-three-dots-vertical fs-6 text-dark"></i>
-                            </button>
-
-                            {activeActionMenuId === inv.invoiceNo && (
-                              <div
-                                className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute text-start"
-                                style={{
-                                  minWidth: "200px",
-                                  zIndex: 1050,
-                                  top: "100%",
-                                  left: 0,
-                                  backgroundColor: "#FFFFFF",
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {/* View / Print Voucher */}
-                                <button
-                                  type="button"
-                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small rounded-2 text-dark"
-                                  onClick={() => {
-                                    setActiveActionMenuId(null);
-                                    setSelectedInvoiceForSingleView(inv);
-                                  }}
-                                >
-                                  <i className="bi bi-file-earmark-text-fill text-primary"></i>
-                                  <span>View / Print Voucher</span>
-                                </button>
-
-                                {/* View Token Ledger */}
-                                {inv.parentToken && (
-                                  <button
-                                    type="button"
-                                    className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small rounded-2 text-dark"
-                                    onClick={() => {
-                                      setActiveActionMenuId(null);
-                                      setSelectedTokenForMultiView(inv.parentToken);
-                                    }}
-                                  >
-                                    <i className="bi bi-collection-fill text-secondary"></i>
-                                    <span>View Token Ledger</span>
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                          </div>
                         </td>
 
                         {/* Invoice No */}
@@ -2102,401 +1120,240 @@ export default function GenerateInvoicePage() {
                           <small className="text-muted">{inv.time}</small>
                         </td>
 
-                        {/* Token No */}
+                        {/* Deal Number */}
                         <td>
-                          <span className="badge bg-light text-primary border font-monospace">
-                            {inv.tokenNo}
+                          <span className="badge bg-light text-primary border font-monospace px-2 py-1">
+                            {inv.dealNumber || "N/A"}
                           </span>
                         </td>
 
-                        {/* Customer & Vehicle */}
+                        {/* Customer */}
                         <td>
-                          <div className="fw-semibold text-dark">
-                            {inv.customerName}
+                          <div className="fw-bold text-dark">{inv.customerName}</div>
+                          <div className="text-muted small">
+                            <i className="bi bi-telephone me-1"></i>
+                            {inv.mobile}
                           </div>
-                          <small className="text-muted d-block text-truncate" style={{ maxWidth: "220px" }}>
-                            {inv.vehicle}
-                          </small>
+                          {inv.city && (
+                            <div className="small text-secondary" style={{ fontSize: "11px" }}>
+                              <i className="bi bi-geo-alt me-1"></i>{inv.city}
+                            </div>
+                          )}
                         </td>
 
-                        {/* Installment / Purpose */}
+                        {/* Vehicle & Spec */}
                         <td>
-                          <span className="fw-semibold text-dark">
+                          <div className="fw-semibold text-dark">{inv.vehicle}</div>
+                          <div className="small text-muted d-flex align-items-center gap-1.5 mt-1">
+                            <span className="badge bg-light text-dark border">
+                              {inv.color || "Standard"}
+                            </span>
+                            {inv.vin && (
+                              <span className="badge bg-light text-secondary border font-monospace">
+                                {inv.vin}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Installment Stage */}
+                        <td>
+                          <span className="badge bg-light text-dark border fw-semibold">
                             {inv.installmentTitle}
                           </span>
                         </td>
 
-                        {/* Amount */}
+                        {/* Amount Paid */}
                         <td className="text-end fw-bold text-success fs-6">
-                          {formatCurrency(inv.amountPaid)}
+                          ₹{formatIndianCurrency(inv.amountPaid)}
                         </td>
 
-                        {/* Mode & Ref */}
+                        {/* Payment Mode & Ref */}
                         <td>
-                          <div className="fw-semibold text-dark">
-                            {inv.paymentMode}
-                          </div>
-                          <small className="text-muted font-monospace">
+                          <div className="fw-semibold text-dark">{inv.paymentMode}</div>
+                          <div className="font-monospace text-muted small">
                             {inv.transactionRef}
-                          </small>
+                          </div>
                         </td>
 
                         {/* Status */}
                         <td className="text-center">
-                          <span className="badge bg-success-subtle text-success px-2 py-1">
-                            {inv.status || "Paid"}
+                          <span className="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
+                            <i className="bi bi-check2-circle me-1"></i>Paid
                           </span>
+                        </td>
+
+                        {/* Action */}
+                        <td className="text-end px-3">
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-dark d-inline-flex align-items-center gap-1 shadow-sm"
+                            onClick={() => setSelectedInvoiceForSingleView(inv)}
+                            title="View / Print Tax Invoice Voucher"
+                          >
+                            <i className="bi bi-file-earmark-text text-primary"></i>
+                            <span>View Bill</span>
+                          </button>
                         </td>
                       </tr>
                     ))
                   )}
                 </tbody>
               </table>
-            </div>
 
-            {/* Pagination Controls for Invoices */}
-            {filteredAllInvoices.length > 0 && (
-              <div className="p-3 border-top bg-white">
-                <Pagination
-                  currentPage={invoicesPage}
-                  lastPage={lastInvoicesPage}
-                  total={totalInvoices}
-                  perPage={invoicesPerPage}
-                  onPageChange={(page) => setInvoicesPage(page)}
-                  onPerPageChange={(newPerPage) => {
-                    setInvoicesPerPage(newPerPage);
-                    setInvoicesPage(1);
-                  }}
-                  perPageOptions={[10, 20, 50, 100]}
-                  itemName="invoices"
-                />
-              </div>
-            )}
-          </div>
-        )}
+              {filteredAllInvoices.length > invoicesPerPage && (
+                <div className="p-3 border-top d-flex justify-content-between align-items-center bg-white">
+                  <span className="text-muted small">
+                    Showing {(invoicesPage - 1) * invoicesPerPage + 1} to{" "}
+                    {Math.min(invoicesPage * invoicesPerPage, filteredAllInvoices.length)} of{" "}
+                    {filteredAllInvoices.length} Invoices
+                  </span>
+                  <Pagination
+                    currentPage={invoicesPage}
+                    totalPages={Math.ceil(filteredAllInvoices.length / invoicesPerPage)}
+                    onPageChange={(p) => setInvoicesPage(p)}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* =====================================================================
-            MODAL 1: GENERATE INVOICE (TASK 1: FIXED SUBMIT BUTTON & TASK 2: PIPELINE LEADS SELECTOR)
+            MODAL 1: GENERATE / ADD INVOICE MODAL
             ===================================================================== */}
         {isGenerateModalOpen && (
           <div
             className="modal fade show d-block"
             tabIndex="-1"
-            style={{ backgroundColor: "rgba(19, 28, 39, 0.70)", zIndex: 1050 }}
+            style={{ backgroundColor: "rgba(19, 28, 39, 0.65)", zIndex: 1050 }}
           >
-            <div
-              className="modal-dialog modal-lg modal-dialog-centered"
-              style={{ maxWidth: "800px", margin: "1.75rem auto" }}
-            >
-              {/* Form container with fixed height and flex-column layout */}
+            <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
               <form
                 onSubmit={handleSaveInvoice}
                 className="modal-content border-0 shadow-lg"
-                style={{
-                  maxHeight: "90vh",
-                  display: "flex",
-                  flexDirection: "column",
-                  borderRadius: "14px",
-                  overflow: "hidden",
-                  backgroundColor: "#ffffff",
-                }}
+                style={{ borderRadius: "14px", overflow: "hidden" }}
               >
-                {/* 1. Modal Header (Pinned at top) */}
+                {/* Header */}
                 <div
-                  className="modal-header px-4 py-3 flex-shrink-0"
+                  className="modal-header px-4 py-3"
                   style={{
                     backgroundColor: "#131C27",
                     color: "#DCE9A2",
-                    borderBottom: "1px solid rgba(220, 233, 162, 0.2)",
                   }}
                 >
                   <div className="d-flex align-items-center gap-2">
-                    <div
-                      className="rounded-circle d-flex align-items-center justify-content-center"
-                      style={{
-                        width: "36px",
-                        height: "36px",
-                        background: "rgba(88, 99, 42, 0.4)",
-                        color: "#DCE9A2",
-                      }}
-                    >
-                      <i className="bi bi-receipt-cutoff fs-5"></i>
-                    </div>
+                    <i className="bi bi-receipt fs-4 text-warning"></i>
                     <div>
                       <h5 className="modal-title fw-bold text-white mb-0">
-                        Generate Invoice Voucher
+                        Generate Tax Invoice & Record Payment
                       </h5>
-                      <small style={{ color: "#DCE9A2" }}>
-                        Format: <code>DAL-/YYYY/MM/XXXX</code> • Deals &amp; Bookings Flow
-                      </small>
+                      <span className="small" style={{ color: "#DCE9A2" }}>
+                        Links directly to Vehicle Deals & Bookings Database
+                      </span>
                     </div>
                   </div>
                   <button
                     type="button"
                     className="btn-close btn-close-white"
                     onClick={() => setIsGenerateModalOpen(false)}
-                    aria-label="Close"
                   ></button>
                 </div>
 
-                {/* 2. Modal Body (Scrollable with smooth scrolling) */}
-                <div
-                  className="modal-body px-4 py-3"
-                  style={{
-                    overflowY: "auto",
-                    flex: "1 1 auto",
-                    maxHeight: "calc(90vh - 135px)",
-                  }}
-                >
-                  {/* =========================================================================
-                      TASK: SELECT CUSTOMER FROM DEALS & BOOKINGS (SEARCHABLE DROPDOWN)
-                      ========================================================================= */}
-                  <div
-                    className="p-3 rounded mb-3 border shadow-sm deal-search-container position-relative"
-                    ref={dealDropdownRef}
-                    style={{
-                      background: "linear-gradient(135deg, rgba(88, 99, 42, 0.08), rgba(19, 28, 39, 0.04))",
-                      borderColor: "var(--border-color, #D9DDCC)",
-                    }}
-                  >
-                    <div className="d-flex align-items-center justify-content-between mb-2">
-                      <label className="form-label fw-bold text-dark small mb-0 d-flex align-items-center gap-2">
-                        <i className="bi bi-person-check-fill text-primary"></i>
-                        <span>Select Customer from Deals &amp; Bookings</span>
-                        <span className="text-danger">*</span>
-                      </label>
-                      <div className="d-flex align-items-center gap-2">
-                        {isLoadingDeals && (
-                          <span className="spinner-border spinner-border-sm text-primary" role="status"></span>
-                        )}
-                        <span className="badge bg-secondary-subtle text-secondary small">
-                          {deals.length} Booked Customers
-                        </span>
-                      </div>
+                {/* Body */}
+                <div className="modal-body px-4 py-3">
+                  {/* Deal Selector Dropdown */}
+                  <div className="mb-3 position-relative" ref={dealDropdownRef}>
+                    <label className="form-label fw-bold text-dark small mb-1">
+                      Select Vehicle Deal <span className="text-danger">*</span>
+                    </label>
+                    <div className="input-group">
+                      <span className="input-group-text bg-white">
+                        <i className="bi bi-car-front-fill text-primary"></i>
+                      </span>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Search & choose deal by customer name or deal number..."
+                        value={dealSearchQuery}
+                        onChange={(e) => {
+                          setDealSearchQuery(e.target.value);
+                          setIsDealDropdownOpen(true);
+                        }}
+                        onFocus={() => setIsDealDropdownOpen(true)}
+                        required
+                      />
                     </div>
 
-                    {/* Searchable Input Dropdown */}
-                    <div className="position-relative">
-                      <div className="input-group">
-                        <span
-                          className="input-group-text bg-white border-end-0 text-muted"
-                          style={{ borderColor: "var(--primary, #58632A)" }}
-                        >
-                          <i className="bi bi-search text-primary"></i>
-                        </span>
-                        <input
-                          type="text"
-                          className="form-control fw-semibold border-start-0 border-end-0 ps-1"
-                          style={{ borderColor: "var(--primary, #58632A)" }}
-                          placeholder="Search by customer name or phone number..."
-                          value={dealSearchQuery}
-                          onChange={(e) => {
-                            setDealSearchQuery(e.target.value);
-                            setIsDealDropdownOpen(true);
-                            if (!e.target.value.trim()) {
-                              setSelectedDealId("");
-                              setLinkedExistingToken(null);
-                            }
-                          }}
-                          onFocus={() => setIsDealDropdownOpen(true)}
-                        />
-                        {dealSearchQuery ? (
-                          <button
-                            type="button"
-                            className="btn btn-outline-secondary border-start-0 bg-white"
-                            style={{ borderColor: "var(--primary, #58632A)" }}
-                            onClick={() => {
-                              setDealSearchQuery("");
-                              setSelectedDealId("");
-                              setLinkedExistingToken(null);
-                              setIsDealDropdownOpen(false);
-                            }}
-                            title="Clear search"
-                          >
-                            <i className="bi bi-x-circle-fill text-danger"></i>
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="btn btn-outline-secondary border-start-0 bg-white"
-                            style={{ borderColor: "var(--primary, #58632A)" }}
-                            onClick={() => setIsDealDropdownOpen((prev) => !prev)}
-                            title="Toggle customer list"
-                          >
-                            <i className={`bi bi-chevron-${isDealDropdownOpen ? "up" : "down"}`}></i>
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Dropdown Results Box */}
-                      {isDealDropdownOpen && (
-                        <div
-                          className="position-absolute start-0 end-0 bg-white border rounded shadow-lg mt-1"
-                          style={{
-                            zIndex: 1060,
-                            maxHeight: "260px",
-                            overflowY: "auto",
-                            borderColor: "#58632A",
-                          }}
-                        >
-                          {filteredDeals.length === 0 ? (
-                            <div className="p-3 text-center text-muted small">
-                              <i className="bi bi-search me-1"></i>
-                              No customer found matching &ldquo;{dealSearchQuery}&rdquo;
-                            </div>
-                          ) : (
-                            filteredDeals.map((deal) => {
-                              const isSelected = String(deal.id) === String(selectedDealId);
-                              const dealName = deal.customer_name || deal.lead?.name || "Customer";
-                              const dealPhone = deal.customer_phone || deal.lead?.phone || "-";
-                              const dealNumber = deal.deal_number || `#DEAL-${deal.id}`;
-                              const brand = deal.brand_name || deal.brand?.name || "";
-                              const model = deal.model_variant || deal.lead?.model_variant || "";
-                              const balance = deal.balance_due ?? (deal.net_amount - (deal.total_paid || 0));
-
-                              return (
-                                <div
-                                  key={deal.id}
-                                  className={`p-2.5 px-3 border-bottom d-flex align-items-center justify-content-between text-start ${
-                                    isSelected ? "bg-primary-subtle" : ""
-                                  }`}
-                                  style={{
-                                    cursor: "pointer",
-                                    transition: "background-color 0.15s ease",
-                                  }}
-                                  onMouseEnter={(e) => {
-                                    if (!isSelected) e.currentTarget.style.backgroundColor = "#F7F8F3";
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    if (!isSelected) e.currentTarget.style.backgroundColor = "transparent";
-                                  }}
-                                  onClick={() => {
-                                    handleSelectBookingDeal(deal);
-                                    setDealSearchQuery(`${dealName} (${dealPhone})`);
-                                    setIsDealDropdownOpen(false);
-                                  }}
-                                >
-                                  <div className="me-2" style={{ minWidth: 0 }}>
-                                    <div className="d-flex align-items-center gap-2 flex-wrap mb-1">
-                                      <span className="badge bg-dark-subtle text-dark font-monospace small px-1.5 py-0.5">
-                                        {dealNumber}
-                                      </span>
-                                      <strong className="text-dark small text-truncate">
-                                        {dealName}
-                                      </strong>
-                                      <span className="badge bg-light text-secondary border small">
-                                        <i className="bi bi-telephone-fill me-1 text-success"></i>
-                                        {dealPhone}
-                                      </span>
-                                    </div>
-                                    <div className="small text-muted text-truncate" style={{ fontSize: "11.5px" }}>
-                                      <i className="bi bi-car-front-fill me-1 text-primary"></i>
-                                      {brand} {model} {deal.color ? `• ${deal.color}` : ""} {deal.customer_city ? `• ${deal.customer_city}` : ""}
-                                    </div>
-                                  </div>
-
-                                  <div className="text-end flex-shrink-0">
-                                    <div className="small fw-bold text-dark">
-                                      {formatCurrency(deal.net_amount || deal.total_amount || 0)}
-                                    </div>
-                                    <div className="extra-small text-muted" style={{ fontSize: "10.5px" }}>
-                                      Bal: <span className="text-danger fw-semibold">{formatCurrency(balance || 0)}</span>
-                                    </div>
-                                  </div>
+                    {isDealDropdownOpen && (
+                      <div
+                        className="dropdown-menu show w-100 shadow-lg border rounded-3 p-1 mt-1 position-absolute"
+                        style={{
+                          maxHeight: "260px",
+                          overflowY: "auto",
+                          zIndex: 1100,
+                        }}
+                      >
+                        {enrichedDeals
+                          .filter((d) => {
+                            if (!dealSearchQuery) return true;
+                            const q = dealSearchQuery.toLowerCase();
+                            return (
+                              d.customer_name?.toLowerCase().includes(q) ||
+                              d.deal_number?.toLowerCase().includes(q) ||
+                              d.model_variant?.toLowerCase().includes(q) ||
+                              d.customer_phone?.toLowerCase().includes(q)
+                            );
+                          })
+                          .slice(0, 15)
+                          .map((d) => (
+                            <button
+                              type="button"
+                              key={d.id}
+                              className="dropdown-item p-2 rounded-2 text-start d-flex justify-content-between align-items-center"
+                              onClick={() => handleSelectDeal(d)}
+                            >
+                              <div>
+                                <strong className="text-dark d-block">
+                                  {d.customer_name}{" "}
+                                  <span className="text-muted fw-normal">({d.customer_phone})</span>
+                                </strong>
+                                <small className="text-primary">{d.model_variant} • Color: {d.color || "Std"}</small>
+                              </div>
+                              <div className="text-end">
+                                <span className="badge bg-light text-dark font-monospace border mb-1">
+                                  {d.deal_number}
+                                </span>
+                                <div className="small text-danger fw-bold">
+                                  Due: ₹{formatIndianCurrency(d.computedBalanceDue)}
                                 </div>
-                              );
-                            })
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Linked Token Notification Banner */}
-                    {linkedExistingToken ? (
-                      <div
-                        className="mt-2.5 p-2.5 rounded d-flex align-items-center justify-content-between"
-                        style={{
-                          background: "rgba(21, 128, 61, 0.12)",
-                          border: "1px solid #16a34a",
-                        }}
-                      >
-                        <div className="small">
-                          <span className="badge bg-success me-2">EXISTING TOKEN LINKED</span>
-                          <strong className="text-dark font-monospace">
-                            {linkedExistingToken.tokenNo}
-                          </strong>{" "}
-                          • {linkedExistingToken.invoicesCount} Previous Bills Generated
-                        </div>
-                        <div className="small text-end">
-                          <span className="text-muted">Total Paid: </span>
-                          <strong className="text-success">
-                            {formatCurrency(linkedExistingToken.computedTotalPaid)}
-                          </strong>{" "}
-                          | <span className="text-muted">Balance: </span>
-                          <strong className="text-danger">
-                            {formatCurrency(linkedExistingToken.computedBalanceDue)}
-                          </strong>
-                        </div>
+                              </div>
+                            </button>
+                          ))}
                       </div>
-                    ) : selectedDealId ? (
-                      <div
-                        className="mt-2.5 p-2 rounded d-flex align-items-center justify-content-between"
-                        style={{
-                          background: "rgba(88, 99, 42, 0.1)",
-                          border: "1px dashed var(--primary, #58632A)",
-                        }}
-                      >
-                        <div className="small">
-                          <span className="badge bg-primary me-2">NEW TOKEN ALLOCATION</span>
-                          <span>Booking deal customer verified. Assigned Token: </span>
-                          <strong className="text-dark font-monospace">{formTokenNo}</strong>
-                        </div>
-                      </div>
-                    ) : null}
+                    )}
                   </div>
 
-                  {/* Auto-Generated Invoice No & Date */}
-                  <div className="row g-3 mb-3">
+                  {/* Top Bar: Invoice Number & Date */}
+                  <div className="row g-2 mb-3">
                     <div className="col-12 col-md-6">
-                      <label className="form-label fw-semibold small text-dark">
-                        Invoice Number (DAL-/YYYY/MM/XXXX)
+                      <label className="form-label small mb-1 fw-bold text-dark">
+                        Invoice Number (DAL-/)
                       </label>
-                      <div className="input-group">
-                        <span className="input-group-text bg-light text-muted font-monospace">
-                          #
-                        </span>
-                        <input
-                          type="text"
-                          className="form-control font-monospace fw-bold"
-                          value={formInvoiceNo}
-                          readOnly
-                          style={{
-                            backgroundColor: "#F7F7F5",
-                            color: "#131C27",
-                          }}
-                        />
-                        <button
-                          type="button"
-                          className="btn btn-outline-secondary"
-                          onClick={handleRegenerateInvoiceNo}
-                          title="Regenerate random 4-digit code"
-                        >
-                          <i className="bi bi-arrow-repeat"></i>
-                        </button>
-                      </div>
-                      <small className="text-muted" style={{ fontSize: "0.72rem" }}>
-                        Format: Current Year ({new Date().getFullYear()}) / Month (
-                        {String(new Date().getMonth() + 1).padStart(2, "0")}) / Random 4 Digits
-                      </small>
+                      <input
+                        type="text"
+                        className="form-control form-control-sm font-monospace fw-bold bg-light"
+                        value={formInvoiceNo}
+                        readOnly
+                      />
                     </div>
-
                     <div className="col-12 col-md-6">
-                      <label className="form-label fw-semibold small text-dark">
-                        Invoice Issue Date
+                      <label className="form-label small mb-1 fw-bold text-dark">
+                        Invoice Date <span className="text-danger">*</span>
                       </label>
                       <input
                         type="date"
-                        className="form-control"
+                        className="form-control form-control-sm"
                         value={formInvoiceDate}
                         onChange={(e) => setFormInvoiceDate(e.target.value)}
                         required
@@ -2504,254 +1361,158 @@ export default function GenerateInvoicePage() {
                     </div>
                   </div>
 
-                  {/* Customer & Vehicle Information Grid (Pre-filled from pipeline lead) */}
-                  <div className="p-3 bg-light rounded border mb-3">
-                    <div className="d-flex align-items-center justify-content-between mb-2">
-                      <h6 className="fw-bold text-dark mb-0">
-                        <i className="bi bi-person-badge-fill me-1 text-primary"></i>
-                        Customer & Vehicle Particulars
-                      </h6>
-                      <span className="text-muted small">
-                        Token Ref: <strong className="font-monospace text-dark">{formTokenNo || "Auto"}</strong>
-                      </span>
-                    </div>
+                  {/* Customer & Vehicle Info Snapshot (Exact Deal & Booking Fields) */}
+                  {selectedDealObject && (
+                    <div className="p-3 bg-light rounded border mb-3">
+                      <div className="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2">
+                        <span className="fw-bold text-dark small">
+                          <i className="bi bi-info-circle-fill text-primary me-1"></i>
+                          Selected Deal Particulars ({selectedDealObject.deal_number})
+                        </span>
+                        <span className={`badge text-capitalize ${getStageBadgeClass(selectedDealObject.deal_status)}`}>
+                          Stage: {selectedDealObject.deal_status?.replace(/_/g, " ")}
+                        </span>
+                      </div>
 
-                    <div className="row g-2">
-                      <div className="col-12 col-md-6">
-                        <label className="form-label small mb-1">
-                          Customer Name <span className="text-danger">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          className="form-control form-control-sm"
-                          placeholder="Customer full name"
-                          value={formCustomerName}
-                          onChange={(e) => setFormCustomerName(e.target.value)}
-                          required
-                        />
-                      </div>
-                      <div className="col-12 col-md-6">
-                        <label className="form-label small mb-1">
-                          Mobile Number <span className="text-danger">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          className="form-control form-control-sm"
-                          placeholder="e.g. 9825123456"
-                          value={formMobile}
-                          onChange={(e) => setFormMobile(e.target.value)}
-                          required
-                        />
-                      </div>
-                      <div className="col-12 col-md-4">
-                        <label className="form-label small mb-1">
-                          Service / Army No
-                        </label>
-                        <input
-                          type="text"
-                          className="form-control form-control-sm"
-                          placeholder="e.g. IC-78291X"
-                          value={formServiceNo}
-                          onChange={(e) => setFormServiceNo(e.target.value)}
-                        />
-                      </div>
-                      <div className="col-12 col-md-4">
-                        <label className="form-label small mb-1">
-                          Unit / Station
-                        </label>
-                        <input
-                          type="text"
-                          className="form-control form-control-sm"
-                          placeholder="e.g. Ahmedabad Cantt"
-                          value={formUnit}
-                          onChange={(e) => setFormUnit(e.target.value)}
-                        />
-                      </div>
-                      <div className="col-12 col-md-4">
-                        <label className="form-label small mb-1">
-                          City & State
-                        </label>
-                        <input
-                          type="text"
-                          className="form-control form-control-sm"
-                          placeholder="e.g. Ahmedabad, Gujarat"
-                          value={formCity}
-                          onChange={(e) => setFormCity(e.target.value)}
-                        />
-                      </div>
-                      <div className="col-12 col-md-4">
-                        <div className="d-flex align-items-center justify-content-between mb-1">
-                          <label className="form-label small mb-0 fw-bold text-dark">
-                            Brand (From Lead) <span className="text-danger">*</span>
-                          </label>
-                          {formBrand ? (
-                            <span className="badge bg-success-subtle text-success px-1.5 py-0" style={{ fontSize: "0.68rem" }}>
-                              <i className="bi bi-shield-check me-1"></i>From Lead
-                            </span>
-                          ) : (
-                            <span className="badge bg-light text-muted border px-1.5 py-0" style={{ fontSize: "0.68rem" }}>
-                              Auto-filled
-                            </span>
-                          )}
+                      <div className="row g-2">
+                        <div className="col-12 col-md-4">
+                          <label className="form-label small mb-0 text-muted">Customer Name</label>
+                          <div className="fw-bold text-dark">{selectedDealObject.customer_name}</div>
                         </div>
-                        <input
-                          type="text"
-                          className="form-control form-control-sm fw-bold"
-                          placeholder="Select lead to load brand"
-                          value={formBrand}
-                          readOnly
-                          style={{
-                            backgroundColor: "#F7F7F5",
-                            color: formBrand ? "var(--primary, #58632A)" : "#6c757d",
-                            cursor: "not-allowed",
-                            border: formBrand ? "1.5px solid var(--primary, #58632A)" : "1px solid #ced4da",
-                          }}
-                          required
-                        />
-                      </div>
-                      <div className="col-12 col-md-4">
-                        <div className="d-flex align-items-center justify-content-between mb-1">
-                          <label className="form-label small mb-0 fw-bold text-dark">
-                            Model / Variant <span className="text-danger">*</span>
-                          </label>
-                          {formModel && (
-                            <span className="badge bg-info-subtle text-info px-1.5 py-0" style={{ fontSize: "0.68rem" }}>
-                              From Lead
-                            </span>
-                          )}
+                        <div className="col-12 col-md-4">
+                          <label className="form-label small mb-0 text-muted">Customer Phone</label>
+                          <div className="fw-semibold text-dark">{selectedDealObject.customer_phone || "-"}</div>
                         </div>
-                        <input
-                          type="text"
-                          className="form-control form-control-sm fw-semibold"
-                          placeholder="Select lead to load model"
-                          value={formModel}
-                          readOnly
-                          style={{
-                            backgroundColor: "#F7F7F5",
-                            color: "#131C27",
-                            cursor: "not-allowed",
-                          }}
-                          required
-                        />
-                      </div>
-                      <div className="col-12 col-md-4">
-                        <label className="form-label small mb-1">
-                          Total Deal Value (₹)
-                        </label>
-                        <input
-                          type="number"
-                          className="form-control form-control-sm fw-bold"
-                          value={formTotalDealAmount}
-                          onChange={(e) => setFormTotalDealAmount(e.target.value)}
-                          required
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Payment Stage & Amount Paid */}
-                  <div className="row g-3 mb-3">
-                    <div className="col-12 col-md-6">
-                      <label className="form-label fw-semibold small text-dark">
-                        Payment Installment / Stage Title
-                      </label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        list="installmentPresetsList"
-                        value={formInstallmentTitle}
-                        onChange={(e) => setFormInstallmentTitle(e.target.value)}
-                        placeholder="e.g. 2nd Installment - Margin Money"
-                        required
-                      />
-                      <datalist id="installmentPresetsList">
-                        <option value="1st Installment - Token Booking Advance" />
-                        <option value="2nd Installment - Margin Money Deposit" />
-                        <option value="3rd Installment - CSD Base Value Transfer" />
-                        <option value="4th Installment - RTO, Insurance & Registration" />
-                        <option value="5th Installment - Accessories & Teflon Kit" />
-                        <option value="Full & Final Balance Settlement" />
-                      </datalist>
-                    </div>
-
-                    <div className="col-12 col-md-6">
-                      <label className="form-label fw-semibold small text-dark">
-                        Amount Paid on this Invoice (₹) <span className="text-danger">*</span>
-                      </label>
-                      <div className="input-group">
-                        <span className="input-group-text bg-light fw-bold">₹</span>
-                        <input
-                          type="number"
-                          className="form-control fw-bold fs-6 text-success"
-                          value={formAmountPaid}
-                          onChange={(e) => setFormAmountPaid(e.target.value)}
-                          placeholder="0"
-                          required
-                        />
+                        <div className="col-12 col-md-4">
+                          <label className="form-label small mb-0 text-muted">City & State</label>
+                          <div className="small text-dark">{selectedDealObject.customer_city || "Gujarat"}</div>
+                        </div>
+                        <div className="col-12 col-md-6 mt-2">
+                          <label className="form-label small mb-0 text-muted">Vehicle Model & Variant</label>
+                          <div className="fw-bold text-primary">{selectedDealObject.model_variant}</div>
+                        </div>
+                        <div className="col-12 col-md-3 mt-2">
+                          <label className="form-label small mb-0 text-muted">Color</label>
+                          <div className="text-dark fw-semibold">{selectedDealObject.color || "Standard"}</div>
+                        </div>
+                        <div className="col-12 col-md-3 mt-2">
+                          <label className="form-label small mb-0 text-muted">Insurance</label>
+                          <div>
+                            {selectedDealObject.has_insurance === "Yes" ? (
+                              <span className="badge bg-success-subtle text-success">Insurance: Yes</span>
+                            ) : (
+                              <span className="badge bg-secondary-subtle text-muted">Insurance: No</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="col-12 col-md-4 mt-2">
+                          <label className="form-label small mb-0 text-muted">Total Deal Net Amount</label>
+                          <div className="fw-bold text-dark">₹{formatIndianCurrency(selectedDealObject.net_amount || selectedDealObject.total_amount)}</div>
+                        </div>
+                        <div className="col-12 col-md-4 mt-2">
+                          <label className="form-label small mb-0 text-muted">Already Paid</label>
+                          <div className="fw-bold text-success">₹{formatIndianCurrency(selectedDealObject.computedTotalPaid)}</div>
+                        </div>
+                        <div className="col-12 col-md-4 mt-2">
+                          <label className="form-label small mb-0 text-muted">Balance Due</label>
+                          <div className="fw-bold text-danger">₹{formatIndianCurrency(selectedDealObject.computedBalanceDue)}</div>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
 
-                  {/* Payment Mode & Reference */}
-                  <div className="row g-3 mb-3">
+                  {/* Payment Details */}
+                  <div className="row g-2 mb-3">
                     <div className="col-12 col-md-6">
-                      <label className="form-label fw-semibold small text-dark">
-                        Payment Mode
+                      <label className="form-label small mb-1 fw-bold text-dark">
+                        Installment Stage Title <span className="text-danger">*</span>
                       </label>
                       <select
-                        className="form-select"
-                        value={formPaymentMode}
-                        onChange={(e) => setFormPaymentMode(e.target.value)}
+                        className="form-select form-select-sm"
+                        value={formInstallmentTitle}
+                        onChange={(e) => setFormInstallmentTitle(e.target.value)}
                       >
-                        <option value="UPI / GPay">UPI / GPay / PhonePe</option>
-                        <option value="NEFT / NetBanking">NEFT / NetBanking</option>
-                        <option value="RTGS">RTGS Bank Transfer</option>
-                        <option value="Cheque">Bank Cheque</option>
-                        <option value="Bank DD / Cheque">Demand Draft (DD)</option>
-                        <option value="Cash">Cash Receipt</option>
-                        <option value="Debit / Credit Card">POS Card Swipe</option>
+                        <option value="1st Installment - Token Booking Advance">1st Installment - Token Booking Advance</option>
+                        <option value="2nd Installment - Margin Money Deposit">2nd Installment - Margin Money Deposit</option>
+                        <option value="3rd Installment - RTO, Insurance & CSD Tax">3rd Installment - RTO, Insurance & CSD Tax</option>
+                        <option value="4th Installment - Balance Settlement">4th Installment - Balance Settlement</option>
+                        <option value="Full Settlement Payment">Full Settlement Payment</option>
                       </select>
                     </div>
 
                     <div className="col-12 col-md-6">
-                      <label className="form-label fw-semibold small text-dark">
-                        Transaction / Cheque / UTR Reference
+                      <label className="form-label small mb-1 fw-bold text-dark">
+                        Amount Paid (₹) <span className="text-danger">*</span>
                       </label>
                       <input
+                        type="number"
+                        className="form-control form-control-sm fw-bold text-success"
+                        value={formAmountPaid}
+                        onChange={(e) => setFormAmountPaid(e.target.value)}
+                        required
+                      />
+                    </div>
+
+                    <div className="col-12 col-md-4">
+                      <label className="form-label small mb-1 fw-bold text-dark">Payment Mode</label>
+                      <select
+                        className="form-select form-select-sm"
+                        value={formPaymentMode}
+                        onChange={(e) => setFormPaymentMode(e.target.value)}
+                      >
+                        <option value="UPI / GPay">UPI / GPay / QR</option>
+                        <option value="NEFT / RTGS">NEFT / RTGS Bank Transfer</option>
+                        <option value="Cheque / DD">Cheque / Demand Draft</option>
+                        <option value="Cash">Cash Receipt</option>
+                      </select>
+                    </div>
+
+                    <div className="col-12 col-md-4">
+                      <label className="form-label small mb-1 fw-bold text-dark">UTR / Transaction Reference</label>
+                      <input
                         type="text"
-                        className="form-control font-monospace"
-                        placeholder="e.g. UPI/625371928341 or CHQ-99120"
+                        className="form-control form-control-sm font-monospace"
+                        placeholder="e.g. UTR192837482"
                         value={formTransactionRef}
                         onChange={(e) => setFormTransactionRef(e.target.value)}
                       />
                     </div>
+
+                    <div className="col-12 col-md-4">
+                      <label className="form-label small mb-1 fw-bold text-dark">Bank Name</label>
+                      <input
+                        type="text"
+                        className="form-control form-control-sm"
+                        placeholder="e.g. HDFC Bank"
+                        value={formBankName}
+                        onChange={(e) => setFormBankName(e.target.value)}
+                      />
+                    </div>
                   </div>
 
-                  {/* Itemized Line Items Breakdown */}
+                  {/* Line Items Table */}
                   <div className="mb-3">
                     <div className="d-flex align-items-center justify-content-between mb-1">
-                      <label className="form-label fw-semibold small text-dark mb-0">
-                        Invoice Line Items Breakdown
-                      </label>
+                      <label className="form-label small fw-bold text-dark mb-0">Invoice Item Details</label>
                       <button
                         type="button"
-                        className="btn btn-sm btn-outline-secondary py-0 px-2"
-                        style={{ fontSize: "0.75rem" }}
+                        className="btn btn-sm btn-link p-0 text-primary small text-decoration-none"
                         onClick={handleAddLineItem}
                       >
-                        <i className="bi bi-plus me-1"></i>Add Row
+                        <i className="bi bi-plus-circle me-1"></i>Add Item
                       </button>
                     </div>
-                    <div className="table-responsive">
-                      <table className="table table-sm table-bordered mb-1 align-middle">
+
+                    <div className="table-responsive border rounded">
+                      <table className="table table-sm table-bordered align-middle mb-0">
                         <thead className="table-light small">
                           <tr>
                             <th>Description</th>
                             <th style={{ width: "90px" }}>HSN</th>
-                            <th style={{ width: "60px" }}>Qty</th>
+                            <th style={{ width: "65px" }}>Qty</th>
                             <th style={{ width: "110px" }}>Rate (₹)</th>
                             <th style={{ width: "120px" }}>Amount (₹)</th>
-                            <th style={{ width: "40px" }}></th>
+                            <th style={{ width: "35px" }}></th>
                           </tr>
                         </thead>
                         <tbody>
@@ -2762,10 +1523,8 @@ export default function GenerateInvoicePage() {
                                   type="text"
                                   className="form-control form-control-sm"
                                   value={item.desc}
-                                  placeholder="Item description"
-                                  onChange={(e) =>
-                                    handleLineItemChange(idx, "desc", e.target.value)
-                                  }
+                                  onChange={(e) => handleLineItemChange(idx, "desc", e.target.value)}
+                                  required
                                 />
                               </td>
                               <td>
@@ -2773,9 +1532,7 @@ export default function GenerateInvoicePage() {
                                   type="text"
                                   className="form-control form-control-sm"
                                   value={item.hsn}
-                                  onChange={(e) =>
-                                    handleLineItemChange(idx, "hsn", e.target.value)
-                                  }
+                                  onChange={(e) => handleLineItemChange(idx, "hsn", e.target.value)}
                                 />
                               </td>
                               <td>
@@ -2783,9 +1540,7 @@ export default function GenerateInvoicePage() {
                                   type="number"
                                   className="form-control form-control-sm"
                                   value={item.qty}
-                                  onChange={(e) =>
-                                    handleLineItemChange(idx, "qty", e.target.value)
-                                  }
+                                  onChange={(e) => handleLineItemChange(idx, "qty", e.target.value)}
                                 />
                               </td>
                               <td>
@@ -2793,19 +1548,15 @@ export default function GenerateInvoicePage() {
                                   type="number"
                                   className="form-control form-control-sm"
                                   value={item.rate}
-                                  onChange={(e) =>
-                                    handleLineItemChange(idx, "rate", e.target.value)
-                                  }
+                                  onChange={(e) => handleLineItemChange(idx, "rate", e.target.value)}
                                 />
                               </td>
                               <td>
                                 <input
                                   type="number"
-                                  className="form-control form-control-sm fw-semibold"
+                                  className="form-control form-control-sm fw-bold text-success"
                                   value={item.amount}
-                                  onChange={(e) =>
-                                    handleLineItemChange(idx, "amount", e.target.value)
-                                  }
+                                  onChange={(e) => handleLineItemChange(idx, "amount", e.target.value)}
                                 />
                               </td>
                               <td className="text-center">
@@ -2826,55 +1577,51 @@ export default function GenerateInvoicePage() {
                     </div>
                   </div>
 
-                  {/* Remarks / Notes */}
+                  {/* Remarks */}
                   <div className="mb-2">
-                    <label className="form-label fw-semibold small text-dark">
-                      Payment Remarks / Internal Notes
-                    </label>
+                    <label className="form-label small text-muted mb-1">Remarks / Internal Notes</label>
                     <textarea
-                      className="form-control"
+                      className="form-control form-control-sm"
                       rows="2"
-                      placeholder="Add any specific delivery condition, gate pass clearance or bank note..."
+                      placeholder="Add any specific delivery conditions or note..."
                       value={formRemarks}
                       onChange={(e) => setFormRemarks(e.target.value)}
                     ></textarea>
                   </div>
                 </div>
 
-                {/* =========================================================================
-                    TASK 1: FIXED & PROMINENT MODAL FOOTER WITH SUBMIT BUTTON
-                    This footer is pinned to the bottom of the modal dialog so it is ALWAYS visible!
-                    ========================================================================= */}
-                <div
-                  className="modal-footer px-4 py-3 bg-light flex-shrink-0 d-flex justify-content-between align-items-center"
-                  style={{
-                    borderTop: "1px solid #dee2e6",
-                    boxShadow: "0 -2px 10px rgba(0,0,0,0.05)",
-                  }}
-                >
+                {/* Footer */}
+                <div className="modal-footer px-4 py-3 bg-light d-flex justify-content-between">
                   <button
                     type="button"
-                    className="btn btn-outline-secondary px-3"
+                    className="btn btn-outline-secondary"
                     onClick={() => setIsGenerateModalOpen(false)}
+                    disabled={isSubmittingInvoice}
                   >
-                    <i className="bi bi-x me-1"></i>
                     Cancel
                   </button>
 
-                  <div className="d-flex align-items-center gap-2">
-                    <button
-                      type="submit"
-                      className="btn text-white px-4 py-2 fw-bold shadow d-flex align-items-center gap-2"
-                      style={{
-                        backgroundColor: "var(--primary, #58632A)",
-                        borderColor: "var(--primary, #58632A)",
-                        fontSize: "0.95rem",
-                      }}
-                    >
-                      <i className="bi bi-check2-circle fs-5"></i>
-                      <span>Generate & Save Invoice</span>
-                    </button>
-                  </div>
+                  <button
+                    type="submit"
+                    className="btn text-white px-4 fw-bold shadow d-flex align-items-center gap-2"
+                    style={{
+                      backgroundColor: "var(--primary, #58632A)",
+                      borderColor: "var(--primary, #58632A)",
+                    }}
+                    disabled={isSubmittingInvoice}
+                  >
+                    {isSubmittingInvoice ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm" role="status"></span>
+                        <span>Saving to Database...</span>
+                      </>
+                    ) : (
+                      <>
+                        <i className="bi bi-check2-circle fs-5"></i>
+                        <span>Generate & Save Invoice</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               </form>
             </div>
@@ -2882,19 +1629,16 @@ export default function GenerateInvoicePage() {
         )}
 
         {/* =====================================================================
-            MODAL 2: VIEW ALL INVOICES FOR TOKEN (CONSOLIDATED TIMELINE)
+            MODAL 2: VIEW ALL INVOICES FOR A SINGLE DEAL
             ===================================================================== */}
-        {selectedTokenForMultiView && (
+        {selectedDealForMultiView && (
           <div
             className="modal fade show d-block"
             tabIndex="-1"
             style={{ backgroundColor: "rgba(19, 28, 39, 0.65)", zIndex: 1050 }}
           >
             <div className="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
-              <div
-                className="modal-content border-0 shadow-lg"
-                style={{ borderRadius: "14px", overflow: "hidden" }}
-              >
+              <div className="modal-content border-0 shadow-lg" style={{ borderRadius: "14px", overflow: "hidden" }}>
                 {/* Header */}
                 <div
                   className="modal-header px-4 py-3"
@@ -2917,149 +1661,59 @@ export default function GenerateInvoicePage() {
                     </div>
                     <div>
                       <h5 className="modal-title fw-bold text-white mb-0">
-                        Consolidated Invoices Ledger: {selectedTokenForMultiView.tokenNo}
+                        Deal Ledger & Invoices: {selectedDealForMultiView.deal_number}
                       </h5>
                       <span className="small" style={{ color: "#DCE9A2" }}>
-                        Customer: {selectedTokenForMultiView.customerName} • {selectedTokenForMultiView.brand}{" "}
-                        {selectedTokenForMultiView.model}
+                        Customer: {selectedDealForMultiView.customer_name} • {selectedDealForMultiView.model_variant}
                       </span>
                     </div>
                   </div>
                   <button
                     type="button"
                     className="btn-close btn-close-white"
-                    onClick={() => setSelectedTokenForMultiView(null)}
+                    onClick={() => setSelectedDealForMultiView(null)}
                   ></button>
                 </div>
 
                 {/* Body */}
                 <div className="modal-body px-4 py-4">
-                  {/* Financial Summary Top Bar */}
+                  {/* Financial Summary */}
                   <div className="row g-3 mb-4">
-                    <div className="col-12 col-md-3">
+                    <div className="col-12 col-md-4">
                       <div className="card bg-light border-0 p-3 rounded">
-                        <span className="small text-muted text-uppercase fw-semibold">
-                          Total Deal Value
-                        </span>
+                        <span className="small text-muted text-uppercase fw-semibold">Net Deal Amount</span>
                         <h4 className="fw-bold text-dark my-1">
-                          {formatCurrency(selectedTokenForMultiView.totalDealAmount)}
+                          ₹{formatIndianCurrency(selectedDealForMultiView.net_amount || selectedDealForMultiView.total_amount)}
                         </h4>
-                        <span className="small text-muted">Vehicle + CSD Package</span>
+                        <span className="small text-muted">{selectedDealForMultiView.model_variant}</span>
                       </div>
                     </div>
-                    <div className="col-12 col-md-3">
-                      <div
-                        className="card border-0 p-3 rounded"
-                        style={{ background: "rgba(21, 128, 61, 0.1)" }}
-                      >
-                        <span className="small text-success text-uppercase fw-semibold">
-                          Total Invoices Paid ({selectedTokenForMultiView.invoicesCount} Bills)
-                        </span>
+                    <div className="col-12 col-md-4">
+                      <div className="card bg-success-subtle border-0 p-3 rounded">
+                        <span className="small text-success text-uppercase fw-semibold">Total Paid</span>
                         <h4 className="fw-bold text-success my-1">
-                          {formatCurrency(selectedTokenForMultiView.computedTotalPaid)}
+                          ₹{formatIndianCurrency(selectedDealForMultiView.computedTotalPaid)}
                         </h4>
-                        <span className="small text-muted">
-                          {selectedTokenForMultiView.computedPercentPaid}% Total Cleared
+                        <span className="small text-success">
+                          {selectedDealForMultiView.invoicesCount} Invoices Cleared
                         </span>
                       </div>
                     </div>
-                    <div className="col-12 col-md-3">
-                      <div
-                        className="card border-0 p-3 rounded"
-                        style={{ background: "rgba(220, 38, 38, 0.08)" }}
-                      >
-                        <span className="small text-danger text-uppercase fw-semibold">
-                          Outstanding Balance
-                        </span>
+                    <div className="col-12 col-md-4">
+                      <div className="card bg-danger-subtle border-0 p-3 rounded">
+                        <span className="small text-danger text-uppercase fw-semibold">Balance Due</span>
                         <h4 className="fw-bold text-danger my-1">
-                          {formatCurrency(selectedTokenForMultiView.computedBalanceDue)}
+                          ₹{formatIndianCurrency(selectedDealForMultiView.computedBalanceDue)}
                         </h4>
-                        <span className="small text-muted">Remaining to collect</span>
-                      </div>
-                    </div>
-                    <div className="col-12 col-md-3">
-                      <div className="card bg-light border-0 p-3 rounded d-flex justify-content-center">
-                        <div className="d-flex align-items-center justify-content-between mb-1">
-                          <span className="small fw-semibold text-dark">
-                            Settlement Progress
-                          </span>
-                          <span className="small fw-bold text-dark">
-                            {selectedTokenForMultiView.computedPercentPaid}%
-                          </span>
-                        </div>
-                        <div className="progress" style={{ height: "8px" }}>
-                          <div
-                            className={`progress-bar ${selectedTokenForMultiView.computedBalanceDue <= 0
-                              ? "bg-success"
-                              : "bg-warning"
-                              }`}
-                            style={{
-                              width: `${selectedTokenForMultiView.computedPercentPaid}%`,
-                            }}
-                          ></div>
-                        </div>
-                        <div className="mt-2 text-center">
-                          <span
-                            className={`badge ${selectedTokenForMultiView.computedBalanceDue <= 0
-                              ? "bg-success"
-                              : "bg-warning text-dark"
-                              }`}
-                          >
-                            {selectedTokenForMultiView.computedBalanceDue <= 0
-                              ? "Account Fully Settled"
-                              : "Active Billing in Progress"}
-                          </span>
-                        </div>
+                        <span className="small text-danger">Pending Receivables</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Customer Info Pill Strip */}
-                  <div className="bg-light p-3 rounded border mb-4 d-flex flex-wrap gap-4 align-items-center justify-content-between">
-                    <div>
-                      <small className="text-muted d-block">Customer Phone</small>
-                      <strong className="text-dark">
-                        {selectedTokenForMultiView.mobile}
-                      </strong>
-                    </div>
-                    <div>
-                      <small className="text-muted d-block">Service / Army No</small>
-                      <strong className="text-dark">
-                        {selectedTokenForMultiView.serviceNo || "N/A"}
-                      </strong>
-                    </div>
-                    <div>
-                      <small className="text-muted d-block">Unit / Station</small>
-                      <strong className="text-dark">
-                        {selectedTokenForMultiView.unit || "N/A"}
-                      </strong>
-                    </div>
-                    <div>
-                      <small className="text-muted d-block">Vehicle Details</small>
-                      <strong className="text-dark">
-                        {selectedTokenForMultiView.brand}{" "}
-                        {selectedTokenForMultiView.model} (
-                        {selectedTokenForMultiView.variant})
-                      </strong>
-                    </div>
-                    <div>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-dark d-flex align-items-center gap-1"
-                        onClick={() =>
-                          handleExportTokenLedgerCSV(selectedTokenForMultiView)
-                        }
-                      >
-                        <i className="bi bi-download"></i>
-                        <span>Export Ledger CSV</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* List of Invoices issued for this Token */}
+                  {/* Table of Invoices */}
                   <h6 className="fw-bold text-dark mb-3 d-flex align-items-center gap-2">
                     <i className="bi bi-receipt text-primary"></i>
-                    All Invoices Generated for this Customer ({selectedTokenForMultiView.invoicesCount} Invoices)
+                    All Invoices Issued for this Deal ({selectedDealForMultiView.invoicesCount} Invoices)
                   </h6>
 
                   <div className="table-responsive border rounded">
@@ -3068,8 +1722,8 @@ export default function GenerateInvoicePage() {
                         <tr>
                           <th className="py-2.5 px-3">#</th>
                           <th>Invoice No</th>
-                          <th>Date & Time</th>
-                          <th>Installment Title / Stage</th>
+                          <th>Date</th>
+                          <th>Installment Stage</th>
                           <th>Payment Mode</th>
                           <th>Reference / UTR</th>
                           <th className="text-end">Amount Paid</th>
@@ -3078,77 +1732,50 @@ export default function GenerateInvoicePage() {
                         </tr>
                       </thead>
                       <tbody style={{ fontSize: "0.88rem" }}>
-                        {(selectedTokenForMultiView.invoices || []).map(
-                          (inv, idx) => (
-                            <tr key={inv.id || idx}>
-                              <td className="px-3 text-muted fw-bold">
-                                {idx + 1}
-                              </td>
-                              <td>
-                                <span className="badge font-monospace bg-light text-dark border fw-bold">
-                                  {inv.invoiceNo}
-                                </span>
-                              </td>
-                              <td>
-                                <div className="fw-semibold text-dark">
-                                  {inv.date}
-                                </div>
-                                <small className="text-muted">{inv.time}</small>
-                              </td>
-                              <td className="fw-semibold text-dark">
-                                {inv.installmentTitle}
-                              </td>
-                              <td>{inv.paymentMode}</td>
-                              <td className="font-monospace text-muted small">
-                                {inv.transactionRef}
-                              </td>
-                              <td className="text-end fw-bold text-success">
-                                {formatCurrency(inv.amountPaid)}
-                              </td>
-                              <td className="text-center">
-                                <span className="badge bg-success-subtle text-success">
-                                  {inv.status || "Paid"}
-                                </span>
-                              </td>
-                              <td className="text-end px-3">
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-outline-dark d-inline-flex align-items-center gap-1"
-                                  onClick={() => {
-                                    setSelectedInvoiceForSingleView({
-                                      ...inv,
-                                      tokenNo: selectedTokenForMultiView.tokenNo,
-                                      customerName:
-                                        selectedTokenForMultiView.customerName,
-                                      mobile: selectedTokenForMultiView.mobile,
-                                      vehicle: `${selectedTokenForMultiView.brand} ${selectedTokenForMultiView.model} (${selectedTokenForMultiView.variant})`,
-                                      totalDealAmount:
-                                        selectedTokenForMultiView.totalDealAmount,
-                                      parentToken: selectedTokenForMultiView,
-                                    });
-                                  }}
-                                >
-                                  <i className="bi bi-file-earmark-text text-primary"></i>
-                                  <span>View Bill</span>
-                                </button>
-                              </td>
-                            </tr>
-                          )
-                        )}
+                        {(selectedDealForMultiView.invoices || []).map((inv, idx) => (
+                          <tr key={inv.id || idx}>
+                            <td className="px-3 text-muted fw-bold">{idx + 1}</td>
+                            <td>
+                              <span className="badge font-monospace bg-light text-dark border fw-bold">
+                                {inv.invoiceNo}
+                              </span>
+                            </td>
+                            <td>{inv.date}</td>
+                            <td className="fw-semibold text-dark">{inv.installmentTitle}</td>
+                            <td>{inv.paymentMode}</td>
+                            <td className="font-monospace text-muted small">{inv.transactionRef}</td>
+                            <td className="text-end fw-bold text-success">₹{formatIndianCurrency(inv.amountPaid)}</td>
+                            <td className="text-center">
+                              <span className="badge bg-success-subtle text-success">Paid</span>
+                            </td>
+                            <td className="text-end px-3">
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-dark d-inline-flex align-items-center gap-1"
+                                onClick={() => {
+                                  setSelectedInvoiceForSingleView({
+                                    ...inv,
+                                    dealNumber: selectedDealForMultiView.deal_number,
+                                    customerName: selectedDealForMultiView.customer_name,
+                                    mobile: selectedDealForMultiView.customer_phone,
+                                    email: selectedDealForMultiView.customer_email,
+                                    city: selectedDealForMultiView.customer_city,
+                                    vehicle: selectedDealForMultiView.model_variant,
+                                    color: selectedDealForMultiView.color,
+                                    vin: selectedDealForMultiView.vin_chassis_number,
+                                    regNo: selectedDealForMultiView.registration_number,
+                                    totalDealAmount: selectedDealForMultiView.net_amount || selectedDealForMultiView.total_amount,
+                                    parentDeal: selectedDealForMultiView,
+                                  });
+                                }}
+                              >
+                                <i className="bi bi-file-earmark-text text-primary"></i>
+                                <span>View Bill</span>
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
                       </tbody>
-                      <tfoot className="table-light fw-bold">
-                        <tr>
-                          <td colSpan="6" className="text-end px-3">
-                            Total Paid Across All Invoices:
-                          </td>
-                          <td className="text-end text-success fs-6">
-                            {formatCurrency(
-                              selectedTokenForMultiView.computedTotalPaid
-                            )}
-                          </td>
-                          <td colSpan="2"></td>
-                        </tr>
-                      </tfoot>
                     </table>
                   </div>
                 </div>
@@ -3158,7 +1785,7 @@ export default function GenerateInvoicePage() {
                   <button
                     type="button"
                     className="btn btn-outline-secondary"
-                    onClick={() => setSelectedTokenForMultiView(null)}
+                    onClick={() => setSelectedDealForMultiView(null)}
                   >
                     Close
                   </button>
@@ -3171,13 +1798,13 @@ export default function GenerateInvoicePage() {
                       borderColor: "var(--primary, #58632A)",
                     }}
                     onClick={() => {
-                      const tok = selectedTokenForMultiView;
-                      setSelectedTokenForMultiView(null);
-                      handleOpenGenerateForToken(tok);
+                      const d = selectedDealForMultiView;
+                      setSelectedDealForMultiView(null);
+                      handleOpenGenerateForDeal(d);
                     }}
                   >
                     <i className="bi bi-plus-circle-fill"></i>
-                    <span>Generate Next Installment Bill</span>
+                    <span>Add Next Installment Invoice</span>
                   </button>
                 </div>
               </div>
@@ -3186,7 +1813,7 @@ export default function GenerateInvoicePage() {
         )}
 
         {/* =====================================================================
-            MODAL 3: VIEW & PRINT INDIVIDUAL INVOICE VOUCHER (PRINTABLE PDF)
+            MODAL 3: VIEW & PRINT OFFICIAL DAL TAX INVOICE VOUCHER
             ===================================================================== */}
         {selectedInvoiceForSingleView && (
           <div
@@ -3195,10 +1822,7 @@ export default function GenerateInvoicePage() {
             style={{ backgroundColor: "rgba(19, 28, 39, 0.75)", zIndex: 1060 }}
           >
             <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
-              <div
-                className="modal-content border-0 shadow-lg"
-                style={{ borderRadius: "14px", overflow: "hidden" }}
-              >
+              <div className="modal-content border-0 shadow-lg" style={{ borderRadius: "14px", overflow: "hidden" }}>
                 {/* Modal Top Control Bar (Hidden on print) */}
                 <div
                   className="modal-header px-4 py-3 no-print"
@@ -3210,7 +1834,7 @@ export default function GenerateInvoicePage() {
                   <div className="d-flex align-items-center gap-2">
                     <i className="bi bi-receipt fs-4 text-warning"></i>
                     <h5 className="modal-title fw-bold text-white mb-0">
-                      Invoice Voucher Preview
+                      Tax Invoice Voucher Preview
                     </h5>
                     <span className="badge bg-light text-dark font-monospace ms-2">
                       {selectedInvoiceForSingleView.invoiceNo}
@@ -3248,110 +1872,71 @@ export default function GenerateInvoicePage() {
                               e.target.style.display = "none";
                             }}
                           />
-                          <div>
-                            <h3
-                              className="fw-bold mb-0"
-                              style={{
-                                color: "#131C27",
-                                letterSpacing: "-0.5px",
-                              }}
-                            >
-                              DEFENCE AUTOLINK
-                            </h3>
-                            <span
-                              className="small fw-semibold"
-                              style={{ color: "var(--primary, #58632A)" }}
-                            >
-                              CSD Canteen Automotive Facilitation & Delivery Desk
-                            </span>
-                          </div>
+                          <span
+                            className="fs-4 fw-bold"
+                            style={{ color: "#131C27", letterSpacing: "0.5px" }}
+                          >
+                            DEFENCE AUTOLINK
+                          </span>
                         </div>
-                        <div
-                          className="small text-muted mt-2"
-                          style={{ lineHeight: "1.4" }}
-                        >
-                          SG Highway Corporate Hub, Near Thaltej Cross Roads,
-                          Ahmedabad, Gujarat - 380054
-                          <br />
-                          GSTIN: <strong>24AAECD4920K1Z5</strong> • PAN:{" "}
-                          <strong>AAECD4920K</strong> • Contact:{" "}
-                          <strong>+91 97233 37621</strong>
+                        <div className="small text-muted" style={{ lineHeight: "1.4" }}>
+                          Multi-Brand Automotive CSD AFD Assistance Services<br />
+                          Main Ring Road Showroom, South Extension Part-II, New Delhi – 110049<br />
+                          GSTIN: <strong>07AAAAA0000A1Z5</strong> • Email: contact@defenceautolink.com
                         </div>
                       </div>
 
-                      {/* Invoice Badge & Details */}
                       <div className="text-end">
                         <span
-                          className="badge px-3 py-1.5 text-uppercase fw-bold mb-2"
+                          className="badge text-uppercase px-3 py-1.5 mb-2 d-inline-block"
                           style={{
-                            background: "rgba(21, 128, 61, 0.15)",
-                            color: "#15803D",
+                            backgroundColor: "var(--primary, #58632A)",
+                            color: "#FFFFFF",
                             fontSize: "0.85rem",
-                            border: "1px solid #15803D",
+                            letterSpacing: "0.5px",
                           }}
                         >
-                          TAX INVOICE / RECEIPT
+                          OFFICIAL TAX INVOICE
                         </span>
-                        <div className="fw-bold fs-5 text-dark font-monospace">
-                          {selectedInvoiceForSingleView.invoiceNo}
-                        </div>
-                        <div className="small text-muted">
-                          Date:{" "}
-                          <strong>
-                            {selectedInvoiceForSingleView.date} |{" "}
-                            {selectedInvoiceForSingleView.time}
+                        <div className="small">
+                          Invoice No:{" "}
+                          <strong className="font-monospace text-dark">
+                            {selectedInvoiceForSingleView.invoiceNo}
                           </strong>
                         </div>
-                        <div className="small text-muted font-monospace">
-                          Token Ref:{" "}
-                          <strong className="text-dark">
-                            {selectedInvoiceForSingleView.tokenNo}
+                        <div className="small text-muted">
+                          Date: <strong>{selectedInvoiceForSingleView.date}</strong>
+                        </div>
+                        <div className="small text-muted">
+                          Deal Ref:{" "}
+                          <strong className="font-monospace text-dark">
+                            {selectedInvoiceForSingleView.dealNumber || "DEAL-CSD"}
                           </strong>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Customer & Vehicle Information Grid */}
+                  {/* Customer & Vehicle Grid */}
                   <div className="row g-3 mb-4">
                     <div className="col-6">
                       <div className="border rounded p-3 h-100 bg-light">
                         <span className="small text-uppercase fw-bold text-muted d-block mb-1">
-                          Billed To (Customer Details):
+                          Billed To (Customer Particulars):
                         </span>
-                        <h6 className="fw-bold text-dark mb-1">
+                        <div className="fw-bold text-dark fs-6 mb-1">
                           {selectedInvoiceForSingleView.customerName}
-                        </h6>
+                        </div>
                         <div className="small text-muted">
-                          {selectedInvoiceForSingleView.parentToken?.serviceNo && (
-                            <div>
-                              Service No:{" "}
-                              <strong>
-                                {selectedInvoiceForSingleView.parentToken.serviceNo}
-                              </strong>
-                            </div>
-                          )}
-                          {selectedInvoiceForSingleView.parentToken?.unit && (
-                            <div>
-                              Unit:{" "}
-                              <strong>
-                                {selectedInvoiceForSingleView.parentToken.unit}
-                              </strong>
-                            </div>
-                          )}
-                          <div>
-                            Mobile:{" "}
-                            <strong>
-                              {selectedInvoiceForSingleView.mobile}
-                            </strong>
+                          Mobile: <strong>{selectedInvoiceForSingleView.mobile}</strong>
+                        </div>
+                        {selectedInvoiceForSingleView.email && (
+                          <div className="small text-muted">
+                            Email: {selectedInvoiceForSingleView.email}
                           </div>
-                          <div>
-                            City:{" "}
-                            <strong>
-                              {selectedInvoiceForSingleView.parentToken?.city ||
-                                "Ahmedabad, Gujarat"}
-                            </strong>
-                          </div>
+                        )}
+                        <div className="small text-muted">
+                          City: {selectedInvoiceForSingleView.city || "Ahmedabad, Gujarat"}
                         </div>
                       </div>
                     </div>
@@ -3359,115 +1944,65 @@ export default function GenerateInvoicePage() {
                     <div className="col-6">
                       <div className="border rounded p-3 h-100 bg-light">
                         <span className="small text-uppercase fw-bold text-muted d-block mb-1">
-                          Vehicle & Booking Particulars:
+                          Vehicle Booking Details:
                         </span>
-                        <h6 className="fw-bold text-dark mb-1">
+                        <div className="fw-bold text-primary fs-6 mb-1">
                           {selectedInvoiceForSingleView.vehicle}
-                        </h6>
+                        </div>
                         <div className="small text-muted">
-                          <div>
-                            Color:{" "}
-                            <strong>
-                              {selectedInvoiceForSingleView.parentToken?.color ||
-                                "As per CSD Indent"}
-                            </strong>
+                          Color: <strong>{selectedInvoiceForSingleView.color || "Standard"}</strong>
+                        </div>
+                        {selectedInvoiceForSingleView.vin && (
+                          <div className="small text-muted font-monospace">
+                            VIN / Chassis: {selectedInvoiceForSingleView.vin}
                           </div>
-                          <div>
-                            Total Deal Value:{" "}
-                            <strong className="text-dark">
-                              {formatCurrency(
-                                selectedInvoiceForSingleView.totalDealAmount
-                              )}
-                            </strong>
-                          </div>
-                          <div>
-                            Payment Purpose:{" "}
-                            <strong className="text-primary">
-                              {selectedInvoiceForSingleView.installmentTitle}
-                            </strong>
-                          </div>
+                        )}
+                        <div className="small text-muted">
+                          Installment Stage: <strong>{selectedInvoiceForSingleView.installmentTitle}</strong>
                         </div>
                       </div>
                     </div>
                   </div>
 
                   {/* Line Items Table */}
-                  <div className="table-responsive mb-4">
+                  <div className="table-responsive mb-3">
                     <table className="table table-bordered align-middle mb-0">
-                      <thead
-                        style={{
-                          backgroundColor: "#131C27",
-                          color: "#ffffff",
-                          fontSize: "0.82rem",
-                          textTransform: "uppercase",
-                        }}
-                      >
+                      <thead className="table-light small text-uppercase">
                         <tr>
-                          <th style={{ width: "40px" }} className="text-center">
-                            #
-                          </th>
-                          <th>Description of Service / Charges</th>
-                          <th style={{ width: "90px" }} className="text-center">
-                            HSN/SAC
-                          </th>
-                          <th style={{ width: "60px" }} className="text-center">
-                            Qty
-                          </th>
-                          <th style={{ width: "110px" }} className="text-end">
-                            Rate
-                          </th>
-                          <th style={{ width: "130px" }} className="text-end">
-                            Amount (INR)
-                          </th>
+                          <th style={{ width: "40px" }} className="text-center">#</th>
+                          <th>Item Description</th>
+                          <th style={{ width: "90px" }} className="text-center">HSN/SAC</th>
+                          <th style={{ width: "70px" }} className="text-center">Qty</th>
+                          <th style={{ width: "130px" }} className="text-end">Rate (₹)</th>
+                          <th style={{ width: "140px" }} className="text-end">Amount (₹)</th>
                         </tr>
                       </thead>
                       <tbody style={{ fontSize: "0.88rem" }}>
-                        {(selectedInvoiceForSingleView.items || [
-                          {
-                            desc: selectedInvoiceForSingleView.installmentTitle,
-                            hsn: "998313",
-                            qty: 1,
-                            rate: selectedInvoiceForSingleView.amountPaid,
-                            amount: selectedInvoiceForSingleView.amountPaid,
-                          },
-                        ]).map((item, idx) => (
+                        {(selectedInvoiceForSingleView.items || []).map((it, idx) => (
                           <tr key={idx}>
                             <td className="text-center text-muted">{idx + 1}</td>
-                            <td className="fw-semibold text-dark">
-                              {item.desc}
-                            </td>
-                            <td className="text-center font-monospace small">
-                              {item.hsn}
-                            </td>
-                            <td className="text-center">{item.qty}</td>
-                            <td className="text-end">
-                              {formatCurrency(item.rate)}
-                            </td>
-                            <td className="text-end fw-bold">
-                              {formatCurrency(item.amount)}
-                            </td>
+                            <td className="fw-semibold text-dark">{it.desc}</td>
+                            <td className="text-center font-monospace">{it.hsn || "998313"}</td>
+                            <td className="text-center">{it.qty || 1}</td>
+                            <td className="text-end">₹{formatIndianCurrency(it.rate || it.amount)}</td>
+                            <td className="text-end fw-bold text-dark">₹{formatIndianCurrency(it.amount)}</td>
                           </tr>
                         ))}
                       </tbody>
                       <tfoot>
                         <tr>
-                          <td
-                            colSpan="5"
-                            className="text-end fw-bold text-dark pt-3"
-                          >
-                            Current Invoice Total:
+                          <td colSpan="5" className="text-end fw-bold text-dark pt-3">
+                            Invoice Total:
                           </td>
                           <td className="text-end fw-bold fs-6 text-success pt-3">
-                            {formatCurrency(
-                              selectedInvoiceForSingleView.amountPaid
-                            )}
+                            ₹{formatIndianCurrency(selectedInvoiceForSingleView.amountPaid)}
                           </td>
                         </tr>
                       </tfoot>
                     </table>
                   </div>
 
-                  {/* Payment Details & Multi-Bill Ledger Status */}
+                  {/* Payment Details & Multi-Bill Status */}
                   <div className="row g-3 mb-4">
                     <div className="col-7">
                       <div className="border rounded p-3 bg-light">
@@ -3476,16 +2011,12 @@ export default function GenerateInvoicePage() {
                         </span>
                         <div className="small">
                           <div>
-                            Payment Method:{" "}
-                            <strong>
-                              {selectedInvoiceForSingleView.paymentMode}
-                            </strong>
+                            Payment Method: <strong>{selectedInvoiceForSingleView.paymentMode}</strong>
                           </div>
                           <div>
                             UTR / Transaction Ref:{" "}
                             <strong className="font-monospace text-dark">
-                              {selectedInvoiceForSingleView.transactionRef ||
-                                "Verified"}
+                              {selectedInvoiceForSingleView.transactionRef || "Verified"}
                             </strong>
                           </div>
                           {selectedInvoiceForSingleView.remarks && (
@@ -3502,17 +2033,13 @@ export default function GenerateInvoicePage() {
                         <div className="d-flex justify-content-between small text-muted mb-1">
                           <span>Total Agreed Deal Value:</span>
                           <strong className="text-dark">
-                            {formatCurrency(
-                              selectedInvoiceForSingleView.totalDealAmount
-                            )}
+                            ₹{formatIndianCurrency(selectedInvoiceForSingleView.totalDealAmount)}
                           </strong>
                         </div>
                         <div className="d-flex justify-content-between small text-muted mb-1">
                           <span>Paid in this Invoice:</span>
                           <strong className="text-success">
-                            {formatCurrency(
-                              selectedInvoiceForSingleView.amountPaid
-                            )}
+                            ₹{formatIndianCurrency(selectedInvoiceForSingleView.amountPaid)}
                           </strong>
                         </div>
                         <hr className="my-2" />
@@ -3530,22 +2057,10 @@ export default function GenerateInvoicePage() {
                       <span className="small fw-bold text-dark d-block mb-1">
                         Terms & Conditions:
                       </span>
-                      <ol
-                        className="small text-muted ps-3 mb-0"
-                        style={{ fontSize: "0.72rem", lineHeight: "1.4" }}
-                      >
-                        <li>
-                          This is an official computer-generated receipt for CSD
-                          AFD portal documentation.
-                        </li>
-                        <li>
-                          Token booking amounts are adjusted against final vehicle
-                          invoice upon delivery.
-                        </li>
-                        <li>
-                          Vehicle allocation is subject to availability and Army
-                          CSD AFD portal approval.
-                        </li>
+                      <ol className="small text-muted ps-3 mb-0" style={{ fontSize: "0.72rem", lineHeight: "1.4" }}>
+                        <li>This is an official computer-generated receipt for CSD AFD portal documentation.</li>
+                        <li>Token booking amounts are adjusted against final vehicle invoice upon delivery.</li>
+                        <li>Vehicle allocation is subject to availability and Army CSD AFD portal approval.</li>
                       </ol>
                     </div>
 
@@ -3571,7 +2086,7 @@ export default function GenerateInvoicePage() {
                   </div>
                 </div>
 
-                {/* Modal Footer Controls (Hidden on print) */}
+                {/* Footer Controls */}
                 <div className="modal-footer px-4 py-3 bg-light no-print d-flex justify-content-between">
                   <button
                     type="button"
@@ -3582,29 +2097,6 @@ export default function GenerateInvoicePage() {
                   </button>
 
                   <div className="d-flex gap-2">
-                    <button
-                      type="button"
-                      className="btn btn-outline-dark d-flex align-items-center gap-1"
-                      onClick={() => {
-                        const csvRow = `"${selectedInvoiceForSingleView.invoiceNo}","${selectedInvoiceForSingleView.date}","${selectedInvoiceForSingleView.tokenNo}","${selectedInvoiceForSingleView.customerName}",${selectedInvoiceForSingleView.amountPaid}`;
-                        const blob = new Blob(
-                          [
-                            `InvoiceNo,Date,TokenNo,CustomerName,Amount\n${csvRow}`,
-                          ],
-                          { type: "text/csv" }
-                        );
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement("a");
-                        a.href = url;
-                        a.download = `Invoice_${selectedInvoiceForSingleView.invoiceNo.replace(/[^a-zA-Z0-9]/g, "_")}.csv`;
-                        a.click();
-                        showToast("Invoice data exported!", "success");
-                      }}
-                    >
-                      <i className="bi bi-file-earmark-arrow-down"></i>
-                      <span>Export CSV</span>
-                    </button>
-
                     <button
                       type="button"
                       className="btn btn-primary d-flex align-items-center gap-1 fw-bold"

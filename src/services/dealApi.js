@@ -52,8 +52,22 @@ export function normalizeDeal(d) {
       }
     }
 
+    let invNo = p.invoice_no || p.invoice_number || "";
+    if (!invNo && typeof p.notes === "string" && p.notes) {
+      const invMatch = p.notes.match(/(?:Invoice(?:\s*No)?|INV):\s*([^,\)\n•]+)/i);
+      if (invMatch && invMatch[1]) invNo = invMatch[1].trim();
+    }
+    if (!invNo) {
+      const pDate = new Date(p.payment_date || p.created_at || Date.now());
+      const y = isNaN(pDate.getFullYear()) ? new Date().getFullYear() : pDate.getFullYear();
+      const m = isNaN(pDate.getMonth()) ? "01" : String(pDate.getMonth() + 1).padStart(2, "0");
+      const pIdNum = p.id ? String(1000 + Number(p.id)) : "1042";
+      invNo = `DAL-/${y}/${m}/${pIdNum}`;
+    }
+
     return {
       ...p,
+      invoice_no: invNo,
       status: p.status === "rejected" ? "rejected" : "cleared",
       transaction_reference: ref,
       bank_name: bank,
@@ -357,7 +371,10 @@ export const dealApi = {
     const bankStr = payload.bank_name ? String(payload.bank_name).trim() : "";
     const receivedBy = payload.received_by ? String(payload.received_by).trim() : "";
 
+    const invNo = payload.invoice_no ? String(payload.invoice_no).trim() : "";
+
     const metaParts = [];
+    if (invNo) metaParts.push(`Invoice: ${invNo}`);
     if (refStr) metaParts.push(`UTR: ${refStr}`);
     if (bankStr) metaParts.push(`Bank: ${bankStr}`);
     if (receivedBy) metaParts.push(`Received By: ${receivedBy}`);
@@ -375,6 +392,8 @@ export const dealApi = {
       payment_status: "cleared",
       is_cleared: 1,
       payment_date: payload.payment_date || new Date().toISOString().split("T")[0],
+      invoice_no: invNo,
+      invoice_number: invNo,
       transaction_reference: refStr,
       reference_no: refStr,
       reference_number: refStr,
