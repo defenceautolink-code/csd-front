@@ -13,16 +13,22 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
   const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const userStr = localStorage.getItem("user");
-      if (userStr) {
-        try {
-          setCurrentUser(JSON.parse(userStr));
-        } catch (e) {
-          console.error(e);
+    const syncUser = () => {
+      if (typeof window !== "undefined") {
+        const userStr = localStorage.getItem("user");
+        if (userStr) {
+          try {
+            setCurrentUser(JSON.parse(userStr));
+          } catch (e) {
+            console.error(e);
+          }
         }
       }
-    }
+    };
+
+    syncUser();
+    window.addEventListener("csd_user_updated", syncUser);
+    return () => window.removeEventListener("csd_user_updated", syncUser);
   }, []);
 
   const isLinkActive = (path) => {
@@ -577,6 +583,16 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                   <span>Reports & Analytics</span>
                 </Link>
               </li>
+              <li className="nav-item">
+                <Link
+                  href="/admin/expense-detail"
+                  className={`nav-link ${isLinkActive("/admin/expense-detail") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-journal-text"></i>
+                  <span>Expense Details</span>
+                </Link>
+              </li>
             </ul>
 
             <div className="nav-section-title">Master Data</div>
@@ -643,16 +659,6 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
               </li>
               <li className="nav-item">
                 <Link
-                  href="/admin/expense-detail"
-                  className={`nav-link ${isLinkActive("/admin/expense-detail") ? "active" : ""}`}
-                  onClick={onCloseMobile}
-                >
-                  <i className="bi bi-journal-text"></i>
-                  <span>Expense Details</span>
-                </Link>
-              </li>
-              <li className="nav-item">
-                <Link
                   href="/admin/lead-source"
                   className={`nav-link ${isLinkActive("/admin/lead-source") ? "active" : ""}`}
                   onClick={onCloseMobile}
@@ -689,53 +695,67 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
           </>
         )}
 
-        {/* Services & Support - Only for roles that have support (SA, SM, SE, Rec) */}
-        {userRole !== "Accountant" && (
-          <>
-            <div className="nav-section-title">Services & Alerts</div>
-            <ul className="sidebar-nav">
-              <li className="nav-item">
-                <a
-                  href="#"
-                  className="nav-link"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    showToast("Dealership CRM Helpdesk is available 24/7", "info");
-                  }}
-                >
-                  <i className="bi bi-question-circle-fill"></i>
-                  <span>Help & Support</span>
-                </a>
-              </li>
-            </ul>
-          </>
-        )}
+        {/* Account & Profile Menu - Universal for all roles/panels */}
+        <div className="nav-section-title">Account</div>
+        <ul className="sidebar-nav">
+          <li className="nav-item">
+            <Link
+              href="/admin/profile"
+              className={`nav-link ${isLinkActive("/admin/profile") ? "active" : ""}`}
+              onClick={onCloseMobile}
+            >
+              <i className="bi bi-person-badge-fill"></i>
+              <span>My Profile</span>
+            </Link>
+          </li>
+          <li className="nav-item">
+            <a
+              href="#"
+              className="nav-link"
+              onClick={(e) => {
+                e.preventDefault();
+                showToast("Dealership CRM Helpdesk is available 24/7", "info");
+              }}
+            >
+              <i className="bi bi-question-circle-fill"></i>
+              <span>Help & Support</span>
+            </a>
+          </li>
+        </ul>
       </div>
 
       {/* Sidebar User Profile Footer */}
       <div className="sidebar-footer">
         <div className="sidebar-user-card">
-          <div
-            style={{
-              width: 38,
-              height: 38,
-              borderRadius: "50%",
-              background: getRoleBadgeGradient(),
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontWeight: "bold",
-              fontSize: "1rem",
-              color: "#fff",
-              flexShrink: 0,
-            }}
+          <Link
+            href="/admin/profile"
+            className="d-flex align-items-center gap-2 text-decoration-none"
+            style={{ minWidth: 0, flex: 1 }}
+            onClick={onCloseMobile}
+            title="View & Manage Profile"
           >
-            {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : "A"}
-          </div>
-          <div className="sidebar-user-info" style={{ minWidth: 0 }}>
-            <h6 className="sidebar-user-name text-truncate">{currentUser?.name || "Alexander Vance"}</h6>
-            <p className="sidebar-user-role text-truncate">{userRole}</p>
-          </div>
+            <div
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: "50%",
+                background: getRoleBadgeGradient(),
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontWeight: "bold",
+                fontSize: "1rem",
+                color: "#fff",
+                flexShrink: 0,
+              }}
+            >
+              {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : "A"}
+            </div>
+            <div className="sidebar-user-info" style={{ minWidth: 0 }}>
+              <h6 className="sidebar-user-name text-truncate mb-0">{currentUser?.name || "Alexander Vance"}</h6>
+              <p className="sidebar-user-role text-truncate mb-0">{userRole}</p>
+            </div>
+          </Link>
           <button
             type="button"
             className="btn btn-link text-secondary p-0 border-0"

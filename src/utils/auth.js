@@ -366,6 +366,11 @@ export function canAccessAdminPath(pathname, customUser = undefined) {
   const user = customUser !== undefined ? customUser : getAuthenticatedUser();
   if (!user || !user.role) return false;
 
+  // Universal access: All authenticated roles (Admin, Sales Manager, Sales Executive, Accountant, Receptionist) can access their profile page
+  if (pathname === "/admin/profile" || pathname.startsWith("/admin/profile/")) {
+    return true;
+  }
+
   const currentRole = normalizeRole(user.role);
 
   // Determine prefix role requirement and normalize to /admin/*

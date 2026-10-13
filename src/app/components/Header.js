@@ -42,16 +42,22 @@ export default function Header({ onToggleSidebar, onQuickAddLead }) {
 
   useEffect(() => {
     setMounted(true);
-    if (typeof window !== "undefined") {
-      const userStr = localStorage.getItem("user");
-      if (userStr) {
-        try {
-          setCurrentUser(JSON.parse(userStr));
-        } catch (e) {
-          console.error(e);
+    const syncUser = () => {
+      if (typeof window !== "undefined") {
+        const userStr = localStorage.getItem("user");
+        if (userStr) {
+          try {
+            setCurrentUser(JSON.parse(userStr));
+          } catch (e) {
+            console.error(e);
+          }
         }
       }
-    }
+    };
+
+    syncUser();
+    window.addEventListener("csd_user_updated", syncUser);
+    return () => window.removeEventListener("csd_user_updated", syncUser);
   }, []);
 
   const handleSignOut = (e) => {
@@ -267,18 +273,14 @@ export default function Header({ onToggleSidebar, onQuickAddLead }) {
                 <span className="text-muted small">{currentUser?.email || "user@carcrm.com"}</span>
               </div>
               <div className="pt-2">
-                <a
+                <Link
                   className="dropdown-item py-2 d-flex align-items-center"
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    showToast(`Signed in as ${currentUser?.name} (${currentUser?.role})`, "info");
-                    setShowProfileMenu(false);
-                  }}
+                  href="/admin/profile"
+                  onClick={() => setShowProfileMenu(false)}
                   style={{ color: "var(--text-primary)" }}
                 >
                   <i className="bi bi-person me-2 text-primary"></i> My Profile
-                </a>
+                </Link>
                 <hr className="dropdown-divider my-1" style={{ borderColor: "var(--border-color)" }} />
                 <a
                   className="dropdown-item py-2 d-flex align-items-center text-danger"

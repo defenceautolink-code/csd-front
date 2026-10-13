@@ -254,6 +254,9 @@ export const dealApi = {
         received_by_name: initReceivedBy,
         recorded_by: initReceivedBy,
         notes: fullNotes,
+        invoice_no: payload.initial_payment.invoice_no
+          ? String(payload.initial_payment.invoice_no).trim()
+          : `DAL-/${new Date().getFullYear()}/${String(new Date().getMonth() + 1).padStart(2, "0")}/${Math.floor(1000 + Math.random() * 9000)}`,
       };
 
       if (refStr) {
@@ -371,7 +374,12 @@ export const dealApi = {
     const bankStr = payload.bank_name ? String(payload.bank_name).trim() : "";
     const receivedBy = payload.received_by ? String(payload.received_by).trim() : "";
 
-    const invNo = payload.invoice_no ? String(payload.invoice_no).trim() : "";
+    const now = new Date();
+    const yr = now.getFullYear();
+    const mo = String(now.getMonth() + 1).padStart(2, "0");
+    const randSeq = Math.floor(1000 + Math.random() * 9000);
+    const fallbackInvNo = `DAL-/${yr}/${mo}/${randSeq}`;
+    const invNo = payload.invoice_no ? String(payload.invoice_no).trim() : fallbackInvNo;
 
     const metaParts = [];
     if (invNo) metaParts.push(`Invoice: ${invNo}`);

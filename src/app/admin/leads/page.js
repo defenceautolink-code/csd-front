@@ -1148,7 +1148,7 @@ export default function LeadsPage() {
           </div>
 
           <div className="page-header-actions d-flex align-items-center gap-2 flex-wrap">
-            {can("lead.send_wishes") && <button
+            {/* {can("lead.send_wishes") && <button
               className="btn btn-outline-custom d-flex align-items-center gap-1"
               style={{ color: "#f43f5e", borderColor: "rgba(244, 63, 94, 0.4)" }}
               onClick={handleTriggerGreetings}
@@ -1157,7 +1157,7 @@ export default function LeadsPage() {
             >
               <i className="bi bi-gift-fill"></i>
               <span>{isTriggeringWishes ? "Sending..." : "Send Today's Wishes"}</span>
-            </button>}
+            </button>} */}
 
             <Link href="/admin/follow-up" className="btn btn-outline-custom">
               <i className="bi bi-telephone-outbound-fill text-warning"></i>
