@@ -1649,39 +1649,27 @@ export default function LeadsPage() {
 
                             {activeActionMenuId === lead.id && (
                               <div
-                                className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute start-0 text-start"
+                                className="dropdown-menu show shadow-lg border rounded-3 p-1.5 position-absolute start-0 text-start"
                                 style={{
-                                  minWidth: "215px",
+                                  minWidth: "205px",
                                   zIndex: 1050,
                                   top: "100%",
                                   backgroundColor: "#FFFFFF",
+                                  boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.08)",
                                 }}
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                {/* View Full 360 Detail Page */}
-                                <Link
-                                  href={`/admin/leads/${lead.id}`}
-                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-primary"
-                                  style={{ backgroundColor: "rgba(13, 110, 253, 0.08)" }}
-                                  onClick={() => setActiveActionMenuId(null)}
-                                >
-                                  <i className="bi bi-person-lines-fill text-primary"></i>
-                                  <span>View 360 Profile</span>
-                                </Link>
-
-                                <div className="dropdown-divider my-1"></div>
-
                                 {/* Convert to Deal */}
                                 <button
                                   type="button"
-                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-bold text-success"
-                                  style={{ backgroundColor: "rgba(21, 128, 61, 0.08)" }}
+                                  className="dropdown-item d-flex align-items-center gap-2.5 py-2 px-3 rounded-2 fw-semibold text-success"
+                                  style={{ fontSize: "0.85rem" }}
                                   onClick={() => {
                                     setActiveActionMenuId(null);
                                     setConvertDealTarget(lead);
                                   }}
                                 >
-                                  <i className="bi bi-trophy-fill text-success"></i>
+                                  <i className="bi bi-trophy-fill text-success text-center" style={{ width: "18px", fontSize: "0.95rem" }}></i>
                                   <span>Convert to Deal</span>
                                 </button>
 
@@ -1691,13 +1679,14 @@ export default function LeadsPage() {
                                 {(can("lead.followup") || can("followup.log_call") || !currentUser) && (
                                   <button
                                     type="button"
-                                    className="dropdown-item d-flex align-items-center gap-2 py-1 px-3 small text-dark"
+                                    className="dropdown-item d-flex align-items-center gap-2.5 py-2 px-3 rounded-2 text-dark"
+                                    style={{ fontSize: "0.85rem" }}
                                     onClick={() => {
                                       setActiveActionMenuId(null);
                                       handleOpenFollowUpModal(lead);
                                     }}
                                   >
-                                    <i className="bi bi-telephone-plus text-success"></i>
+                                    <i className="bi bi-telephone-plus text-primary text-center" style={{ width: "18px", fontSize: "0.95rem" }}></i>
                                     <span>Log Follow-Up</span>
                                   </button>
                                 )}
@@ -1706,26 +1695,28 @@ export default function LeadsPage() {
                                 {can("lead.send_quotation") && (
                                   <Link
                                     href={`/admin/quotation/create?lead_id=${lead.id}`}
-                                    className="dropdown-item d-flex align-items-center gap-2 py-1 px-3 small text-dark text-decoration-none"
+                                    className="dropdown-item d-flex align-items-center gap-2.5 py-2 px-3 rounded-2 text-dark text-decoration-none"
+                                    style={{ fontSize: "0.85rem" }}
                                     onClick={() => setActiveActionMenuId(null)}
                                   >
-                                    <i className="bi bi-file-earmark-spreadsheet text-primary"></i>
+                                    <i className="bi bi-file-earmark-spreadsheet text-info text-center" style={{ width: "18px", fontSize: "0.95rem" }}></i>
                                     <span>Send Quotation</span>
                                   </Link>
                                 )}
 
-                                {/* Quick View Modal */}
+                                {/* View Lead Details */}
                                 {(can("lead.view_assigned") || can("lead.view_all")) && (
                                   <button
                                     type="button"
-                                    className="dropdown-item d-flex align-items-center gap-2 py-1 px-3 small text-dark"
+                                    className="dropdown-item d-flex align-items-center gap-2.5 py-2 px-3 rounded-2 text-dark"
+                                    style={{ fontSize: "0.85rem" }}
                                     onClick={() => {
                                       setActiveActionMenuId(null);
                                       handleOpenViewLead(lead);
                                     }}
                                   >
-                                    <i className="bi bi-eye text-info"></i>
-                                    <span>Quick View Modal</span>
+                                    <i className="bi bi-eye text-secondary text-center" style={{ width: "18px", fontSize: "0.95rem" }}></i>
+                                    <span>View Lead Details</span>
                                   </button>
                                 )}
 
@@ -1733,7 +1724,8 @@ export default function LeadsPage() {
                                 {can("lead.edit") && (
                                   <button
                                     type="button"
-                                    className="dropdown-item d-flex align-items-center gap-2 py-1 px-3 small text-dark"
+                                    className="dropdown-item d-flex align-items-center gap-2.5 py-2 px-3 rounded-2 text-dark"
+                                    style={{ fontSize: "0.85rem" }}
                                     onClick={() => {
                                       setActiveActionMenuId(null);
                                       setEditLead({
@@ -1762,7 +1754,7 @@ export default function LeadsPage() {
                                       if (lead.model_id) fetchEditVariants(lead.model_id);
                                     }}
                                   >
-                                    <i className="bi bi-pencil text-warning"></i>
+                                    <i className="bi bi-pencil-square text-warning text-center" style={{ width: "18px", fontSize: "0.95rem" }}></i>
                                     <span>Edit Lead</span>
                                   </button>
                                 )}
@@ -1773,13 +1765,14 @@ export default function LeadsPage() {
                                 {can("lead.delete") && (
                                   <button
                                     type="button"
-                                    className="dropdown-item d-flex align-items-center gap-2 py-1 px-3 small text-danger"
+                                    className="dropdown-item d-flex align-items-center gap-2.5 py-2 px-3 rounded-2 text-danger"
+                                    style={{ fontSize: "0.85rem" }}
                                     onClick={() => {
                                       setActiveActionMenuId(null);
                                       setDeleteTarget(lead);
                                     }}
                                   >
-                                    <i className="bi bi-trash"></i>
+                                    <i className="bi bi-trash3-fill text-danger text-center" style={{ width: "18px", fontSize: "0.95rem" }}></i>
                                     <span>Delete Lead</span>
                                   </button>
                                 )}
