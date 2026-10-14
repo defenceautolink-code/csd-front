@@ -67,13 +67,14 @@ export default function GenerateInvoicePage() {
   const [formInvoiceDate, setFormInvoiceDate] = useState(() => {
     return new Date().toISOString().split("T")[0];
   });
-  const [formInstallmentTitle, setFormInstallmentTitle] = useState("1st Installment - Token Booking Advance");
+  const [formInstallmentTitle, setFormInstallmentTitle] = useState("Down Payment");
   const [formPaymentMode, setFormPaymentMode] = useState("UPI / GPay");
   const [formTransactionRef, setFormTransactionRef] = useState("");
   const [formBankName, setFormBankName] = useState("HDFC Bank");
   const [formReceivedBy, setFormReceivedBy] = useState("");
-  const [formAmountPaid, setFormAmountPaid] = useState("50000");
+  const [formAmountPaid, setFormAmountPaid] = useState("0");
   const [formRemarks, setFormRemarks] = useState("");
+  const [isDealLocked, setIsDealLocked] = useState(false);
 
   // Dynamic Line Items in Invoice
   const [formLineItems, setFormLineItems] = useState([
@@ -316,42 +317,50 @@ export default function GenerateInvoicePage() {
     setIsDealDropdownOpen(false);
 
     const netVal = Number(deal.net_amount || deal.total_amount || 0);
-    const nextCount = (deal.invoices || []).length + 1;
-    let stageTitle = `${nextCount}th Installment`;
-    if (nextCount === 1) stageTitle = "1st Installment - Token Booking Advance";
-    else if (nextCount === 2) stageTitle = "2nd Installment - Margin Money Deposit";
-    else if (nextCount === 3) stageTitle = "3rd Installment - RTO, Insurance & CSD Tax";
-    else if (nextCount >= 4) stageTitle = `${nextCount}th Installment - Balance Settlement`;
+    const totalPaid = Number(deal.paid_amount ?? deal.total_paid ?? (deal.computedTotalPaid || 0));
+    const remaining = Math.max(0, netVal - totalPaid);
 
-    setFormInstallmentTitle(stageTitle);
+    const invoicesCount = (deal.invoices || []).length;
+    let defaultType = "Down Payment";
+    if (invoicesCount === 0) {
+      defaultType = "Token Advance";
+    } else if (remaining > 0) {
+      defaultType = "Part Payment";
+    } else {
+      defaultType = "Down Payment";
+    }
 
-    const remaining = Number(deal.balance_due ?? (netVal - Number(deal.paid_amount || 0)));
-    const suggestedAmt = remaining > 0 ? remaining : 50000;
-    setFormAmountPaid(String(suggestedAmt));
+    setFormInstallmentTitle(defaultType);
+    setFormAmountPaid(String(remaining));
 
     setFormLineItems([
       {
-        desc: `${stageTitle} for ${deal.model_variant || "Vehicle"} (${deal.deal_number})`,
+        desc: `${defaultType} for ${deal.model_variant || "Vehicle"} (${deal.deal_number})`,
         hsn: "998313",
         qty: 1,
-        rate: String(suggestedAmt),
-        amount: String(suggestedAmt),
+        rate: String(remaining),
+        amount: String(remaining),
       },
     ]);
-    setFormRemarks(`Installment payment for Deal ${deal.deal_number}. Customer: ${deal.customer_name}`);
+    setFormRemarks(`${defaultType} payment for Deal ${deal.deal_number} - Customer: ${deal.customer_name}`);
   };
 
-  // Open Generate Invoice for an existing Deal
+  // Open Generate Invoice for an existing Deal (Add Bill button)
   const handleOpenGenerateForDeal = (deal) => {
+    setIsDealLocked(true);
     handleSelectDeal(deal);
     setFormInvoiceNo(generateInvoiceNumber());
     setFormInvoiceDate(new Date().toISOString().split("T")[0]);
+    setFormPaymentMode("UPI / GPay");
     setFormTransactionRef("");
+    setFormBankName("HDFC Bank");
+    setFormReceivedBy("");
     setIsGenerateModalOpen(true);
   };
 
   // Open Generate Modal from top button "Generate New Invoice"
   const handleOpenGenerateModal = () => {
+    setIsDealLocked(false);
     setFormInvoiceNo(generateInvoiceNumber());
     setFormInvoiceDate(new Date().toISOString().split("T")[0]);
     setSelectedDealId("");
@@ -359,17 +368,20 @@ export default function GenerateInvoicePage() {
     setDealSearchQuery("");
     setIsDealDropdownOpen(false);
 
-    setFormInstallmentTitle("1st Installment - Token Booking Advance");
-    setFormAmountPaid("50000");
+    setFormInstallmentTitle("Token Advance");
+    setFormPaymentMode("UPI / GPay");
+    setFormAmountPaid("0");
     setFormTransactionRef("");
-    setFormRemarks("Vehicle booking installment payment recorded.");
+    setFormBankName("HDFC Bank");
+    setFormReceivedBy("");
+    setFormRemarks("Token Advance payment recorded.");
     setFormLineItems([
       {
-        desc: "Token Booking Deposit / Installment Payment",
+        desc: "Token Advance Payment",
         hsn: "998313",
         qty: 1,
-        rate: "50000",
-        amount: "50000",
+        rate: "0",
+        amount: "0",
       },
     ]);
     setIsGenerateModalOpen(true);
@@ -424,6 +436,18 @@ export default function GenerateInvoicePage() {
       return;
     }
 
+    const isCashMode = formPaymentMode === "Cash" || formPaymentMode.toLowerCase().includes("cash");
+
+    if (!formReceivedBy || !formReceivedBy.trim()) {
+      showToast("Please enter the Received By person name.", "warning");
+      return;
+    }
+
+    if (!isCashMode && !formTransactionRef.trim()) {
+      showToast("Please enter the UTR / Transaction Reference number.", "warning");
+      return;
+    }
+
     setIsSubmittingInvoice(true);
     const finalInvoiceNo = formInvoiceNo || generateInvoiceNumber();
 
@@ -435,11 +459,11 @@ export default function GenerateInvoicePage() {
     else if (lowerMode.includes("neft") || lowerMode.includes("rtgs")) modeSlug = "neft_rtgs";
     else modeSlug = "upi";
 
-    // Map installment title into standard payment type slug
+    // Map payment type into standard slug
     let typeSlug = "part_payment";
     const lowerTitle = formInstallmentTitle.toLowerCase();
     if (lowerTitle.includes("token") || lowerTitle.includes("advance")) typeSlug = "token_advance";
-    else if (lowerTitle.includes("margin") || lowerTitle.includes("down")) typeSlug = "down_payment";
+    else if (lowerTitle.includes("down") || lowerTitle.includes("margin")) typeSlug = "down_payment";
     else typeSlug = "part_payment";
 
     const payload = {
@@ -448,9 +472,9 @@ export default function GenerateInvoicePage() {
       payment_type: typeSlug,
       payment_mode: modeSlug,
       payment_date: formInvoiceDate,
-      transaction_reference: formTransactionRef,
-      bank_name: formBankName,
-      received_by: formReceivedBy,
+      transaction_reference: isCashMode ? "CASH-RECEIPT" : (formTransactionRef || "UTR-VERIFIED"),
+      bank_name: isCashMode ? "Cash Counter" : formBankName,
+      received_by: formReceivedBy.trim(),
       notes: `${formInstallmentTitle} • ${formRemarks || 'Recorded via Invoice Module'}`,
       invoice_no: finalInvoiceNo,
     };
@@ -479,8 +503,9 @@ export default function GenerateInvoicePage() {
           regNo: targetDeal.registration_number,
           installmentTitle: formInstallmentTitle,
           paymentMode: formPaymentMode,
-          transactionRef: formTransactionRef || "UTR-VERIFIED",
-          bankName: formBankName,
+          transactionRef: isCashMode ? "CASH-RECEIPT" : (formTransactionRef || "UTR-VERIFIED"),
+          bankName: isCashMode ? "Cash Counter" : formBankName,
+          receivedBy: formReceivedBy.trim(),
           amountPaid: amountNum,
           totalDealAmount: targetDeal.net_amount || targetDeal.total_amount,
           items: formLineItems.map((item) => ({
@@ -838,10 +863,12 @@ export default function GenerateInvoicePage() {
               (EXACT SAME COLUMNS AND FIELDS AS VEHICLE DEALS & BOOKINGS PAGE)
               ========================================================================= */}
           {activeTab === "deals" && (
-            <div className="table-responsive">
+            <>
+              <div className="table-responsive">
               <table className="table align-middle mb-0 table-hover">
                 <thead className="table-light small text-uppercase">
                   <tr>
+                    <th className="px-3" style={{ width: "175px" }}>Actions</th>
                     <th style={{ width: "110px" }}># Deal</th>
                     <th>Customer</th>
                     <th>Vehicle & Spec</th>
@@ -850,7 +877,6 @@ export default function GenerateInvoicePage() {
                     <th>Delivery Stage</th>
                     <th>Delivery Date</th>
                     <th className="text-center" style={{ width: "120px" }}>Invoices</th>
-                    <th className="text-end px-3" style={{ width: "160px" }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody style={{ fontSize: "0.9rem" }}>
@@ -873,7 +899,38 @@ export default function GenerateInvoicePage() {
                       const pctPaid = deal.computedPercentPaid || 0;
                       return (
                         <tr key={deal.id || deal.deal_number}>
-                          {/* 1. Deal ID Badge */}
+                          {/* 1. Actions */}
+                          <td className="px-3">
+                            <div className="d-flex align-items-center gap-2">
+                              {deal.computedBalanceDue > 0 && (
+                                <button
+                                  type="button"
+                                  className="btn btn-sm text-white fw-bold d-inline-flex align-items-center gap-1.5 shadow-sm px-2.5 py-1"
+                                  style={{
+                                    backgroundColor: "var(--primary, #58632A)",
+                                    borderColor: "var(--primary, #58632A)",
+                                    fontSize: "0.8rem",
+                                  }}
+                                  onClick={() => handleOpenGenerateForDeal(deal)}
+                                  title="Add next invoice installment"
+                                >
+                                  <i className="bi bi-plus-circle"></i>
+                                  <span>Add Bill</span>
+                                </button>
+                              )}
+
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-light border d-inline-flex align-items-center shadow-none px-2.5 py-1"
+                                onClick={() => setSelectedDealForMultiView(deal)}
+                                title="View Deal Ledger"
+                              >
+                                <i className="bi bi-eye"></i>
+                              </button>
+                            </div>
+                          </td>
+
+                          {/* 2. Deal ID Badge */}
                           <td>
                             <span className="badge bg-light text-primary border font-monospace px-2 py-1">
                               {deal.deal_number || `#${deal.id}`}
@@ -1009,35 +1066,6 @@ export default function GenerateInvoicePage() {
                               <span className="fw-bold">{deal.invoicesCount} Bills</span>
                             </button>
                           </td>
-
-                          {/* 9. Actions */}
-                          <td className="text-end px-3">
-                            <div className="d-flex justify-content-end gap-1.5">
-                              <button
-                                type="button"
-                                className="btn btn-sm text-white fw-bold d-inline-flex align-items-center gap-1 shadow-sm px-2.5"
-                                style={{
-                                  backgroundColor: "var(--primary, #58632A)",
-                                  borderColor: "var(--primary, #58632A)",
-                                  fontSize: "0.8rem",
-                                }}
-                                onClick={() => handleOpenGenerateForDeal(deal)}
-                                title="Add next invoice installment"
-                              >
-                                <i className="bi bi-plus-circle"></i>
-                                <span>Add Bill</span>
-                              </button>
-
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-light border d-inline-flex align-items-center shadow-none px-2"
-                                onClick={() => setSelectedDealForMultiView(deal)}
-                                title="View Deal Ledger"
-                              >
-                                <i className="bi bi-eye"></i>
-                              </button>
-                            </div>
-                          </td>
                         </tr>
                       );
                     })
@@ -1045,42 +1073,46 @@ export default function GenerateInvoicePage() {
                 </tbody>
               </table>
 
-              {filteredDeals.length > dealsPerPage && (
-                <div className="p-3 border-top d-flex justify-content-between align-items-center bg-white">
-                  <span className="text-muted small">
-                    Showing {(dealsPage - 1) * dealsPerPage + 1} to{" "}
-                    {Math.min(dealsPage * dealsPerPage, filteredDeals.length)} of{" "}
-                    {filteredDeals.length} Deals
-                  </span>
-                  <Pagination
-                    currentPage={dealsPage}
-                    totalPages={Math.ceil(filteredDeals.length / dealsPerPage)}
-                    onPageChange={(p) => setDealsPage(p)}
-                  />
-                </div>
-              )}
             </div>
+
+            {!isLoadingDeals && filteredDeals.length > 0 && (
+              <Pagination
+                currentPage={dealsPage}
+                lastPage={Math.max(1, Math.ceil(filteredDeals.length / dealsPerPage))}
+                total={filteredDeals.length}
+                perPage={dealsPerPage}
+                onPageChange={(p) => setDealsPage(p)}
+                onPerPageChange={(newPerPage) => {
+                  setDealsPerPage(newPerPage);
+                  setDealsPage(1);
+                }}
+                perPageOptions={[10, 20, 50, 100]}
+                itemName="deals"
+              />
+            )}
+          </>
           )}
 
           {/* =========================================================================
               TAB 2 CONTENT: ALL INVOICES REGISTER (DATE-WISE FLAT TABLE)
               ========================================================================= */}
           {activeTab === "all-invoices" && (
-            <div className="table-responsive">
+            <>
+              <div className="table-responsive">
               <table className="table align-middle mb-0 table-hover">
                 <thead className="table-light small text-uppercase">
                   <tr>
-                    <th className="py-3 px-3">#</th>
+                    <th className="py-3 px-3" style={{ width: "50px" }}>#</th>
+                    <th className="py-3 px-3" style={{ width: "130px" }}>Action</th>
                     <th className="py-3">Invoice No</th>
                     <th className="py-3">Date & Time</th>
                     <th className="py-3">Deal Number</th>
                     <th className="py-3">Customer</th>
                     <th className="py-3">Vehicle & Spec</th>
-                    <th className="py-3">Installment Stage</th>
+                    <th className="py-3">Payment Type</th>
                     <th className="py-3 text-end">Amount Paid</th>
                     <th className="py-3">Payment Mode & Ref</th>
                     <th className="py-3 text-center">Status</th>
-                    <th className="py-3 text-end px-3">Action</th>
                   </tr>
                 </thead>
                 <tbody style={{ fontSize: "0.9rem" }}>
@@ -1096,6 +1128,19 @@ export default function GenerateInvoicePage() {
                       <tr key={inv.id || inv.invoiceNo}>
                         <td className="px-3 text-muted small">
                           {(invoicesPage - 1) * invoicesPerPage + index + 1}
+                        </td>
+
+                        {/* Action */}
+                        <td className="px-3">
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-dark d-inline-flex align-items-center gap-1 shadow-sm px-2.5 py-1"
+                            onClick={() => setSelectedInvoiceForSingleView(inv)}
+                            title="View / Print Tax Invoice Voucher"
+                          >
+                            <i className="bi bi-file-earmark-text text-primary"></i>
+                            <span>View Bill</span>
+                          </button>
                         </td>
 
                         {/* Invoice No */}
@@ -1172,8 +1217,13 @@ export default function GenerateInvoicePage() {
                         <td>
                           <div className="fw-semibold text-dark">{inv.paymentMode}</div>
                           <div className="font-monospace text-muted small">
-                            {inv.transactionRef}
+                            {inv.paymentMode?.toLowerCase() === "cash" ? "Cash Receipt" : inv.transactionRef}
                           </div>
+                          {inv.receivedBy && (
+                            <div className="text-muted" style={{ fontSize: "11px" }}>
+                              Rec: {inv.receivedBy}
+                            </div>
+                          )}
                         </td>
 
                         {/* Status */}
@@ -1182,40 +1232,30 @@ export default function GenerateInvoicePage() {
                             <i className="bi bi-check2-circle me-1"></i>Paid
                           </span>
                         </td>
-
-                        {/* Action */}
-                        <td className="text-end px-3">
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline-dark d-inline-flex align-items-center gap-1 shadow-sm"
-                            onClick={() => setSelectedInvoiceForSingleView(inv)}
-                            title="View / Print Tax Invoice Voucher"
-                          >
-                            <i className="bi bi-file-earmark-text text-primary"></i>
-                            <span>View Bill</span>
-                          </button>
-                        </td>
                       </tr>
                     ))
                   )}
                 </tbody>
               </table>
 
-              {filteredAllInvoices.length > invoicesPerPage && (
-                <div className="p-3 border-top d-flex justify-content-between align-items-center bg-white">
-                  <span className="text-muted small">
-                    Showing {(invoicesPage - 1) * invoicesPerPage + 1} to{" "}
-                    {Math.min(invoicesPage * invoicesPerPage, filteredAllInvoices.length)} of{" "}
-                    {filteredAllInvoices.length} Invoices
-                  </span>
-                  <Pagination
-                    currentPage={invoicesPage}
-                    totalPages={Math.ceil(filteredAllInvoices.length / invoicesPerPage)}
-                    onPageChange={(p) => setInvoicesPage(p)}
-                  />
-                </div>
-              )}
             </div>
+
+            {!isLoadingDeals && filteredAllInvoices.length > 0 && (
+              <Pagination
+                currentPage={invoicesPage}
+                lastPage={Math.max(1, Math.ceil(filteredAllInvoices.length / invoicesPerPage))}
+                total={filteredAllInvoices.length}
+                perPage={invoicesPerPage}
+                onPageChange={(p) => setInvoicesPage(p)}
+                onPerPageChange={(newPerPage) => {
+                  setInvoicesPerPage(newPerPage);
+                  setInvoicesPage(1);
+                }}
+                perPageOptions={[10, 20, 50, 100]}
+                itemName="invoices"
+              />
+            )}
+          </>
           )}
         </div>
 
@@ -1264,28 +1304,48 @@ export default function GenerateInvoicePage() {
                 <div className="modal-body px-4 py-3">
                   {/* Deal Selector Dropdown */}
                   <div className="mb-3 position-relative" ref={dealDropdownRef}>
-                    <label className="form-label fw-bold text-dark small mb-1">
-                      Select Vehicle Deal <span className="text-danger">*</span>
-                    </label>
+                    <div className="d-flex align-items-center justify-content-between mb-1">
+                      <label className="form-label fw-bold text-dark small mb-0">
+                        Select Vehicle Deal <span className="text-danger">*</span>
+                      </label>
+                      {isDealLocked && (
+                        <span className="badge bg-secondary-subtle text-secondary small fw-normal">
+                          <i className="bi bi-lock-fill me-1"></i>Deal Locked
+                        </span>
+                      )}
+                    </div>
                     <div className="input-group">
                       <span className="input-group-text bg-white">
-                        <i className="bi bi-car-front-fill text-primary"></i>
+                        {isDealLocked ? (
+                          <i className="bi bi-lock-fill text-muted"></i>
+                        ) : (
+                          <i className="bi bi-car-front-fill text-primary"></i>
+                        )}
                       </span>
                       <input
                         type="text"
-                        className="form-control"
-                        placeholder="Search & choose deal by customer name or deal number..."
+                        className={`form-control ${isDealLocked ? "bg-light text-muted" : ""}`}
+                        placeholder={
+                          isDealLocked
+                            ? "Deal locked for this invoice"
+                            : "Search & choose deal by customer name or deal number..."
+                        }
                         value={dealSearchQuery}
+                        disabled={isDealLocked}
+                        readOnly={isDealLocked}
                         onChange={(e) => {
+                          if (isDealLocked) return;
                           setDealSearchQuery(e.target.value);
                           setIsDealDropdownOpen(true);
                         }}
-                        onFocus={() => setIsDealDropdownOpen(true)}
+                        onFocus={() => {
+                          if (!isDealLocked) setIsDealDropdownOpen(true);
+                        }}
                         required
                       />
                     </div>
 
-                    {isDealDropdownOpen && (
+                    {!isDealLocked && isDealDropdownOpen && (
                       <div
                         className="dropdown-menu show w-100 shadow-lg border rounded-3 p-1 mt-1 position-absolute"
                         style={{
@@ -1324,9 +1384,13 @@ export default function GenerateInvoicePage() {
                                 <span className="badge bg-light text-dark font-monospace border mb-1">
                                   {d.deal_number}
                                 </span>
-                                <div className="small text-danger fw-bold">
-                                  Due: ₹{formatIndianCurrency(d.computedBalanceDue)}
-                                </div>
+                                {d.computedBalanceDue <= 0 ? (
+                                  <div className="small text-success fw-bold">Fully Paid</div>
+                                ) : (
+                                  <div className="small text-danger fw-bold">
+                                    Due: ₹{formatIndianCurrency(d.computedBalanceDue)}
+                                  </div>
+                                )}
                               </div>
                             </button>
                           ))}
@@ -1425,36 +1489,69 @@ export default function GenerateInvoicePage() {
                   <div className="row g-2 mb-3">
                     <div className="col-12 col-md-6">
                       <label className="form-label small mb-1 fw-bold text-dark">
-                        Installment Stage Title <span className="text-danger">*</span>
+                        Payment Type <span className="text-danger">*</span>
                       </label>
                       <select
                         className="form-select form-select-sm"
                         value={formInstallmentTitle}
-                        onChange={(e) => setFormInstallmentTitle(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormInstallmentTitle(val);
+                          setFormLineItems((prev) =>
+                            prev.map((item, idx) =>
+                              idx === 0
+                                ? {
+                                    ...item,
+                                    desc: selectedDealObject
+                                      ? `${val} for ${selectedDealObject.model_variant || "Vehicle"} (${selectedDealObject.deal_number})`
+                                      : `${val} Payment`,
+                                  }
+                                : item
+                            )
+                          );
+                          if (selectedDealObject) {
+                            setFormRemarks(`${val} payment for Deal ${selectedDealObject.deal_number} - Customer: ${selectedDealObject.customer_name}`);
+                          }
+                        }}
                       >
-                        <option value="1st Installment - Token Booking Advance">1st Installment - Token Booking Advance</option>
-                        <option value="2nd Installment - Margin Money Deposit">2nd Installment - Margin Money Deposit</option>
-                        <option value="3rd Installment - RTO, Insurance & CSD Tax">3rd Installment - RTO, Insurance & CSD Tax</option>
-                        <option value="4th Installment - Balance Settlement">4th Installment - Balance Settlement</option>
-                        <option value="Full Settlement Payment">Full Settlement Payment</option>
+                        <option value="Down Payment">Down Payment</option>
+                        <option value="Token Advance">Token Advance</option>
+                        <option value="Part Payment">Part Payment</option>
                       </select>
                     </div>
 
                     <div className="col-12 col-md-6">
                       <label className="form-label small mb-1 fw-bold text-dark">
                         Amount Paid (₹) <span className="text-danger">*</span>
+                        {selectedDealObject && (
+                          <span className="text-muted fw-normal ms-1">
+                            (Due: ₹{formatIndianCurrency(selectedDealObject.computedBalanceDue)})
+                          </span>
+                        )}
                       </label>
                       <input
                         type="number"
                         className="form-control form-control-sm fw-bold text-success"
                         value={formAmountPaid}
-                        onChange={(e) => setFormAmountPaid(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormAmountPaid(val);
+                          setFormLineItems((prev) =>
+                            prev.map((item, idx) =>
+                              idx === 0
+                                ? { ...item, rate: val, amount: (Number(item.qty) || 1) * (Number(val) || 0) }
+                                : item
+                            )
+                          );
+                        }}
                         required
                       />
                     </div>
 
-                    <div className="col-12 col-md-4">
-                      <label className="form-label small mb-1 fw-bold text-dark">Payment Mode</label>
+                    <div className={formPaymentMode === "Cash" ? "col-12 col-md-6" : "col-12 col-md-4"}>
+                      <label className="form-label small mb-1 fw-bold text-dark">
+                        Payment Mode <span className="text-danger">*</span>
+                      </label>
                       <select
                         className="form-select form-select-sm"
                         value={formPaymentMode}
@@ -1463,31 +1560,77 @@ export default function GenerateInvoicePage() {
                         <option value="UPI / GPay">UPI / GPay / QR</option>
                         <option value="NEFT / RTGS">NEFT / RTGS Bank Transfer</option>
                         <option value="Cheque / DD">Cheque / Demand Draft</option>
-                        <option value="Cash">Cash Receipt</option>
+                        <option value="Cash">Cash</option>
                       </select>
                     </div>
 
-                    <div className="col-12 col-md-4">
-                      <label className="form-label small mb-1 fw-bold text-dark">UTR / Transaction Reference</label>
-                      <input
-                        type="text"
-                        className="form-control form-control-sm font-monospace"
-                        placeholder="e.g. UTR192837482"
-                        value={formTransactionRef}
-                        onChange={(e) => setFormTransactionRef(e.target.value)}
-                      />
-                    </div>
-
-                    <div className="col-12 col-md-4">
-                      <label className="form-label small mb-1 fw-bold text-dark">Bank Name</label>
+                    <div className={formPaymentMode === "Cash" ? "col-12 col-md-6" : "col-12 col-md-4"}>
+                      <label className="form-label small mb-1 fw-bold text-dark">
+                        Received By <span className="text-danger">*</span>
+                      </label>
                       <input
                         type="text"
                         className="form-control form-control-sm"
-                        placeholder="e.g. HDFC Bank"
-                        value={formBankName}
-                        onChange={(e) => setFormBankName(e.target.value)}
+                        placeholder="e.g. Cashier / Staff Name"
+                        value={formReceivedBy}
+                        onChange={(e) => setFormReceivedBy(e.target.value)}
+                        required
                       />
                     </div>
+
+                    {formPaymentMode !== "Cash" && (
+                      <>
+                        <div className="col-12 col-md-4">
+                          <label className="form-label small mb-1 fw-bold text-dark">
+                            UTR / Transaction Reference <span className="text-danger">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            className="form-control form-control-sm font-monospace"
+                            placeholder="e.g. UTR192837482"
+                            value={formTransactionRef}
+                            onChange={(e) => setFormTransactionRef(e.target.value)}
+                            required
+                          />
+                        </div>
+
+                        <div className="col-12">
+                          <label className="form-label small mb-1 fw-bold text-dark">Bank Name</label>
+                          <input
+                            type="text"
+                            className="form-control form-control-sm"
+                            placeholder="e.g. HDFC Bank, SBI"
+                            value={formBankName}
+                            onChange={(e) => setFormBankName(e.target.value)}
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {formPaymentMode === "Cash" && (
+                      <div className="col-12">
+                        <div className="p-2 px-3 bg-light border border-success-subtle rounded d-flex align-items-center gap-2 text-success small">
+                          <i className="bi bi-cash-stack fs-5 text-success"></i>
+                          <div>
+                            <strong>Cash Receipt Mode:</strong> Direct counter cash collection. Received by: <strong>{formReceivedBy || "Accounts"}</strong>.
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Remarks / Internal Notes */}
+                  <div className="mb-3">
+                    <label className="form-label small fw-bold text-dark mb-1">
+                      Remarks / Internal Notes
+                    </label>
+                    <textarea
+                      className="form-control form-control-sm"
+                      rows="2"
+                      placeholder="Add payment notes or remarks..."
+                      value={formRemarks}
+                      onChange={(e) => setFormRemarks(e.target.value)}
+                    ></textarea>
                   </div>
 
                   {/* Line Items Table */}
@@ -1575,18 +1718,6 @@ export default function GenerateInvoicePage() {
                         </tbody>
                       </table>
                     </div>
-                  </div>
-
-                  {/* Remarks */}
-                  <div className="mb-2">
-                    <label className="form-label small text-muted mb-1">Remarks / Internal Notes</label>
-                    <textarea
-                      className="form-control form-control-sm"
-                      rows="2"
-                      placeholder="Add any specific delivery conditions or note..."
-                      value={formRemarks}
-                      onChange={(e) => setFormRemarks(e.target.value)}
-                    ></textarea>
                   </div>
                 </div>
 
@@ -1723,7 +1854,7 @@ export default function GenerateInvoicePage() {
                           <th className="py-2.5 px-3">#</th>
                           <th>Invoice No</th>
                           <th>Date</th>
-                          <th>Installment Stage</th>
+                          <th>Payment Type</th>
                           <th>Payment Mode</th>
                           <th>Reference / UTR</th>
                           <th className="text-end">Amount Paid</th>
@@ -1743,7 +1874,9 @@ export default function GenerateInvoicePage() {
                             <td>{inv.date}</td>
                             <td className="fw-semibold text-dark">{inv.installmentTitle}</td>
                             <td>{inv.paymentMode}</td>
-                            <td className="font-monospace text-muted small">{inv.transactionRef}</td>
+                            <td className="font-monospace text-muted small">
+                              {inv.paymentMode?.toLowerCase() === "cash" ? "Cash Receipt" : inv.transactionRef}
+                            </td>
                             <td className="text-end fw-bold text-success">₹{formatIndianCurrency(inv.amountPaid)}</td>
                             <td className="text-center">
                               <span className="badge bg-success-subtle text-success">Paid</span>
@@ -1790,22 +1923,28 @@ export default function GenerateInvoicePage() {
                     Close
                   </button>
 
-                  <button
-                    type="button"
-                    className="btn text-white fw-bold shadow-sm d-flex align-items-center gap-2"
-                    style={{
-                      backgroundColor: "var(--primary, #58632A)",
-                      borderColor: "var(--primary, #58632A)",
-                    }}
-                    onClick={() => {
-                      const d = selectedDealForMultiView;
-                      setSelectedDealForMultiView(null);
-                      handleOpenGenerateForDeal(d);
-                    }}
-                  >
-                    <i className="bi bi-plus-circle-fill"></i>
-                    <span>Add Next Installment Invoice</span>
-                  </button>
+                  {selectedDealForMultiView.computedBalanceDue > 0 ? (
+                    <button
+                      type="button"
+                      className="btn text-white fw-bold shadow-sm d-flex align-items-center gap-2"
+                      style={{
+                        backgroundColor: "var(--primary, #58632A)",
+                        borderColor: "var(--primary, #58632A)",
+                      }}
+                      onClick={() => {
+                        const d = selectedDealForMultiView;
+                        setSelectedDealForMultiView(null);
+                        handleOpenGenerateForDeal(d);
+                      }}
+                    >
+                      <i className="bi bi-plus-circle-fill"></i>
+                      <span>Add Next Installment Invoice</span>
+                    </button>
+                  ) : (
+                    <span className="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 fw-semibold">
+                      <i className="bi bi-check-circle-fill me-1"></i>All Payments Completed (Fully Paid)
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -1958,7 +2097,7 @@ export default function GenerateInvoicePage() {
                           </div>
                         )}
                         <div className="small text-muted">
-                          Installment Stage: <strong>{selectedInvoiceForSingleView.installmentTitle}</strong>
+                          Payment Type: <strong>{selectedInvoiceForSingleView.installmentTitle}</strong>
                         </div>
                       </div>
                     </div>
@@ -2013,12 +2152,19 @@ export default function GenerateInvoicePage() {
                           <div>
                             Payment Method: <strong>{selectedInvoiceForSingleView.paymentMode}</strong>
                           </div>
-                          <div>
-                            UTR / Transaction Ref:{" "}
-                            <strong className="font-monospace text-dark">
-                              {selectedInvoiceForSingleView.transactionRef || "Verified"}
-                            </strong>
-                          </div>
+                          {selectedInvoiceForSingleView.paymentMode?.toLowerCase() !== "cash" && (
+                            <div>
+                              UTR / Transaction Ref:{" "}
+                              <strong className="font-monospace text-dark">
+                                {selectedInvoiceForSingleView.transactionRef || "Verified"}
+                              </strong>
+                            </div>
+                          )}
+                          {selectedInvoiceForSingleView.receivedBy && (
+                            <div>
+                              Received By: <strong>{selectedInvoiceForSingleView.receivedBy}</strong>
+                            </div>
+                          )}
                           {selectedInvoiceForSingleView.remarks && (
                             <div className="mt-1 text-muted">
                               Remarks: {selectedInvoiceForSingleView.remarks}

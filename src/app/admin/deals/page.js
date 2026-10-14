@@ -8,6 +8,15 @@ import dealApi from "@/services/dealApi";
 import { numberToWords, formatIndianCurrency } from "@/utils/numberToWords";
 import Pagination from "@/components/common/Pagination";
 
+// Helper to generate Invoice Number in exact required format: DAL-/YYYY/MM/XXXX
+export const generateInvoiceNumber = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const random4 = Math.floor(1000 + Math.random() * 9000);
+  return `DAL-/${year}/${month}/${random4}`;
+};
+
 export default function DealsPage() {
   const { showToast } = useToast();
 
@@ -37,20 +46,21 @@ export default function DealsPage() {
     pendingBalance: 0,
   });
 
-  // Payment Modal State
+  // Payment / Add Bill Modal State (Exact same as Invoice Page)
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedDealForPayment, setSelectedDealForPayment] = useState(null);
-  const [paymentForm, setPaymentForm] = useState({
-    amount: "",
-    payment_type: "down_payment",
-    payment_mode: "neft_rtgs",
-    payment_date: new Date().toISOString().split("T")[0],
-    transaction_reference: "",
-    bank_name: "HDFC Bank",
-    received_by: "",
-    notes: "Customer down payment transfer",
-  });
+  const [formInvoiceNo, setFormInvoiceNo] = useState("");
+  const [formInvoiceDate, setFormInvoiceDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [formPaymentType, setFormPaymentType] = useState("Down Payment");
+  const [formPaymentMode, setFormPaymentMode] = useState("UPI / GPay");
+  const [formAmountPaid, setFormAmountPaid] = useState("0");
+  const [formReceivedBy, setFormReceivedBy] = useState("");
+  const [formTransactionRef, setFormTransactionRef] = useState("");
+  const [formBankName, setFormBankName] = useState("HDFC Bank");
+  const [formRemarks, setFormRemarks] = useState("");
+  const [formLineItems, setFormLineItems] = useState([]);
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
+  const [selectedInvoiceForSingleView, setSelectedInvoiceForSingleView] = useState(null);
 
   // Update Deal Modal State
   const [showUpdateModal, setShowUpdateModal] = useState(false);
@@ -183,7 +193,7 @@ export default function DealsPage() {
     };
   }, [pagination.current_page, searchTerm, stageFilter, startDate, endDate, pagination.per_page]);
 
-  // Open Payment Modal
+  // Open Add Bill / Payment Modal
   const handleOpenPayment = (deal) => {
     let currentUserName = "";
     if (typeof window !== "undefined") {
@@ -193,53 +203,168 @@ export default function DealsPage() {
       } catch (e) {}
     }
 
+    const netVal = Number(deal.net_amount || deal.total_amount || 0);
+    const totalPaid = Number(deal.paid_amount ?? deal.total_paid ?? 0);
+    const remaining = Math.max(0, netVal - totalPaid);
+
+    // Pick appropriate default payment type
+    const invoicesCount = Array.isArray(deal.payments) ? deal.payments.length : 0;
+    let defaultType = "Down Payment";
+    if (invoicesCount === 0) {
+      defaultType = "Token Advance";
+    } else if (remaining > 0) {
+      defaultType = "Part Payment";
+    } else {
+      defaultType = "Down Payment";
+    }
+
     setSelectedDealForPayment(deal);
-    setPaymentForm({
-      amount: deal.balance_amount ? String(deal.balance_amount) : "",
-      payment_type: "down_payment",
-      payment_mode: "neft_rtgs",
-      payment_date: new Date().toISOString().split("T")[0],
-      transaction_reference: "",
-      bank_name: "",
-      received_by: currentUserName,
-      notes: "",
-    });
+    setFormInvoiceNo(generateInvoiceNumber());
+    setFormInvoiceDate(new Date().toISOString().split("T")[0]);
+    setFormPaymentType(defaultType);
+    setFormPaymentMode("UPI / GPay");
+    setFormAmountPaid(String(remaining));
+    setFormReceivedBy(currentUserName || "Accounts");
+    setFormTransactionRef("");
+    setFormBankName("HDFC Bank");
+    setFormRemarks(`${defaultType} payment for Deal ${deal.deal_number} - Customer: ${deal.customer_name}`);
+    setFormLineItems([
+      {
+        desc: `${defaultType} for ${deal.model_variant || "Vehicle"} (${deal.deal_number})`,
+        hsn: "998313",
+        qty: 1,
+        rate: String(remaining),
+        amount: String(remaining),
+      },
+    ]);
     setShowPaymentModal(true);
   };
 
-  // Submit Payment
+  // Line item helpers
+  const handleAddLineItem = () => {
+    setFormLineItems((prev) => [
+      ...prev,
+      { desc: "", hsn: "998313", qty: 1, rate: "", amount: "" },
+    ]);
+  };
+
+  const handleRemoveLineItem = (index) => {
+    if (formLineItems.length <= 1) return;
+    setFormLineItems((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleLineItemChange = (index, field, value) => {
+    const updated = [...formLineItems];
+    updated[index][field] = value;
+    if (field === "qty" || field === "rate") {
+      const q = Number(updated[index].qty) || 0;
+      const r = Number(updated[index].rate) || 0;
+      updated[index].amount = q * r;
+    }
+    setFormLineItems(updated);
+
+    const totalFromItems = updated.reduce(
+      (sum, item) => sum + (Number(item.amount) || 0),
+      0
+    );
+    if (totalFromItems > 0) {
+      setFormAmountPaid(String(totalFromItems));
+    }
+  };
+
+  // Submit Payment & Save Invoice
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
     if (!selectedDealForPayment) return;
 
-    const payAmount = parseFloat(paymentForm.amount) || 0;
-    if (payAmount <= 0) {
-      showToast("Please enter a valid payment amount.", "error");
+    const amountNum = Number(formAmountPaid) || 0;
+    if (amountNum <= 0) {
+      showToast("Please enter a valid amount paid for this invoice.", "error");
       return;
     }
 
-    if (!paymentForm.received_by.trim()) {
-      showToast("Please enter the name of the person who received payment.", "error");
+    const isCashMode = formPaymentMode === "Cash" || formPaymentMode.toLowerCase().includes("cash");
+
+    if (!formReceivedBy || !formReceivedBy.trim()) {
+      showToast("Please enter the Received By person name.", "warning");
+      return;
+    }
+
+    if (!isCashMode && !formTransactionRef.trim()) {
+      showToast("Please enter the UTR / Transaction Reference number.", "warning");
       return;
     }
 
     setIsSubmittingPayment(true);
+    const finalInvoiceNo = formInvoiceNo || generateInvoiceNumber();
+
+    // Map payment mode into standard slug
+    let modeSlug = "upi";
+    const lowerMode = formPaymentMode.toLowerCase();
+    if (lowerMode.includes("cash")) modeSlug = "cash";
+    else if (lowerMode.includes("cheque")) modeSlug = "cheque";
+    else if (lowerMode.includes("neft") || lowerMode.includes("rtgs")) modeSlug = "neft_rtgs";
+    else modeSlug = "upi";
+
+    // Map payment type into standard slug
+    let typeSlug = "part_payment";
+    const lowerTitle = formPaymentType.toLowerCase();
+    if (lowerTitle.includes("token") || lowerTitle.includes("advance")) typeSlug = "token_advance";
+    else if (lowerTitle.includes("down") || lowerTitle.includes("margin")) typeSlug = "down_payment";
+    else typeSlug = "part_payment";
+
     const payload = {
-      deal_id: selectedDealForPayment.id,
-      amount: payAmount,
-      payment_type: paymentForm.payment_type,
-      payment_mode: paymentForm.payment_mode,
-      payment_date: paymentForm.payment_date,
-      transaction_reference: paymentForm.transaction_reference.trim(),
-      bank_name: paymentForm.bank_name.trim(),
-      received_by: paymentForm.received_by.trim(),
-      notes: paymentForm.notes.trim(),
+      deal_id: Number(selectedDealForPayment.id),
+      amount: amountNum,
+      payment_type: typeSlug,
+      payment_mode: modeSlug,
+      payment_date: formInvoiceDate,
+      transaction_reference: isCashMode ? "CASH-RECEIPT" : (formTransactionRef || "UTR-VERIFIED"),
+      bank_name: isCashMode ? "Cash Counter" : formBankName,
+      received_by: formReceivedBy.trim(),
+      notes: `${formPaymentType} • ${formRemarks || 'Recorded via Deals Module'}`,
+      invoice_no: finalInvoiceNo,
     };
 
     try {
       const res = await dealApi.addPayment(payload);
-      showToast(res.message || `Payment of ₹${formatIndianCurrency(payAmount)} recorded successfully!`, "success");
+      showToast(res.message || `Invoice ${finalInvoiceNo} created and linked to Deal #${selectedDealForPayment.deal_number}!`, "success");
       setShowPaymentModal(false);
+
+      // Render instant preview voucher
+      const d = selectedDealForPayment;
+      setSelectedInvoiceForSingleView({
+        invoiceNo: finalInvoiceNo,
+        date: formInvoiceDate,
+        time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+        dealNumber: d.deal_number,
+        customerName: d.customer_name,
+        mobile: d.customer_phone,
+        email: d.customer_email,
+        city: d.customer_city,
+        vehicle: d.model_variant,
+        color: d.color,
+        vin: d.vin_chassis_number,
+        regNo: d.registration_number,
+        installmentTitle: formPaymentType,
+        paymentMode: formPaymentMode,
+        transactionRef: isCashMode ? "CASH-RECEIPT" : (formTransactionRef || "UTR-VERIFIED"),
+        bankName: isCashMode ? "Cash Counter" : formBankName,
+        receivedBy: formReceivedBy.trim(),
+        amountPaid: amountNum,
+        totalDealAmount: d.net_amount || d.total_amount,
+        items: formLineItems.map((item) => ({
+          desc: item.desc || formPaymentType,
+          hsn: item.hsn || "998313",
+          qty: Number(item.qty) || 1,
+          rate: Number(item.rate) || amountNum,
+          amount: Number(item.amount) || amountNum,
+        })),
+        remarks: formRemarks,
+        status: "Paid",
+        parentDeal: d,
+      });
+
       fetchMetrics();
       fetchDeals(pagination.current_page, searchTerm, stageFilter, startDate, endDate, pagination.per_page);
     } catch (err) {
@@ -395,7 +520,7 @@ export default function DealsPage() {
     return "bg-secondary text-white";
   };
 
-  const payAmountNum = parseFloat(paymentForm.amount) || 0;
+  const payAmountNum = parseFloat(formAmountPaid) || 0;
 
   return (
     <AdminLayout>
@@ -709,7 +834,7 @@ export default function DealsPage() {
                     );
                     return (
                       <tr key={deal.id}>
-                        {/* 1. Action First Column with 3-Dots Dropdown */}
+                        {/* 1. Action First Column with 3-Dots Menu */}
                         <td className="text-center" onClick={(e) => e.stopPropagation()}>
                           <div className="dropdown position-relative d-inline-block">
                             <button
@@ -725,32 +850,32 @@ export default function DealsPage() {
                               <i className="bi bi-three-dots-vertical fs-6 text-dark"></i>
                             </button>
 
-                            {activeActionMenuId === deal.id && (
-                              <div
-                                className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute start-0 text-start"
-                                style={{
-                                  minWidth: "210px",
-                                  zIndex: 1050,
-                                  top: "100%",
-                                  backgroundColor: "#FFFFFF",
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {/* Record Payment */}
-                                {deal.balance_amount > 0 && (
-                                  <button
-                                    type="button"
-                                    className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-success"
-                                    style={{ backgroundColor: "rgba(21, 128, 61, 0.08)" }}
-                                    onClick={() => {
-                                      setActiveActionMenuId(null);
-                                      handleOpenPayment(deal);
-                                    }}
-                                  >
-                                    <i className="bi bi-cash-stack text-success"></i>
-                                    <span>Record Payment</span>
-                                  </button>
-                                )}
+                              {activeActionMenuId === deal.id && (
+                                <div
+                                  className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute start-0 text-start"
+                                  style={{
+                                    minWidth: "210px",
+                                    zIndex: 1050,
+                                    top: "100%",
+                                    backgroundColor: "#FFFFFF",
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {/* Add Bill */}
+                                  {deal.balance_amount > 0 && (
+                                    <button
+                                      type="button"
+                                      className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-success"
+                                      style={{ backgroundColor: "rgba(21, 128, 61, 0.08)" }}
+                                      onClick={() => {
+                                        setActiveActionMenuId(null);
+                                        handleOpenPayment(deal);
+                                      }}
+                                    >
+                                      <i className="bi bi-plus-circle text-success"></i>
+                                      <span>Add Bill</span>
+                                    </button>
+                                  )}
 
                                 {/* Update Deal & Stage */}
                                 <button
@@ -959,251 +1084,424 @@ export default function DealsPage() {
         </div>
 
         {/* ===================================================================
-            MODAL 1: RECORD PAYMENT
+            MODAL 1: GENERATE TAX INVOICE & RECORD PAYMENT (ADD BILL)
             =================================================================== */}
         {showPaymentModal && selectedDealForPayment && (
-          <div className="modal-backdrop-custom" onClick={() => setShowPaymentModal(false)}>
-            <div
-              className="modal-dialog-custom"
-              onClick={(e) => e.stopPropagation()}
-              style={{ maxWidth: "600px" }}
-            >
-              <div className="modal-header-custom d-flex justify-content-between align-items-center">
-                <div className="d-flex align-items-center gap-2">
-                  <div
-                    style={{
-                      width: 34,
-                      height: 34,
-                      borderRadius: "50%",
-                      backgroundColor: "#15803D",
-                      color: "#fff",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <i className="bi bi-cash-stack"></i>
-                  </div>
-                  <div>
-                    <h5 className="modal-title-custom text-white mb-0 fw-bold">
-                      Record Deal Payment
-                    </h5>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="btn-close btn-close-white"
-                  onClick={() => setShowPaymentModal(false)}
-                ></button>
-              </div>
-
-              <form onSubmit={handlePaymentSubmit}>
-                <div className="modal-body-custom py-3">
-                  {/* Deal Header Banner */}
-                  <div className="p-3 mb-3 bg-light rounded border d-flex justify-content-between align-items-center">
+          <div
+            className="modal fade show d-block"
+            tabIndex="-1"
+            style={{ backgroundColor: "rgba(19, 28, 39, 0.65)", zIndex: 1050 }}
+          >
+            <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+              <form
+                onSubmit={handlePaymentSubmit}
+                className="modal-content border-0 shadow-lg"
+                style={{ borderRadius: "14px", overflow: "hidden" }}
+              >
+                {/* Header */}
+                <div
+                  className="modal-header px-4 py-3"
+                  style={{
+                    backgroundColor: "#131C27",
+                    color: "#DCE9A2",
+                  }}
+                >
+                  <div className="d-flex align-items-center gap-2">
+                    <i className="bi bi-receipt fs-4 text-warning"></i>
                     <div>
-                      <span className="small text-muted text-uppercase fw-bold">Deal Customer</span>
-                      <h6 className="mb-0 text-dark fw-bold">{selectedDealForPayment.customer_name}</h6>
-                      <div className="small text-muted">{selectedDealForPayment.model_variant}</div>
-                    </div>
-                    <div className="text-end">
-                      <span className="small text-muted text-uppercase fw-bold">Balance Due</span>
-                      <h6 className="mb-0 text-danger fw-bold">
-                        ₹{formatIndianCurrency(selectedDealForPayment.balance_amount)}
-                      </h6>
-                      <span className="badge bg-warning-subtle text-warning">
-                        {selectedDealForPayment.payment_status}
+                      <h5 className="modal-title fw-bold text-white mb-0">
+                        Generate Tax Invoice & Record Payment
+                      </h5>
+                      <span className="small" style={{ color: "#DCE9A2" }}>
+                        Links directly to Vehicle Deals & Bookings Database
                       </span>
                     </div>
                   </div>
+                  <button
+                    type="button"
+                    className="btn-close btn-close-white"
+                    onClick={() => setShowPaymentModal(false)}
+                  ></button>
+                </div>
 
-                  <div className="row g-3">
-                    {/* Amount */}
-                    <div className="col-12">
-                      <label className="form-label text-dark fw-bold small mb-1">
-                        Payment Amount (₹) <span className="text-danger">*</span>
+                {/* Body */}
+                <div className="modal-body px-4 py-3">
+                  {/* Deal Selector (Locked for this deal) */}
+                  <div className="mb-3">
+                    <div className="d-flex align-items-center justify-content-between mb-1">
+                      <label className="form-label fw-bold text-dark small mb-0">
+                        Select Vehicle Deal <span className="text-danger">*</span>
                       </label>
-                      <div className="input-group">
-                        <span className="input-group-text bg-light fw-bold">₹</span>
-                        <input
-                          type="number"
-                          step="1"
-                          min="1"
-                          max={selectedDealForPayment.balance_amount || undefined}
-                          className="form-control fw-bold fs-5"
-                          placeholder="e.g. 350000"
-                          required
-                          value={paymentForm.amount}
-                          onChange={(e) =>
-                            setPaymentForm({ ...paymentForm, amount: e.target.value })
-                          }
-                          autoFocus
-                        />
-                      </div>
-
-                      {/* Dynamic Formatted Comma & Text in Words */}
-                      {payAmountNum > 0 && (
-                        <div className="mt-2 p-2 bg-light-subtle border rounded small">
-                          <div className="text-dark fw-bold">
-                            Formatted: ₹{formatIndianCurrency(payAmountNum)}
-                          </div>
-                          <div className="text-success fw-semibold fst-italic" style={{ fontSize: "11px" }}>
-                            ✍️ In Words: {numberToWords(payAmountNum)}
-                          </div>
-                        </div>
-                      )}
+                      <span className="badge bg-secondary-subtle text-secondary small fw-normal">
+                        <i className="bi bi-lock-fill me-1"></i>Deal Locked
+                      </span>
                     </div>
-
-                    {/* Payment Type */}
-                    <div className="col-md-6">
-                      <label className="form-label text-dark fw-bold small mb-1">
-                        Payment Type
-                      </label>
-                      <select
-                        className="form-select"
-                        value={paymentForm.payment_type}
-                        onChange={(e) =>
-                          setPaymentForm({ ...paymentForm, payment_type: e.target.value })
-                        }
-                      >
-                        <option value="down_payment">Down Payment</option>
-                        <option value="token_advance">Token Advance</option>
-                        <option value="part_payment">Part Payment</option>
-                      </select>
-                    </div>
-
-                    {/* Payment Mode */}
-                    <div className="col-md-6">
-                      <label className="form-label text-dark fw-bold small mb-1">
-                        Payment Mode
-                      </label>
-                      <select
-                        className="form-select"
-                        value={paymentForm.payment_mode}
-                        onChange={(e) =>
-                          setPaymentForm({ ...paymentForm, payment_mode: e.target.value })
-                        }
-                      >
-                        <option value="neft_rtgs">NEFT / RTGS</option>
-                        <option value="upi">UPI / QR Code</option>
-                        <option value="cash">Cash</option>
-                        <option value="cheque">Cheque / Demand Draft</option>
-                      </select>
-                    </div>
-
-                    {/* Payment Date */}
-                    <div className="col-md-6">
-                      <label className="form-label text-dark fw-bold small mb-1">
-                        Payment Date <span className="text-danger">*</span>
-                      </label>
+                    <div className="input-group">
+                      <span className="input-group-text bg-white">
+                        <i className="bi bi-lock-fill text-muted"></i>
+                      </span>
                       <input
-                        type="date"
-                        className="form-control"
-                        required
-                        value={paymentForm.payment_date}
-                        onChange={(e) =>
-                          setPaymentForm({ ...paymentForm, payment_date: e.target.value })
-                        }
+                        type="text"
+                        className="form-control bg-light text-muted"
+                        value={`${selectedDealForPayment.customer_name} (${selectedDealForPayment.deal_number})`}
+                        disabled
+                        readOnly
                       />
                     </div>
+                  </div>
 
-                    {/* Received By (Person Name) */}
-                    <div className="col-md-6">
-                      <label className="form-label text-dark fw-bold small mb-1">
-                        Received By (Person Name) <span className="text-danger">*</span>
+                  {/* Top Bar: Invoice Number & Date */}
+                  <div className="row g-2 mb-3">
+                    <div className="col-12 col-md-6">
+                      <label className="form-label small mb-1 fw-bold text-dark">
+                        Invoice Number (DAL-/)
                       </label>
                       <input
                         type="text"
-                        className="form-control"
-                        placeholder="e.g. Cashier / Executive Name"
+                        className="form-control form-control-sm font-monospace fw-bold bg-light"
+                        value={formInvoiceNo}
+                        readOnly
+                      />
+                    </div>
+                    <div className="col-12 col-md-6">
+                      <label className="form-label small mb-1 fw-bold text-dark">
+                        Invoice Date <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        className="form-control form-control-sm"
+                        value={formInvoiceDate}
+                        onChange={(e) => setFormInvoiceDate(e.target.value)}
                         required
-                        value={paymentForm.received_by}
-                        onChange={(e) =>
-                          setPaymentForm({ ...paymentForm, received_by: e.target.value })
-                        }
+                      />
+                    </div>
+                  </div>
+
+                  {/* Customer & Vehicle Info Snapshot */}
+                  <div className="p-3 bg-light rounded border mb-3">
+                    <div className="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2">
+                      <span className="fw-bold text-dark small">
+                        <i className="bi bi-info-circle-fill text-primary me-1"></i>
+                        Selected Deal Particulars ({selectedDealForPayment.deal_number})
+                      </span>
+                      <span className="badge bg-primary text-white text-capitalize">
+                        Stage: {selectedDealForPayment.deal_status?.replace(/_/g, " ") || "Booking Confirmed"}
+                      </span>
+                    </div>
+
+                    <div className="row g-2">
+                      <div className="col-12 col-md-4">
+                        <label className="form-label small mb-0 text-muted">Customer Name</label>
+                        <div className="fw-bold text-dark">{selectedDealForPayment.customer_name}</div>
+                      </div>
+                      <div className="col-12 col-md-4">
+                        <label className="form-label small mb-0 text-muted">Customer Phone</label>
+                        <div className="fw-semibold text-dark">{selectedDealForPayment.customer_phone || "-"}</div>
+                      </div>
+                      <div className="col-12 col-md-4">
+                        <label className="form-label small mb-0 text-muted">City & State</label>
+                        <div className="small text-dark">{selectedDealForPayment.customer_city || "Gujarat"}</div>
+                      </div>
+                      <div className="col-12 col-md-6 mt-2">
+                        <label className="form-label small mb-0 text-muted">Vehicle Model & Variant</label>
+                        <div className="fw-bold text-primary">{selectedDealForPayment.model_variant}</div>
+                      </div>
+                      <div className="col-12 col-md-3 mt-2">
+                        <label className="form-label small mb-0 text-muted">Color</label>
+                        <div className="text-dark fw-semibold">{selectedDealForPayment.color || "Standard"}</div>
+                      </div>
+                      <div className="col-12 col-md-3 mt-2">
+                        <label className="form-label small mb-0 text-muted">Insurance</label>
+                        <div>
+                          {selectedDealForPayment.has_insurance === "Yes" ? (
+                            <span className="badge bg-success-subtle text-success">Insurance: Yes</span>
+                          ) : (
+                            <span className="badge bg-secondary-subtle text-muted">Insurance: No</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-12 col-md-4 mt-2">
+                        <label className="form-label small mb-0 text-muted">Total Deal Net Amount</label>
+                        <div className="fw-bold text-dark">
+                          ₹{formatIndianCurrency(selectedDealForPayment.net_amount || selectedDealForPayment.total_amount)}
+                        </div>
+                      </div>
+                      <div className="col-12 col-md-4 mt-2">
+                        <label className="form-label small mb-0 text-muted">Already Paid</label>
+                        <div className="fw-bold text-success">
+                          ₹{formatIndianCurrency(selectedDealForPayment.paid_amount || selectedDealForPayment.total_paid || 0)}
+                        </div>
+                      </div>
+                      <div className="col-12 col-md-4 mt-2">
+                        <label className="form-label small mb-0 text-muted">Balance Due</label>
+                        <div className="fw-bold text-danger">
+                          ₹{formatIndianCurrency(selectedDealForPayment.balance_amount || 0)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Payment Details */}
+                  <div className="row g-2 mb-3">
+                    <div className="col-12 col-md-6">
+                      <label className="form-label small mb-1 fw-bold text-dark">
+                        Payment Type <span className="text-danger">*</span>
+                      </label>
+                      <select
+                        className="form-select form-select-sm"
+                        value={formPaymentType}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormPaymentType(val);
+                          setFormLineItems((prev) =>
+                            prev.map((item, idx) =>
+                              idx === 0
+                                ? {
+                                    ...item,
+                                    desc: `${val} for ${selectedDealForPayment.model_variant || "Vehicle"} (${selectedDealForPayment.deal_number})`,
+                                  }
+                                : item
+                            )
+                          );
+                          setFormRemarks(`${val} payment for Deal ${selectedDealForPayment.deal_number} - Customer: ${selectedDealForPayment.customer_name}`);
+                        }}
+                      >
+                        <option value="Down Payment">Down Payment</option>
+                        <option value="Token Advance">Token Advance</option>
+                        <option value="Part Payment">Part Payment</option>
+                      </select>
+                    </div>
+
+                    <div className="col-12 col-md-6">
+                      <label className="form-label small mb-1 fw-bold text-dark">
+                        Amount Paid (₹) <span className="text-danger">*</span>
+                        <span className="text-muted fw-normal ms-1">
+                          (Due: ₹{formatIndianCurrency(selectedDealForPayment.balance_amount || 0)})
+                        </span>
+                      </label>
+                      <input
+                        type="number"
+                        className="form-control form-control-sm fw-bold text-success"
+                        value={formAmountPaid}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormAmountPaid(val);
+                          setFormLineItems((prev) =>
+                            prev.map((item, idx) =>
+                              idx === 0
+                                ? { ...item, rate: val, amount: (Number(item.qty) || 1) * (Number(val) || 0) }
+                                : item
+                            )
+                          );
+                        }}
+                        required
                       />
                     </div>
 
-                    {/* Conditional: If Cash, show info banner */}
-                    {paymentForm.payment_mode === "cash" ? (
-                      <div className="col-12">
-                        <div className="p-2 px-3 bg-light border border-success-subtle rounded d-flex align-items-center gap-2 text-success small">
-                          <i className="bi bi-cash-stack fs-5 text-success"></i>
-                          <div>
-                            <strong>Cash Mode:</strong> Direct cash collection at counter. Received by: <strong>{paymentForm.received_by || "Staff"}</strong>.
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
+                    <div className={formPaymentMode === "Cash" ? "col-12 col-md-6" : "col-12 col-md-4"}>
+                      <label className="form-label small mb-1 fw-bold text-dark">
+                        Payment Mode <span className="text-danger">*</span>
+                      </label>
+                      <select
+                        className="form-select form-select-sm"
+                        value={formPaymentMode}
+                        onChange={(e) => setFormPaymentMode(e.target.value)}
+                      >
+                        <option value="UPI / GPay">UPI / GPay / QR</option>
+                        <option value="NEFT / RTGS">NEFT / RTGS Bank Transfer</option>
+                        <option value="Cheque / DD">Cheque / Demand Draft</option>
+                        <option value="Cash">Cash</option>
+                      </select>
+                    </div>
+
+                    <div className={formPaymentMode === "Cash" ? "col-12 col-md-6" : "col-12 col-md-4"}>
+                      <label className="form-label small mb-1 fw-bold text-dark">
+                        Received By <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control form-control-sm"
+                        placeholder="e.g. Cashier / Staff Name"
+                        value={formReceivedBy}
+                        onChange={(e) => setFormReceivedBy(e.target.value)}
+                        required
+                      />
+                    </div>
+
+                    {formPaymentMode !== "Cash" && (
                       <>
-                        <div className="col-md-6">
-                          <label className="form-label text-dark fw-bold small mb-1">
-                            Transaction Reference / UTR
+                        <div className="col-12 col-md-4">
+                          <label className="form-label small mb-1 fw-bold text-dark">
+                            UTR / Transaction Reference <span className="text-danger">*</span>
                           </label>
                           <input
                             type="text"
-                            className="form-control font-monospace"
-                            placeholder="e.g. UPI/98127391823/HDFC"
-                            value={paymentForm.transaction_reference}
-                            onChange={(e) =>
-                              setPaymentForm({
-                                ...paymentForm,
-                                transaction_reference: e.target.value,
-                              })
-                            }
+                            className="form-control form-control-sm font-monospace"
+                            placeholder="e.g. UTR192837482"
+                            value={formTransactionRef}
+                            onChange={(e) => setFormTransactionRef(e.target.value)}
+                            required
                           />
                         </div>
 
-                        <div className="col-md-6">
-                          <label className="form-label text-dark fw-bold small mb-1">
-                            Bank Name
-                          </label>
+                        <div className="col-12">
+                          <label className="form-label small mb-1 fw-bold text-dark">Bank Name</label>
                           <input
                             type="text"
-                            className="form-control"
+                            className="form-control form-control-sm"
                             placeholder="e.g. HDFC Bank, SBI"
-                            value={paymentForm.bank_name}
-                            onChange={(e) =>
-                              setPaymentForm({ ...paymentForm, bank_name: e.target.value })
-                            }
+                            value={formBankName}
+                            onChange={(e) => setFormBankName(e.target.value)}
                           />
                         </div>
                       </>
                     )}
 
-                    <div className="col-12">
-                      <label className="form-label text-dark fw-bold small mb-1">
-                        Payment Notes / Remarks
-                      </label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        placeholder="e.g. Customer payment transfer"
-                        value={paymentForm.notes}
-                        onChange={(e) =>
-                          setPaymentForm({ ...paymentForm, notes: e.target.value })
-                        }
-                      />
+                    {formPaymentMode === "Cash" && (
+                      <div className="col-12">
+                        <div className="p-2 px-3 bg-light border border-success-subtle rounded d-flex align-items-center gap-2 text-success small">
+                          <i className="bi bi-cash-stack fs-5 text-success"></i>
+                          <div>
+                            <strong>Cash Receipt Mode:</strong> Direct counter cash collection. Received by: <strong>{formReceivedBy || "Accounts"}</strong>.
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Remarks / Internal Notes */}
+                  <div className="mb-3">
+                    <label className="form-label small fw-bold text-dark mb-1">
+                      Remarks / Internal Notes
+                    </label>
+                    <textarea
+                      className="form-control form-control-sm"
+                      rows="2"
+                      placeholder="Add payment notes or remarks..."
+                      value={formRemarks}
+                      onChange={(e) => setFormRemarks(e.target.value)}
+                    ></textarea>
+                  </div>
+
+                  {/* Line Items Table */}
+                  <div className="mb-3">
+                    <div className="d-flex align-items-center justify-content-between mb-1">
+                      <label className="form-label small fw-bold text-dark mb-0">Invoice Item Details</label>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-link p-0 text-primary small text-decoration-none"
+                        onClick={handleAddLineItem}
+                      >
+                        <i className="bi bi-plus-circle me-1"></i>Add Item
+                      </button>
+                    </div>
+
+                    <div className="table-responsive border rounded">
+                      <table className="table table-sm table-bordered align-middle mb-0">
+                        <thead className="table-light small">
+                          <tr>
+                            <th>Description</th>
+                            <th style={{ width: "90px" }}>HSN</th>
+                            <th style={{ width: "65px" }}>Qty</th>
+                            <th style={{ width: "110px" }}>Rate (₹)</th>
+                            <th style={{ width: "120px" }}>Amount (₹)</th>
+                            <th style={{ width: "35px" }}></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {formLineItems.map((item, idx) => (
+                            <tr key={idx}>
+                              <td>
+                                <input
+                                  type="text"
+                                  className="form-control form-control-sm"
+                                  value={item.desc}
+                                  onChange={(e) => handleLineItemChange(idx, "desc", e.target.value)}
+                                  required
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="text"
+                                  className="form-control form-control-sm"
+                                  value={item.hsn}
+                                  onChange={(e) => handleLineItemChange(idx, "hsn", e.target.value)}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="number"
+                                  className="form-control form-control-sm"
+                                  value={item.qty}
+                                  onChange={(e) => handleLineItemChange(idx, "qty", e.target.value)}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="number"
+                                  className="form-control form-control-sm"
+                                  value={item.rate}
+                                  onChange={(e) => handleLineItemChange(idx, "rate", e.target.value)}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="number"
+                                  className="form-control form-control-sm fw-bold text-success"
+                                  value={item.amount}
+                                  onChange={(e) => handleLineItemChange(idx, "amount", e.target.value)}
+                                />
+                              </td>
+                              <td className="text-center">
+                                {formLineItems.length > 1 && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-link text-danger p-0"
+                                    onClick={() => handleRemoveLineItem(idx)}
+                                  >
+                                    <i className="bi bi-trash"></i>
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 </div>
 
-                <div className="modal-footer-custom d-flex justify-content-end gap-2 pt-3">
+                {/* Footer */}
+                <div className="modal-footer px-4 py-3 bg-light d-flex justify-content-between">
                   <button
                     type="button"
-                    className="btn btn-outline-custom"
+                    className="btn btn-outline-secondary"
                     onClick={() => setShowPaymentModal(false)}
                     disabled={isSubmittingPayment}
                   >
                     Cancel
                   </button>
+
                   <button
                     type="submit"
-                    className="btn btn-success d-inline-flex align-items-center gap-1"
+                    className="btn text-white px-4 fw-bold shadow d-flex align-items-center gap-2"
+                    style={{
+                      backgroundColor: "var(--primary, #58632A)",
+                      borderColor: "var(--primary, #58632A)",
+                    }}
                     disabled={isSubmittingPayment}
                   >
-                    <i className="bi bi-check2"></i>
-                    <span>{isSubmittingPayment ? "Recording..." : "Record Payment"}</span>
+                    {isSubmittingPayment ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm" role="status"></span>
+                        <span>Saving to Database...</span>
+                      </>
+                    ) : (
+                      <>
+                        <i className="bi bi-check2-circle fs-5"></i>
+                        <span>Generate & Save Invoice</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </form>
@@ -1643,6 +1941,306 @@ export default function DealsPage() {
                     <i className="bi bi-printer"></i>
                     <span>Print Deal Receipt</span>
                   </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* ===================================================================
+            MODAL 5: VIEW & PRINT OFFICIAL DAL TAX INVOICE VOUCHER PREVIEW
+            =================================================================== */}
+        {selectedInvoiceForSingleView && (
+          <div
+            className="modal fade show d-block"
+            tabIndex="-1"
+            style={{ backgroundColor: "rgba(19, 28, 39, 0.75)", zIndex: 1060 }}
+          >
+            <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+              <div className="modal-content border-0 shadow-lg" style={{ borderRadius: "14px", overflow: "hidden" }}>
+                {/* Modal Top Control Bar (Hidden on print) */}
+                <div
+                  className="modal-header px-4 py-3 no-print"
+                  style={{
+                    backgroundColor: "#131C27",
+                    color: "#DCE9A2",
+                  }}
+                >
+                  <div className="d-flex align-items-center gap-2">
+                    <i className="bi bi-receipt fs-4 text-warning"></i>
+                    <h5 className="modal-title fw-bold text-white mb-0">
+                      Tax Invoice Voucher Preview
+                    </h5>
+                    <span className="badge bg-light text-dark font-monospace ms-2">
+                      {selectedInvoiceForSingleView.invoiceNo}
+                    </span>
+                  </div>
+                  <div className="d-flex align-items-center gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-light d-flex align-items-center gap-1"
+                      onClick={() => {
+                        if (typeof window !== "undefined") window.print();
+                      }}
+                    >
+                      <i className="bi bi-printer-fill"></i>
+                      <span>Print Voucher</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-close btn-close-white"
+                      onClick={() => setSelectedInvoiceForSingleView(null)}
+                    ></button>
+                  </div>
+                </div>
+
+                {/* Printable Invoice Voucher Body */}
+                <div className="modal-body p-4 bg-white" id="printable-single-invoice-voucher">
+                  {/* Voucher Header */}
+                  <div className="row pb-3 mb-3 border-bottom align-items-center">
+                    <div className="col-7">
+                      <div className="d-flex align-items-center gap-2">
+                        <span
+                          className="px-2.5 py-1 fw-bold text-white rounded font-monospace"
+                          style={{ backgroundColor: "var(--primary, #58632A)", letterSpacing: "1px", fontSize: "14px" }}
+                        >
+                          DAL
+                        </span>
+                        <div>
+                          <h4 className="fw-bold mb-0 text-dark" style={{ letterSpacing: "0.5px" }}>
+                            DEFENCE AUTOLINK
+                          </h4>
+                          <span className="small text-muted" style={{ fontSize: "11px" }}>
+                            Official Multi-Brand Automotive Showroom • CSD AFD Invoicing
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-5 text-end">
+                      <div className="p-2 rounded bg-light border text-end d-inline-block">
+                        <span className="badge bg-success-subtle text-success text-uppercase mb-1 d-block">
+                          OFFICIAL TAX INVOICE
+                        </span>
+                        <div className="small">
+                          Invoice No:{" "}
+                          <strong className="font-monospace text-dark">
+                            {selectedInvoiceForSingleView.invoiceNo}
+                          </strong>
+                        </div>
+                        <div className="small text-muted">
+                          Date: <strong>{selectedInvoiceForSingleView.date}</strong>
+                        </div>
+                        <div className="small text-muted">
+                          Deal Ref:{" "}
+                          <strong className="font-monospace text-dark">
+                            {selectedInvoiceForSingleView.dealNumber || "DEAL-CSD"}
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Customer & Vehicle Grid */}
+                  <div className="row g-3 mb-4">
+                    <div className="col-6">
+                      <div className="border rounded p-3 h-100 bg-light">
+                        <span className="small text-uppercase fw-bold text-muted d-block mb-1">
+                          Billed To (Customer Particulars):
+                        </span>
+                        <div className="fw-bold text-dark fs-6 mb-1">
+                          {selectedInvoiceForSingleView.customerName}
+                        </div>
+                        <div className="small text-muted">
+                          Mobile: <strong>{selectedInvoiceForSingleView.mobile}</strong>
+                        </div>
+                        {selectedInvoiceForSingleView.email && (
+                          <div className="small text-muted">
+                            Email: {selectedInvoiceForSingleView.email}
+                          </div>
+                        )}
+                        <div className="small text-muted">
+                          City: {selectedInvoiceForSingleView.city || "Ahmedabad, Gujarat"}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="col-6">
+                      <div className="border rounded p-3 h-100 bg-light">
+                        <span className="small text-uppercase fw-bold text-muted d-block mb-1">
+                          Vehicle Booking Details:
+                        </span>
+                        <div className="fw-bold text-primary fs-6 mb-1">
+                          {selectedInvoiceForSingleView.vehicle}
+                        </div>
+                        <div className="small text-muted">
+                          Color: <strong>{selectedInvoiceForSingleView.color || "Standard"}</strong>
+                        </div>
+                        {selectedInvoiceForSingleView.vin && (
+                          <div className="small text-muted font-monospace">
+                            VIN / Chassis: {selectedInvoiceForSingleView.vin}
+                          </div>
+                        )}
+                        <div className="small text-muted">
+                          Payment Type: <strong>{selectedInvoiceForSingleView.installmentTitle}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Line Items Table */}
+                  <div className="table-responsive mb-3">
+                    <table className="table table-bordered align-middle mb-0">
+                      <thead className="table-light small text-uppercase">
+                        <tr>
+                          <th style={{ width: "40px" }} className="text-center">#</th>
+                          <th>Item Description</th>
+                          <th style={{ width: "90px" }} className="text-center">HSN/SAC</th>
+                          <th style={{ width: "70px" }} className="text-center">Qty</th>
+                          <th style={{ width: "130px" }} className="text-end">Rate (₹)</th>
+                          <th style={{ width: "140px" }} className="text-end">Amount (₹)</th>
+                        </tr>
+                      </thead>
+                      <tbody style={{ fontSize: "0.88rem" }}>
+                        {(selectedInvoiceForSingleView.items || []).map((it, idx) => (
+                          <tr key={idx}>
+                            <td className="text-center text-muted">{idx + 1}</td>
+                            <td className="fw-semibold text-dark">{it.desc}</td>
+                            <td className="text-center font-monospace">{it.hsn || "998313"}</td>
+                            <td className="text-center">{it.qty || 1}</td>
+                            <td className="text-end">₹{formatIndianCurrency(it.rate || it.amount)}</td>
+                            <td className="text-end fw-bold text-dark">₹{formatIndianCurrency(it.amount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr>
+                          <td colSpan="5" className="text-end fw-bold text-dark pt-3">
+                            Invoice Total:
+                          </td>
+                          <td className="text-end fw-bold fs-6 text-success pt-3">
+                            ₹{formatIndianCurrency(selectedInvoiceForSingleView.amountPaid)}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+
+                  {/* Payment Details */}
+                  <div className="row g-3 mb-4">
+                    <div className="col-7">
+                      <div className="border rounded p-3 bg-light">
+                        <span className="small text-uppercase fw-bold text-muted d-block mb-1">
+                          Payment Mode & Verification:
+                        </span>
+                        <div className="small">
+                          <div>
+                            Payment Method: <strong>{selectedInvoiceForSingleView.paymentMode}</strong>
+                          </div>
+                          {selectedInvoiceForSingleView.paymentMode?.toLowerCase() !== "cash" && (
+                            <div>
+                              UTR / Transaction Ref:{" "}
+                              <strong className="font-monospace text-dark">
+                                {selectedInvoiceForSingleView.transactionRef || "Verified"}
+                              </strong>
+                            </div>
+                          )}
+                          {selectedInvoiceForSingleView.receivedBy && (
+                            <div>
+                              Received By: <strong>{selectedInvoiceForSingleView.receivedBy}</strong>
+                            </div>
+                          )}
+                          {selectedInvoiceForSingleView.remarks && (
+                            <div className="mt-1 text-muted">
+                              Remarks: {selectedInvoiceForSingleView.remarks}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="col-5">
+                      <div className="border rounded p-3 bg-light text-end">
+                        <div className="d-flex justify-content-between small text-muted mb-1">
+                          <span>Total Agreed Deal Value:</span>
+                          <strong className="text-dark">
+                            ₹{formatIndianCurrency(selectedInvoiceForSingleView.totalDealAmount)}
+                          </strong>
+                        </div>
+                        <div className="d-flex justify-content-between small text-muted mb-1">
+                          <span>Paid in this Invoice:</span>
+                          <strong className="text-success">
+                            ₹{formatIndianCurrency(selectedInvoiceForSingleView.amountPaid)}
+                          </strong>
+                        </div>
+                        <hr className="my-2" />
+                        <div className="d-flex justify-content-between fw-bold">
+                          <span>Invoice Status:</span>
+                          <span className="text-success">RECEIVED / PAID</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Signatures & Terms */}
+                  <div className="row pt-4 mt-2 border-top align-items-end">
+                    <div className="col-7">
+                      <span className="small fw-bold text-dark d-block mb-1">
+                        Terms & Conditions:
+                      </span>
+                      <ol className="small text-muted ps-3 mb-0" style={{ fontSize: "0.72rem", lineHeight: "1.4" }}>
+                        <li>This is an official computer-generated receipt for CSD AFD portal documentation.</li>
+                        <li>Token booking amounts are adjusted against final vehicle invoice upon delivery.</li>
+                        <li>Vehicle allocation is subject to availability and Army CSD AFD portal approval.</li>
+                      </ol>
+                    </div>
+
+                    <div className="col-5 text-center">
+                      <div
+                        className="mb-1 d-inline-block px-3 py-1 rounded"
+                        style={{
+                          border: "2px dashed #58632A",
+                          color: "#58632A",
+                          fontWeight: 700,
+                          fontSize: "0.75rem",
+                        }}
+                      >
+                        DEFENCE AUTOLINK AUTHORIZED
+                      </div>
+                      <div
+                        className="small fw-bold text-dark pt-3 border-top mx-auto"
+                        style={{ maxWidth: "180px" }}
+                      >
+                        Authorized Signatory
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer Controls */}
+                <div className="modal-footer px-4 py-3 bg-light no-print d-flex justify-content-between">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={() => setSelectedInvoiceForSingleView(null)}
+                  >
+                    Close Preview
+                  </button>
+
+                  <div className="d-flex gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-primary d-flex align-items-center gap-1 fw-bold"
+                      style={{
+                        backgroundColor: "var(--primary, #58632A)",
+                        borderColor: "var(--primary, #58632A)",
+                      }}
+                      onClick={() => {
+                        if (typeof window !== "undefined") window.print();
+                      }}
+                    >
+                      <i className="bi bi-printer-fill me-1"></i>
+                      <span>Print Invoice</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
