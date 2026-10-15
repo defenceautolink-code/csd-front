@@ -11,6 +11,38 @@ export function setClientAuthCache(token, user) {
   clientAuthCached = { token, user };
 }
 
+export const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+export function isSessionExpired() {
+  if (typeof window === "undefined") return false;
+  try {
+    const loginTime = localStorage.getItem("auth_login_time");
+    const token = localStorage.getItem("auth_token") || localStorage.getItem("token");
+    if (!token) return true;
+    if (!loginTime) {
+      // If token exists but login_time was not set previously, stamp it now to grant initial 24 hours
+      localStorage.setItem("auth_login_time", Date.now().toString());
+      return false;
+    }
+    const elapsed = Date.now() - parseInt(loginTime, 10);
+    return elapsed >= SESSION_MAX_AGE_MS;
+  } catch (error) {
+    return false;
+  }
+}
+
+export function getRemainingSessionTimeMs() {
+  if (typeof window === "undefined") return 0;
+  try {
+    const loginTime = localStorage.getItem("auth_login_time");
+    if (!loginTime) return 0;
+    const elapsed = Date.now() - parseInt(loginTime, 10);
+    return Math.max(0, SESSION_MAX_AGE_MS - elapsed);
+  } catch {
+    return 0;
+  }
+}
+
 export function clearAuthSession() {
   clientAuthCached = null;
   if (typeof window === "undefined") return;
@@ -18,6 +50,7 @@ export function clearAuthSession() {
     localStorage.removeItem("auth_token");
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+    localStorage.removeItem("auth_login_time");
     document.cookie = "auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
   } catch (error) {
     console.error("Error clearing auth session:", error);
@@ -28,10 +61,13 @@ export function setAuthSession(token, user) {
   if (typeof window === "undefined") return;
   try {
     const userObj = typeof user === "string" ? JSON.parse(user) : user;
+    const nowStr = Date.now().toString();
     localStorage.setItem("auth_token", token);
     localStorage.setItem("user", JSON.stringify(userObj));
+    localStorage.setItem("auth_login_time", nowStr);
     clientAuthCached = { token, user: userObj };
-    document.cookie = `auth_token=${encodeURIComponent(token)}; path=/; max-age=604800; SameSite=Lax`;
+    // Cookie expires exactly after 24 hours (86400 seconds)
+    document.cookie = `auth_token=${encodeURIComponent(token)}; path=/; max-age=86400; SameSite=Lax`;
   } catch (error) {
     console.error("Error setting auth session:", error);
   }
@@ -43,6 +79,10 @@ export function setAuthSession(token, user) {
  */
 export function getAuthenticatedUser() {
   if (typeof window === "undefined") return null;
+  if (isSessionExpired()) {
+    clearAuthSession();
+    return null;
+  }
   try {
     const userStr = localStorage.getItem("user");
     if (!userStr) return null;
@@ -59,6 +99,10 @@ export function getAuthenticatedUser() {
  */
 export function getAuthToken() {
   if (typeof window === "undefined") return null;
+  if (isSessionExpired()) {
+    clearAuthSession();
+    return null;
+  }
   return localStorage.getItem("auth_token");
 }
 
@@ -67,6 +111,10 @@ export function getAuthToken() {
  * @returns {boolean}
  */
 export function isAuthenticated() {
+  if (isSessionExpired()) {
+    clearAuthSession();
+    return false;
+  }
   return !!getAuthToken();
 }
 

@@ -15,7 +15,6 @@ const ROLE_OPTIONS = [
   "Sales Executive",
   "Receptionist",
   "Accountant",
-  "Customer",
 ];
 
 export default function UsersPage() {

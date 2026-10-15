@@ -30,7 +30,7 @@ export default function LoginPage() {
   const [resetEmail, setResetEmail] = useState("");
   const [resetSent, setResetSent] = useState(false);
 
-  // Dynamic Greeting & Clock
+  // Dynamic Greeting & Clock & Expired Check
   useEffect(() => {
     const hour = new Date().getHours();
     if (hour < 12) {
@@ -39,6 +39,13 @@ export default function LoginPage() {
       setGreeting("Good Afternoon");
     } else {
       setGreeting("Good Evening");
+    }
+
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("expired") === "1") {
+        setErrorMessage("Your session has expired after 24 hours. Please log in again to continue.");
+      }
     }
   }, []);
 

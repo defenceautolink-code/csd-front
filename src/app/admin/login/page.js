@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import axios from "axios";
@@ -17,6 +17,15 @@ export default function CrmLoginPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [activeRole, setActiveRole] = useState("admin");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("expired") === "1") {
+        setErrorMessage("Your session has expired after 24 hours. Please log in again to continue.");
+      }
+    }
+  }, []);
 
   // 2. Quick Demo button click handler
   const handleRoleSelect = (role) => {

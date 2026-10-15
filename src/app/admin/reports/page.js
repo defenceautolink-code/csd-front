@@ -6,6 +6,7 @@ import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
 import { hasPermission } from "@/utils/auth";
 import reportApi from "@/services/reportApi";
+import ReportsNav from "@/app/admin/reports/ReportsNav";
 
 export default function ReportsPage() {
   const { showToast } = useToast();
@@ -19,6 +20,8 @@ export default function ReportsPage() {
   const [endDate, setEndDate] = useState("");
   const [selectedSegment, setSelectedSegment] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [staffFilter, setStaffFilter] = useState("all");
+  const [staffSearch, setStaffSearch] = useState("");
 
   useEffect(() => {
     const user = localStorage.getItem("user");
@@ -106,9 +109,31 @@ export default function ReportsPage() {
   };
 
   const kpis = analyticsData?.kpi_summary;
-  const funnel = analyticsData?.sales_conversion_funnel || [];
+  // Filter out Test Drives stage from the sales conversion funnel
+  const funnel = (analyticsData?.sales_conversion_funnel || []).filter(
+    (stage) => !stage.label?.toLowerCase().includes("test drive") && stage.stage_number !== 3
+  );
   const leadSources = analyticsData?.lead_source_attribution || [];
-  const leaderboard = analyticsData?.sales_executive_leaderboard || [];
+  const rawLeaderboard = analyticsData?.sales_executive_leaderboard || [];
+
+  // Filter leaderboard by role (All vs Sales Team Only vs Managers) and search query
+  const filteredLeaderboard = rawLeaderboard.filter((rep) => {
+    if (staffSearch) {
+      const q = staffSearch.toLowerCase();
+      const matchName = rep.rep_name?.toLowerCase().includes(q);
+      const matchDesig = rep.designation?.toLowerCase().includes(q);
+      if (!matchName && !matchDesig) return false;
+    }
+    const desig = (rep.designation || "").toLowerCase();
+    const name = (rep.rep_name || "").toLowerCase();
+    if (staffFilter === "sales_only") {
+      // Exclude Super Admin / Admin User
+      if (desig.includes("super admin") || desig.includes("admin") || name.includes("admin")) return false;
+    } else if (staffFilter === "managers") {
+      if (!desig.includes("manager")) return false;
+    }
+    return true;
+  });
 
   // Funnel color palette
   const getFunnelColor = (idx) => {
@@ -226,6 +251,9 @@ export default function ReportsPage() {
             )}
           </div>
         </div>
+
+        {/* Reports Navigation Tabs */}
+        <ReportsNav />
 
         {/* Loading State */}
         {loading ? (
@@ -427,9 +455,51 @@ export default function ReportsPage() {
 
             {/* Team Leaderboard Performance */}
             <div className="card">
-              <div className="card-header d-flex justify-content-between align-items-center">
-                <h5 className="card-title mb-0">Sales Executive Performance Leaderboard</h5>
-                <span className="text-muted small">Target achievements & gross bookings</span>
+              <div className="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                  <h5 className="card-title mb-0">Sales Executive Performance Leaderboard</h5>
+                  <p className="text-muted small mb-0">Target achievements & gross bookings</p>
+                </div>
+                <div className="d-flex flex-wrap align-items-center gap-2">
+                  {/* Search Staff */}
+                  <div className="input-group input-group-sm" style={{ width: "220px" }}>
+                    <span className="input-group-text bg-light border-end-0">
+                      <i className="bi bi-search text-muted"></i>
+                    </span>
+                    <input
+                      type="text"
+                      className="form-control border-start-0"
+                      placeholder="Search employee..."
+                      value={staffSearch}
+                      onChange={(e) => setStaffSearch(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Filter by Role */}
+                  <div className="btn-group btn-group-sm" role="group">
+                    <button
+                      type="button"
+                      className={`btn ${staffFilter === "all" ? "btn-primary" : "btn-outline-secondary"}`}
+                      onClick={() => setStaffFilter("all")}
+                    >
+                      All Staff ({rawLeaderboard.length})
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn ${staffFilter === "sales_only" ? "btn-primary" : "btn-outline-secondary"}`}
+                      onClick={() => setStaffFilter("sales_only")}
+                    >
+                      Sales Team Only
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn ${staffFilter === "managers" ? "btn-primary" : "btn-outline-secondary"}`}
+                      onClick={() => setStaffFilter("managers")}
+                    >
+                      Managers
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div className="table-responsive">
@@ -439,7 +509,7 @@ export default function ReportsPage() {
                       <th>Rank & Rep</th>
                       <th>Branch</th>
                       <th>Leads Assigned</th>
-                      <th>Test Drives</th>
+                      <th>Pending Follow-ups</th>
                       <th>Deals Closed</th>
                       <th>Target Achieved</th>
                       <th>Total Sales Volume</th>
@@ -447,14 +517,14 @@ export default function ReportsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {leaderboard.length === 0 ? (
+                    {filteredLeaderboard.length === 0 ? (
                       <tr>
                         <td colSpan="8" className="text-center text-muted py-4">
-                          No sales executive leaderboard records found.
+                          No matching sales executive leaderboard records found.
                         </td>
                       </tr>
                     ) : (
-                      leaderboard.map((rep, idx) => {
+                      filteredLeaderboard.map((rep, idx) => {
                         const rankColor =
                           rep.rank === 1
                             ? "bg-warning text-dark"
@@ -496,16 +566,41 @@ export default function ReportsPage() {
                                   }}
                                 />
                                 <div>
-                                  <div className="text-dark fw-bold small">{rep.rep_name}</div>
-                                  <span className="text-muted" style={{ fontSize: "0.75rem" }}>
+                                  <Link
+                                    href={`/admin/leads?assigned_to=${rep.user_id}`}
+                                    className="text-dark fw-bold small text-decoration-none hover-primary"
+                                    title="Click to view assigned customer leads"
+                                  >
+                                    {rep.rep_name}
+                                    <i className="bi bi-box-arrow-up-right ms-1 text-muted" style={{ fontSize: "0.7rem" }}></i>
+                                  </Link>
+                                  <span className="text-muted d-block" style={{ fontSize: "0.75rem" }}>
                                     {rep.designation || "Sales Consultant"}
                                   </span>
                                 </div>
                               </div>
                             </td>
                             <td>{rep.branch || "Main Showroom"}</td>
-                            <td>{rep.leads_assigned || 0}</td>
-                            <td>{rep.test_drives || 0}</td>
+                            <td>
+                              <Link
+                                href={`/admin/leads?assigned_to=${rep.user_id}`}
+                                className="badge bg-light text-dark border text-decoration-none fw-semibold"
+                                title="View assigned leads"
+                              >
+                                {rep.leads_assigned || 0} Leads
+                              </Link>
+                            </td>
+                            <td>
+                              <span
+                                className={`badge ${
+                                  (rep.pending_followups || 0) > 0
+                                    ? "bg-warning-subtle text-warning fw-bold"
+                                    : "bg-light text-muted"
+                                }`}
+                              >
+                                {rep.pending_followups !== undefined ? `${rep.pending_followups} Pending` : "0 Pending"}
+                              </span>
+                            </td>
                             <td className="text-dark fw-bold">
                               {rep.deals_closed_label || `${rep.deals_closed || 0} Units`}
                             </td>

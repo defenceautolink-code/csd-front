@@ -1,5 +1,5 @@
 import axios from "axios";
-import { clearAuthSession } from "@/utils/auth";
+import { clearAuthSession, isSessionExpired } from "@/utils/auth";
 
 // Create Axios Instance with default settings
 const api = axios.create({
@@ -18,6 +18,13 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     if (typeof window !== "undefined") {
+      if (isSessionExpired()) {
+        clearAuthSession();
+        if (!window.location.pathname.includes("/login")) {
+          window.location.href = "/login?expired=1";
+        }
+        return Promise.reject(new Error("Session expired after 24 hours."));
+      }
       const token = localStorage.getItem("auth_token") || localStorage.getItem("token");
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
