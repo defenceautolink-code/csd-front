@@ -9,6 +9,7 @@ import { useToast } from "@/app/components/Toast";
 import api from "@/lib/axios";
 import quotationApi from "@/lib/quotationApi";
 import ConvertDealModal from "../ConvertDealModal";
+import discountApprovalApi from "@/services/discountApprovalApi";
 
 export default function LeadDetailPage() {
   const params = useParams();
@@ -47,6 +48,10 @@ export default function LeadDetailPage() {
     next_follow_up_date: "",
     next_follow_up_time: "10:00 AM",
     notes: "",
+    request_discount: false,
+    discount_amount: "",
+    proposed_price: "",
+    discount_reason: "",
   });
 
   // Quotations state
@@ -71,7 +76,7 @@ export default function LeadDetailPage() {
           sum +
           (Number(it.total) ||
             Number(it.unit_price || 0) * Number(it.quantity || 1) -
-              Number(it.discount || 0)),
+            Number(it.discount || 0)),
         0
       );
       if (itemsSum > 0) return itemsSum;
@@ -114,13 +119,12 @@ export default function LeadDetailPage() {
             (q.created_at ? new Date(q.created_at).toISOString().split("T")[0] : ""),
           follow_up_time: q.created_at
             ? new Date(q.created_at).toLocaleTimeString("en-IN", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })
+              hour: "2-digit",
+              minute: "2-digit",
+            })
             : "",
-          notes: `Official Quotation #${q.quotation_number || `#Q-${q.id}`} generated for ${
-            q.variant_name || q.model_name || lead?.model_variant || "Vehicle"
-          }. Total Amount: ₹${getQuotationAmount(q).toLocaleString("en-IN")}`,
+          notes: `Official Quotation #${q.quotation_number || `#Q-${q.id}`} generated for ${q.variant_name || q.model_name || lead?.model_variant || "Vehicle"
+            }. Total Amount: ₹${getQuotationAmount(q).toLocaleString("en-IN")}`,
           user_name: q.created_by_name || q.user?.name || "Admin User (Super Admin)",
           _isQuotation: true,
           _quotationId: q.id,
@@ -144,8 +148,13 @@ export default function LeadDetailPage() {
     if (!leadId) return;
     setIsLoading(true);
     try {
-      const res = await api.get(`/leads/${leadId}`);
-      const rawLead = res.data?.data || res.data;
+      const res = await api.get(`/leads/${leadId}`).catch((e) => {
+        if (e.response?.status === 403) {
+          return api.get(`/sales-executive/leads/${leadId}`).catch(() => null);
+        }
+        return null;
+      });
+      const rawLead = res?.data?.data || res?.data;
       if (rawLead) {
         const localPostings = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("csd_lead_postings_cache") || "{}") : {};
         setLead({
@@ -244,6 +253,16 @@ export default function LeadDetailPage() {
   };
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const u = JSON.parse(localStorage.getItem("user") || "{}");
+        const r = (u.role || "").toLowerCase();
+        if (r.includes("executive") || r.includes("sales_executive") || r === "sales") {
+          router.replace(`/sales-executive/leads/${leadId}`);
+          return;
+        }
+      } catch (_) {}
+    }
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchLeadDetails();
     fetchFollowUps();
@@ -273,15 +292,23 @@ export default function LeadDetailPage() {
         next_follow_up_time: followUpForm.next_follow_up_time || null,
         notes: followUpForm.notes.trim(),
         remarks: followUpForm.notes.trim(),
+        lead_status_name: followUpForm.request_discount ? "Discount Pending" : undefined,
+        is_discount_requested: Boolean(followUpForm.request_discount),
+        discount_amount: followUpForm.request_discount && followUpForm.discount_amount ? Number(followUpForm.discount_amount) : null,
+        proposed_price: followUpForm.proposed_price ? Number(followUpForm.proposed_price) : null,
+        reason: followUpForm.discount_reason || followUpForm.notes.trim() || "Customer demanded discount during follow-up call",
       };
 
-      try {
-        await api.post("/follow-ups", payload);
-      } catch {
-        await api.post(`/leads/${leadId}/follow-ups`, payload);
-      }
+      await api.post("/follow-ups", payload);
 
-      showToast("Follow-up call interaction recorded!", "success");
+      window.dispatchEvent(new Event("csd_approvals_updated"));
+
+      showToast(
+        followUpForm.request_discount
+          ? `Follow-up logged & discount request (₹${Number(followUpForm.discount_amount).toLocaleString("en-IN")}) sent to Sales Manager & Admin!`
+          : "Follow-up call interaction recorded!",
+        "success"
+      );
       setShowFollowUpModal(false);
       setFollowUpForm({
         outcome: "Interested / Call Back",
@@ -291,6 +318,10 @@ export default function LeadDetailPage() {
         next_follow_up_date: "",
         next_follow_up_time: "10:00 AM",
         notes: "",
+        request_discount: false,
+        discount_amount: "",
+        proposed_price: "",
+        discount_reason: "",
       });
       fetchFollowUps();
       fetchLeadDetails();
@@ -393,13 +424,12 @@ export default function LeadDetailPage() {
                   <i className="bi bi-person-circle text-primary"></i> Customer Information
                 </h5>
                 <span
-                  className={`badge ${
-                    lead.priority === "Hot"
+                  className={`badge ${lead.priority === "Hot"
                       ? "bg-danger text-white"
                       : lead.priority === "Warm"
                         ? "bg-warning text-dark"
                         : "bg-info text-white"
-                  } px-3 py-1 fw-bold`}
+                    } px-3 py-1 fw-bold`}
                 >
                   {lead.priority === "Hot" ? "🔥 Hot Priority" : lead.priority === "Warm" ? "☀️ Warm Priority" : "❄️ Cold Priority"}
                 </span>
@@ -459,10 +489,10 @@ export default function LeadDetailPage() {
                       <i className="bi bi-cake2-fill text-danger me-1"></i>
                       {lead.birth_date
                         ? new Date(lead.birth_date).toLocaleDateString("en-IN", {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                          })
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })
                         : "Not Recorded"}
                     </div>
                   </div>
@@ -472,10 +502,10 @@ export default function LeadDetailPage() {
                       <i className="bi bi-flower1 text-info me-1"></i>
                       {lead.anniversary_date
                         ? new Date(lead.anniversary_date).toLocaleDateString("en-IN", {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                          })
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })
                         : "Not Recorded"}
                     </div>
                   </div>
@@ -492,12 +522,12 @@ export default function LeadDetailPage() {
                       <i className="bi bi-clock-history me-1 text-primary"></i>
                       {lead.created_at
                         ? new Date(lead.created_at).toLocaleDateString("en-IN", {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
                         : "N/A"}
                     </div>
                   </div>
@@ -635,11 +665,10 @@ export default function LeadDetailPage() {
                     {combinedHistory.map((fu, idx) => (
                       <div
                         key={fu.id || idx}
-                        className={`p-3 border rounded-3 ${
-                          fu._isQuotation
+                        className={`p-3 border rounded-3 ${fu._isQuotation
                             ? "bg-white shadow-sm"
                             : "bg-light"
-                        }`}
+                          }`}
                         style={{
                           cursor: fu._quotationId ? "pointer" : "default",
                           transition: "all 0.15s ease",
@@ -1030,6 +1059,64 @@ export default function LeadDetailPage() {
                         value={followUpForm.next_follow_up_time}
                         onChange={(e) => setFollowUpForm({ ...followUpForm, next_follow_up_time: e.target.value })}
                       />
+                    </div>
+
+                    {/* Customer Demanded Discount Switch & Fields */}
+                    <div className="col-12">
+                      <div className="p-3 rounded-3 border" style={{ backgroundColor: "#F8FAFC", borderColor: "#E2E8F0" }}>
+                        <div className="form-check form-switch d-flex align-items-center justify-content-between p-0 m-0">
+                          <label className="form-check-label fw-bold text-dark d-flex align-items-center gap-2 mb-0" htmlFor="leadDetailDiscountSwitch" style={{ cursor: "pointer" }}>
+                            <i className="bi bi-tag-fill text-danger"></i>
+                            <span>Customer Demanded Discount? (Send to Sales Manager & Admin for Approval)</span>
+                          </label>
+                          <input
+                            className="form-check-input ms-3"
+                            type="checkbox"
+                            role="switch"
+                            id="leadDetailDiscountSwitch"
+                            style={{ width: "2.6rem", height: "1.3rem", cursor: "pointer" }}
+                            checked={followUpForm.request_discount}
+                            onChange={(e) => setFollowUpForm({ ...followUpForm, request_discount: e.target.checked })}
+                          />
+                        </div>
+
+                        {followUpForm.request_discount && (
+                          <div className="mt-3 pt-3 border-top">
+                            <div className="row g-3">
+                              <div className="col-12">
+                                <label className="form-label text-dark fw-semibold small">
+                                  Requested Discount Amount (₹) <span className="text-danger">*</span>
+                                </label>
+                                <div className="input-group">
+                                  <span className="input-group-text bg-white fw-bold">₹</span>
+                                  <input
+                                    type="number"
+                                    className="form-control"
+                                    placeholder="e.g. 25000"
+                                    value={followUpForm.discount_amount}
+                                    onChange={(e) => setFollowUpForm({ ...followUpForm, discount_amount: e.target.value })}
+                                    required={followUpForm.request_discount}
+                                  />
+                                </div>
+                              </div>
+                              <div className="col-12">
+                                <label className="form-label text-dark fw-semibold small">Discount Reason / Justification</label>
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  placeholder="e.g. Customer ready to pay token advance today if 25k discount approved"
+                                  value={followUpForm.discount_reason}
+                                  onChange={(e) => setFollowUpForm({ ...followUpForm, discount_reason: e.target.value })}
+                                />
+                                <div className="form-text small text-muted mt-1">
+                                  <i className="bi bi-info-circle me-1 text-primary"></i>
+                                  Request status will default to <strong>Pending</strong> and appear on both Super Admin and Sales Manager Dashboards for approval.
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

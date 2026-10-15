@@ -83,7 +83,7 @@ export default function LoginPage() {
       setEmail("neha.sharma@carcrm.com");
       setPassword("password");
     } else if (role === "executive") {
-      setEmail("david.miller@carcrm.com");
+      setEmail("rahul.verma@carcrm.com");
       setPassword("password");
     } else if (role === "receptionist") {
       setEmail("pooja.iyer@carcrm.com");

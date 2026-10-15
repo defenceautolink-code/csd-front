@@ -78,7 +78,8 @@ export function isAuthenticated() {
  */
 export function normalizeRole(role) {
   if (!role) return "";
-  return String(role)
+  const roleStr = typeof role === "object" ? (role?.name || role?.title || role?.slug || role?.role || "") : role;
+  return String(roleStr)
     .trim()
     .toLowerCase()
     .replace(/[\s-]+/g, "_");
@@ -105,7 +106,7 @@ export function hasRole(roles, customUser = null) {
   const isMatch = allowedRoles.some((role) => {
     if (role === "admin" && (currentRole === "super_admin" || currentRole === "admin")) return true;
     if (role === "manager" && (currentRole === "sales_manager" || currentRole === "manager")) return true;
-    if (role === "sales_executive" && (currentRole === "sales_executive" || currentRole === "sales")) return true;
+    if (role === "sales_executive" && (currentRole === "sales_executive" || currentRole === "sales" || currentRole === "executive")) return true;
     return currentRole === role;
   });
 
@@ -328,6 +329,7 @@ export function hasPermission(permission, customUser = undefined) {
   let roleKey = currentRole;
   if (roleKey === "admin") roleKey = "super_admin";
   if (roleKey === "manager") roleKey = "sales_manager";
+  if (roleKey === "executive" || roleKey === "sales") roleKey = "sales_executive";
 
   if (roleKey === "super_admin") return true;
 
@@ -402,7 +404,26 @@ export function canAccessAdminPath(pathname, customUser = undefined) {
     if (requiredPrefixRole === "sales_executive" && currentRole !== "sales_executive" && currentRole !== "executive" && currentRole !== "sales") return false;
     if (requiredPrefixRole === "receptionist" && currentRole !== "receptionist") return false;
     if (requiredPrefixRole === "accountant" && currentRole !== "accountant") return false;
-    if (requiredPrefixRole === "super_admin" && currentRole !== "super_admin" && currentRole !== "admin") return false;
+    if (requiredPrefixRole === "super_admin" && currentRole !== "super_admin" && currentRole !== "admin") {
+      // Allow authorized staff roles to access shared admin module routes if they have the module permission
+      const isSharedAdminRoute =
+        pathname === "/admin/leads" ||
+        pathname.startsWith("/admin/leads/") ||
+        pathname === "/admin/follow-up" ||
+        pathname.startsWith("/admin/follow-up/") ||
+        pathname === "/admin/deals" ||
+        pathname.startsWith("/admin/deals/") ||
+        pathname === "/admin/pipeline" ||
+        pathname.startsWith("/admin/pipeline/") ||
+        pathname === "/admin/quotation" ||
+        pathname.startsWith("/admin/quotation/") ||
+        pathname === "/admin/insurance" ||
+        pathname.startsWith("/admin/insurance/");
+
+      if (!isSharedAdminRoute) {
+        return false;
+      }
+    }
   }
 
   if (

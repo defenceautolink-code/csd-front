@@ -1,50 +1,47 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useToast } from "@/app/components/Toast";
+import discountApprovalApi from "@/services/discountApprovalApi";
 
 export default function SalesManagerDashboard() {
   const { showToast } = useToast();
 
-  // Modals state
-  const [showCounterModal, setShowCounterModal] = useState(false);
-  const [counterPrice, setCounterPrice] = useState("₹16,15,000");
-  const [counterNotes, setCounterNotes] = useState("");
 
-  // Action Required State
-  const [actionItem, setActionItem] = useState({
-    id: 1,
-    name: "Rajesh Patel",
-    vehicle: "Hyundai Creta Automatic",
-    rep: "Amit Kumar",
-    date: "Oct 24, 2023",
-    originalPrice: "₹16.4L",
-    counterPrice: "₹16.2L",
-    proposedPrice: "₹16.25L",
-    status: "pending",
-  });
+  // Action Required State - Loaded dynamically from discountApprovalApi
+  const [pendingApprovals, setPendingApprovals] = useState([]);
+  const [isLoadingApprovals, setIsLoadingApprovals] = useState(true);
+
+  const fetchPending = async () => {
+    try {
+      const data = await discountApprovalApi.getPendingApprovals();
+      setPendingApprovals(data || []);
+    } catch (e) {
+      console.error("Failed to load approvals:", e);
+    } finally {
+      setIsLoadingApprovals(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPending();
+    window.addEventListener("csd_approvals_updated", fetchPending);
+    return () => window.removeEventListener("csd_approvals_updated", fetchPending);
+  }, []);
 
   // Handle Approve
-  const handleApprove = () => {
-    showToast(`Approved proposed pricing ₹16.25L for ${actionItem.name}!`, "success");
-    setActionItem(null);
+  const handleApprove = async (item) => {
+    await discountApprovalApi.takeApprovalAction(item.id, "approve");
+    showToast(`Approved discount request for ${item.customer_name || "Customer"}!`, "success");
+    setPendingApprovals((prev) => prev.filter((a) => a.id !== item.id));
   };
 
   // Handle Reject
-  const handleReject = () => {
-    showToast(`Rejected proposed discount for ${actionItem.name}.`, "warning");
-    setActionItem(null);
-  };
-
-  // Handle Submit Counter Offer
-  const handleSubmitCounter = (e) => {
-    e.preventDefault();
-    showToast(`Counter offer of ${counterPrice} sent to Amit Kumar for ${actionItem.name}!`, "info");
-    setShowCounterModal(false);
-    if (actionItem) {
-      setActionItem({ ...actionItem, counterPrice: counterPrice });
-    }
+  const handleReject = async (item) => {
+    await discountApprovalApi.takeApprovalAction(item.id, "reject");
+    showToast(`Rejected discount request for ${item.customer_name || "Customer"}.`, "warning");
+    setPendingApprovals((prev) => prev.filter((a) => a.id !== item.id));
   };
 
   return (
@@ -192,106 +189,115 @@ export default function SalesManagerDashboard() {
                 style={{ color: "#DC2626", fontSize: "0.75rem", letterSpacing: "0.8px" }}
               >
                 <i className="bi bi-exclamation-triangle"></i>
-                <span>ACTION REQUIRED</span>
+                <span>ACTION REQUIRED ({pendingApprovals.length})</span>
               </div>
               <Link
                 href="/admin/leads"
                 className="text-decoration-none text-muted fw-semibold small"
                 style={{ fontSize: "0.8rem" }}
               >
-                View All
+                View Leads
               </Link>
             </div>
 
-            {actionItem ? (
-              <div
-                className="card rounded-4 p-3 bg-white shadow-sm"
-                style={{ border: "1.5px solid #FCA5A5" }}
-              >
-                {/* Header Row */}
-                <div className="d-flex align-items-start justify-content-between mb-1">
-                  <div>
-                    <h5 className="fw-bold text-dark mb-0 fs-6">{actionItem.name}</h5>
-                    <div className="text-secondary small d-flex align-items-center gap-1 mt-1">
-                      <i className="bi bi-car-front"></i>
-                      <span>{actionItem.vehicle}</span>
-                    </div>
-                  </div>
-                  <span
-                    className="badge fw-bold px-2 py-1 rounded-1"
-                    style={{ backgroundColor: "#FEE2E2", color: "#DC2626", fontSize: "0.7rem", letterSpacing: "0.5px" }}
-                  >
-                    NEGOTIATION
-                  </span>
-                </div>
-
-                {/* Subtitle / Rep Meta */}
-                <div className="d-flex align-items-center justify-content-between text-muted small mb-3" style={{ fontSize: "0.78rem" }}>
-                  <span>Rep: {actionItem.rep}</span>
-                  <span>{actionItem.date}</span>
-                </div>
-
-                {/* Pricing Box (Original, Counter, Proposed) */}
-                <div
-                  className="rounded-3 p-2 px-3 mb-3 d-flex align-items-center justify-content-between text-center"
-                  style={{ backgroundColor: "#F9FAFB", border: "1px solid #F3F4F6" }}
-                >
-                  <div>
-                    <span className="text-muted d-block small" style={{ fontSize: "0.72rem" }}>
-                      Original
-                    </span>
-                    <span className="text-decoration-line-through text-muted small fw-semibold">
-                      {actionItem.originalPrice}
-                    </span>
-                  </div>
-                  <div style={{ borderLeft: "1px solid #E5E7EB", height: "24px" }}></div>
-                  <div>
-                    <span className="text-muted d-block small" style={{ fontSize: "0.72rem" }}>
-                      Counter
-                    </span>
-                    <span className="fw-bold text-dark small">{actionItem.counterPrice}</span>
-                  </div>
-                  <div style={{ borderLeft: "1px solid #E5E7EB", height: "24px" }}></div>
-                  <div>
-                    <span className="text-muted d-block small" style={{ fontSize: "0.72rem" }}>
-                      Proposed
-                    </span>
-                    <span className="fw-bolder text-success small">{actionItem.proposedPrice}</span>
-                  </div>
-                </div>
-
-                {/* 3 Action Buttons */}
-                <div className="d-flex gap-2">
-                  <button
-                    type="button"
-                    className="btn flex-fill bg-white border py-2 fw-semibold shadow-sm"
-                    style={{ borderColor: "#E5E7EB", color: "#1E293B", borderRadius: "10px", fontSize: "0.85rem" }}
-                    onClick={handleReject}
-                  >
-                    Reject
-                  </button>
-                  <button
-                    type="button"
-                    className="btn flex-fill bg-white border py-2 fw-semibold shadow-sm"
-                    style={{ borderColor: "#4D5D25", color: "#4D5D25", borderRadius: "10px", fontSize: "0.85rem" }}
-                    onClick={() => setShowCounterModal(true)}
-                  >
-                    Negotiate
-                  </button>
-                  <button
-                    type="button"
-                    className="btn flex-fill text-white py-2 fw-semibold shadow-sm"
-                    style={{ backgroundColor: "#0D1527", borderRadius: "10px", fontSize: "0.85rem", border: "none" }}
-                    onClick={handleApprove}
-                  >
-                    Approve
-                  </button>
-                </div>
-              </div>
-            ) : (
+            {pendingApprovals.length === 0 ? (
               <div className="card border rounded-4 p-4 text-center text-muted bg-white">
                 <i className="bi bi-check-circle-fill text-success fs-3 mb-2"></i>
-                <p className="mb-0 fw-semibold">All negotiation requests resolved!</p>
+                <p className="mb-0 fw-semibold">All customer discount and negotiation requests resolved!</p>
+              </div>
+            ) : (
+              <div className="d-flex flex-column gap-3">
+                {pendingApprovals.map((item) => (
+                  <div
+                    key={item.id}
+                    className="card rounded-4 p-3 bg-white shadow-sm"
+                    style={{ border: "1.5px solid #FCA5A5" }}
+                  >
+                    {/* Header Row */}
+                    <div className="d-flex align-items-start justify-content-between mb-1">
+                      <div>
+                        <h5 className="fw-bold text-dark mb-0 fs-6">{item.customer_name}</h5>
+                        <div className="text-secondary small d-flex align-items-center gap-1 mt-1">
+                          <i className="bi bi-car-front"></i>
+                          <span>{item.vehicle_name}</span>
+                          {item.customer_phone && <span className="ms-2 text-muted">({item.customer_phone})</span>}
+                        </div>
+                      </div>
+                      <span
+                        className="badge fw-bold px-2 py-1 rounded-1"
+                        style={{ backgroundColor: "#FEE2E2", color: "#DC2626", fontSize: "0.7rem", letterSpacing: "0.5px" }}
+                      >
+                        DISCOUNT REQ
+                      </span>
+                    </div>
+
+                    {/* Subtitle / Rep Meta */}
+                    <div className="d-flex align-items-center justify-content-between text-muted small mb-2" style={{ fontSize: "0.78rem" }}>
+                      <span>Rep: {item.requested_by_name || "Sales Executive"}</span>
+                      <span>
+                        {item.created_at
+                          ? new Date(item.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+                          : "Today"}
+                      </span>
+                    </div>
+
+                    {/* Pricing Box (Demanded Discount, Proposed Offer) */}
+                    <div
+                      className="rounded-3 p-2 px-3 mb-2 d-flex align-items-center justify-content-between text-center"
+                      style={{ backgroundColor: "#F9FAFB", border: "1px solid #F3F4F6" }}
+                    >
+                      <div className={item.proposed_price ? "" : "w-100 text-center"}>
+                        <span className="text-muted d-block small" style={{ fontSize: "0.72rem" }}>
+                          Demanded Discount
+                        </span>
+                        <span className="fw-bold text-danger fs-6">
+                          ₹{Number(item.discount_amount || 0).toLocaleString("en-IN")}
+                        </span>
+                      </div>
+                      {item.proposed_price && (
+                        <>
+                          <div style={{ borderLeft: "1px solid #E5E7EB", height: "24px" }}></div>
+                          <div>
+                            <span className="text-muted d-block small" style={{ fontSize: "0.72rem" }}>
+                              Proposed Offer Price
+                            </span>
+                            <span className="fw-bolder text-success fs-6">
+                              ₹{Number(item.proposed_price).toLocaleString("en-IN")}
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Reason / Notes */}
+                    {item.reason && (
+                      <div className="p-2 mb-3 rounded-2 bg-light text-muted small" style={{ fontSize: "0.78rem" }}>
+                        <i className="bi bi-chat-left-quote me-1 text-primary"></i>
+                        <strong>Reason:</strong> {item.reason}
+                      </div>
+                    )}
+
+                    {/* Action Buttons: Reject & Approve */}
+                    <div className="d-flex gap-2">
+                      <button
+                        type="button"
+                        className="btn flex-fill bg-white border py-2 fw-semibold shadow-sm"
+                        style={{ borderColor: "#E5E7EB", color: "#DC2626", borderRadius: "10px", fontSize: "0.85rem" }}
+                        onClick={() => handleReject(item)}
+                      >
+                        Reject
+                      </button>
+                      <button
+                        type="button"
+                        className="btn flex-fill text-white py-2 fw-semibold shadow-sm"
+                        style={{ backgroundColor: "#0D1527", borderRadius: "10px", fontSize: "0.85rem", border: "none" }}
+                        onClick={() => handleApprove(item)}
+                      >
+                        Approve
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -616,77 +622,7 @@ export default function SalesManagerDashboard() {
         </div>
       </div>
 
-      {/* ----------------------------------------------------
-          4. MODAL: COUNTER OFFER NEGOTIATION
-          ---------------------------------------------------- */}
-      {showCounterModal && actionItem && (
-        <div className="modal-backdrop-custom" onClick={() => setShowCounterModal(false)}>
-          <div className="modal-dialog-custom modal-md" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-custom" style={{ backgroundColor: "#0D1527", color: "#fff" }}>
-              <h5 className="modal-title-custom text-white mb-0 fs-6">
-                <i className="bi bi-cash-coin me-2 text-warning"></i> Counter Offer: {actionItem.name}
-              </h5>
-              <button
-                type="button"
-                className="btn-close btn-close-white"
-                onClick={() => setShowCounterModal(false)}
-              ></button>
-            </div>
 
-            <form onSubmit={handleSubmitCounter}>
-              <div className="modal-body-custom">
-                <div className="p-3 rounded-3 mb-3" style={{ background: "#F8F9FA", border: "1px solid #E5E7EB" }}>
-                  <div className="fw-bold text-dark">{actionItem.name}</div>
-                  <div className="text-secondary small">{actionItem.vehicle} • Rep: {actionItem.rep}</div>
-                  <div className="small text-muted mt-1">
-                    Original: <span className="text-decoration-line-through">{actionItem.originalPrice}</span> • Proposed: <strong className="text-success">{actionItem.proposedPrice}</strong>
-                  </div>
-                </div>
-
-                <div className="mb-3">
-                  <label className="form-label fw-semibold small">Manager Counter Offer Price *</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="e.g. ₹16,15,000"
-                    required
-                    value={counterPrice}
-                    onChange={(e) => setCounterPrice(e.target.value)}
-                  />
-                </div>
-
-                <div className="mb-3">
-                  <label className="form-label fw-semibold small">Special Note to Sales Rep</label>
-                  <textarea
-                    className="form-control"
-                    rows="2"
-                    placeholder="e.g. Include 1st year insurance discount instead of cash discount..."
-                    value={counterNotes}
-                    onChange={(e) => setCounterNotes(e.target.value)}
-                  ></textarea>
-                </div>
-              </div>
-
-              <div className="modal-footer-custom">
-                <button
-                  type="button"
-                  className="btn btn-light border px-3"
-                  onClick={() => setShowCounterModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn text-white px-4 fw-semibold"
-                  style={{ backgroundColor: "#0D1527" }}
-                >
-                  Send Counter Offer
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

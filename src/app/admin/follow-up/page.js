@@ -5,8 +5,9 @@ import Link from "next/link";
 import axios from "axios";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
-import { hasPermission } from "@/utils/auth";
+import { hasPermission, normalizeRole } from "@/utils/auth";
 import Pagination from "@/components/common/Pagination";
+import discountApprovalApi from "@/services/discountApprovalApi";
 
 export default function FollowUpPage() {
   const { showToast } = useToast();
@@ -20,6 +21,71 @@ export default function FollowUpPage() {
   }, []);
 
   const can = (permission) => hasPermission(permission, currentUser);
+
+  const getLeadProfileHref = (leadId) => {
+    if (!leadId) return "#";
+    let userObj = currentUser;
+    if (!userObj && typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("user");
+        if (stored) userObj = JSON.parse(stored);
+      } catch (e) {
+        // ignore
+      }
+    }
+    const r = userObj ? normalizeRole(userObj.role) : "";
+    if (r === "sales_executive" || r === "sales" || r === "executive") {
+      return `/sales-executive/leads/${leadId}`;
+    }
+    if (r === "sales_manager" || r === "manager") {
+      return `/sales-manager/leads/${leadId}`;
+    }
+    return `/admin/leads/${leadId}`;
+  };
+
+  const getFollowUpDiscountInfo = (item) => {
+    // Only display discount badge on follow-up interactions where discount was actually requested
+    if (!item.is_discount_requested && !item.discount_amount) {
+      return null;
+    }
+
+    const leadId = item.lead_id;
+    const matchingLead = (leadsList || []).find((l) => Number(l.id) === Number(leadId)) || item.rawLead;
+    const localDisc = leadId ? discountApprovalApi.getLeadApprovalStatus(leadId) : null;
+
+    let status = null;
+    const leadStatusName = matchingLead?.status_name || matchingLead?.status?.name || item.rawLead?.status_name || "";
+    const rawDiscStatus = matchingLead?.discount_approval_status || item.rawLead?.discount_approval_status;
+
+    if (rawDiscStatus && rawDiscStatus !== "none") {
+      status = rawDiscStatus;
+    } else if (leadStatusName.toLowerCase().includes("approved")) {
+      status = "approved";
+    } else if (leadStatusName.toLowerCase().includes("rejected")) {
+      status = "rejected";
+    } else if (leadStatusName.toLowerCase().includes("pending")) {
+      status = "pending";
+    } else if (localDisc && localDisc.status) {
+      status = localDisc.status;
+    } else {
+      status = "pending";
+    }
+
+    if (!status || status === "none") return null;
+
+    const amount = Number(
+      matchingLead?.approved_discount ||
+      matchingLead?.requested_discount ||
+      item.discount_amount ||
+      item.rawLead?.approved_discount ||
+      item.rawLead?.requested_discount ||
+      localDisc?.discount_amount ||
+      0
+    );
+
+    return { status, amount };
+  };
+
   const [activeTab, setActiveTab] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -36,6 +102,19 @@ export default function FollowUpPage() {
     window.addEventListener("click", handleOutsideClick);
     return () => window.removeEventListener("click", handleOutsideClick);
   }, []);
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      fetchFollowUps(currentPage, perPage, searchTerm, startDate, endDate, activeTab);
+      axios.get(`${API_URL}/leads`).then((res) => {
+        if (res.data?.data && Array.isArray(res.data.data)) {
+          setLeadsList(res.data.data);
+        }
+      }).catch(() => {});
+    };
+    window.addEventListener("csd_approvals_updated", handleUpdate);
+    return () => window.removeEventListener("csd_approvals_updated", handleUpdate);
+  }, [currentPage, perPage, searchTerm, startDate, endDate, activeTab]);
 
   // Live follow-ups list & KPIs from backend
   const [followUpsList, setFollowUpsList] = useState([]);
@@ -60,6 +139,10 @@ export default function FollowUpPage() {
     type: "Phone Call",
     nextTime: "10:00 AM",
     notes: "",
+    request_discount: false,
+    discount_amount: "",
+    proposed_price: "",
+    discount_reason: "",
   });
 
   // Fetch follow-ups from live backend API following backend contract
@@ -155,7 +238,7 @@ export default function FollowUpPage() {
 
           return {
             id: item.id,
-            lead_id: item.lead_id,
+            lead_id: item.lead_id || item.lead?.id || item.lead?.lead_id || item.id,
             customer: custName,
             phone: phone,
             city: city,
@@ -165,6 +248,10 @@ export default function FollowUpPage() {
             outcomeDesc: desc,
             badgeClass: outcome === "Completed" ? "bg-success-subtle text-success" : "bg-warning-subtle text-warning",
             badgeIcon: outcome === "Completed" ? "bi bi-check2-circle" : "bi bi-telephone-outbound",
+            is_discount_requested: Boolean(item.is_discount_requested),
+            discount_amount: item.discount_amount,
+            proposed_price: item.proposed_price,
+            rawLead: item.lead,
             rawDueDate: rawDueDate,
             dueTime: dueDate,
             dueSubtext: dueSub,
@@ -231,14 +318,39 @@ export default function FollowUpPage() {
         next_follow_up_date: callLog.nextDate || null,
         next_follow_up_time: callLog.nextTime || "10:00 AM",
         status: callLog.outcome,
-        lead_status_name: "In Follow-Up",
+        lead_status_name: callLog.request_discount ? "Discount Pending" : "In Follow-Up",
+        is_discount_requested: Boolean(callLog.request_discount),
+        discount_amount: callLog.request_discount && callLog.discount_amount ? Number(callLog.discount_amount) : null,
+        proposed_price: callLog.proposed_price ? Number(callLog.proposed_price) : null,
+        reason: callLog.discount_reason || callLog.notes || "Customer requested special discount",
       });
-      showToast(`Follow-up call interaction logged for ${callLog.customer}!`, "success");
+
+      window.dispatchEvent(new Event("csd_approvals_updated"));
+
+      showToast(
+        callLog.request_discount
+          ? `Follow-up logged & discount request (₹${Number(callLog.discount_amount).toLocaleString("en-IN")}) sent to Sales Manager & Admin!`
+          : `Follow-up call interaction logged for ${callLog.customer}!`,
+        "success"
+      );
       setShowLogModal(false);
       fetchFollowUps(currentPage, perPage, searchTerm, startDate, endDate, activeTab);
     } catch (err) {
       console.log("Submit error:", err);
-      showToast(`Follow-up call interaction logged for ${callLog.customer}!`, "success");
+      if (callLog.request_discount && callLog.discount_amount) {
+        await discountApprovalApi.createDiscountRequest({
+          lead_id: callLog.lead_id || Date.now(),
+          customer_name: callLog.customer,
+          customer_phone: callLog.phone,
+          vehicle_name: callLog.vehicle || "Vehicle",
+          discount_amount: callLog.discount_amount,
+          proposed_price: callLog.proposed_price,
+          reason: callLog.discount_reason || callLog.notes || "Customer demanded discount during follow-up call",
+        });
+        showToast(`Discount approval request sent to Sales Manager & Admin!`, "success");
+      } else {
+        showToast(`Follow-up call interaction logged for ${callLog.customer}!`, "success");
+      }
       setShowLogModal(false);
     }
   };
@@ -387,6 +499,10 @@ export default function FollowUpPage() {
                     type: "Phone Call",
                     nextTime: "10:00 AM",
                     notes: "",
+                    request_discount: false,
+                    discount_amount: "",
+                    proposed_price: "",
+                    discount_reason: "",
                   });
                   setShowLogModal(true);
                 }}
@@ -644,6 +760,7 @@ export default function FollowUpPage() {
                                   onClick={() => {
                                     setActiveActionMenuId(null);
                                     setSelectedLead(item.customer);
+                                    const existingDisc = item.lead_id ? discountApprovalApi.getLeadApprovalStatus(item.lead_id) : null;
                                     setCallLog({
                                       lead_id: item.lead_id || item.id,
                                       customer: item.customer,
@@ -654,6 +771,10 @@ export default function FollowUpPage() {
                                       type: "Phone Call",
                                       nextTime: "10:00 AM",
                                       notes: "",
+                                      request_discount: existingDisc && existingDisc.status === "pending" ? true : false,
+                                      discount_amount: existingDisc ? String(existingDisc.discount_amount || "") : "",
+                                      proposed_price: existingDisc ? String(existingDisc.proposed_price || "") : "",
+                                      discount_reason: existingDisc ? existingDisc.reason || "" : "",
                                     });
                                     setShowLogModal(true);
                                   }}
@@ -676,9 +797,9 @@ export default function FollowUpPage() {
                               )}
 
                               {/* View Lead 360 Profile */}
-                              {item.lead_id && (
+                              {(item.lead_id || item.id) && (
                                 <Link
-                                  href={`/admin/leads/${item.lead_id}`}
+                                  href={getLeadProfileHref(item.lead_id || item.id)}
                                   className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-dark text-decoration-none"
                                   onClick={() => setActiveActionMenuId(null)}
                                 >
@@ -700,7 +821,19 @@ export default function FollowUpPage() {
                             style={{ width: "36px", height: "36px", borderRadius: "50%", flexShrink: 0 }}
                           />
                           <div>
-                            <div className="text-dark fw-bold small">{item.customer}</div>
+                            {item.lead_id || item.id ? (
+                              <Link
+                                href={getLeadProfileHref(item.lead_id || item.id)}
+                                className="text-decoration-none"
+                                title="View Lead Details"
+                              >
+                                <div className="text-primary fw-bold small" style={{ cursor: "pointer" }}>
+                                  {item.customer}
+                                </div>
+                              </Link>
+                            ) : (
+                              <div className="text-dark fw-bold small">{item.customer}</div>
+                            )}
                             <div className="text-muted" style={{ fontSize: "0.75rem" }}>
                               {item.phone}{item.city ? ` • ${item.city}` : ""}
                             </div>
@@ -724,6 +857,54 @@ export default function FollowUpPage() {
                           <i className={`${item.badgeIcon || "bi bi-telephone-outbound"} me-1`}></i>
                           {item.outcome}
                         </span>
+                        {/* Discount Status Badge */}
+                        {(() => {
+                          const discInfo = getFollowUpDiscountInfo(item);
+                          if (!discInfo) return null;
+                          if (discInfo.status === "pending") {
+                            return (
+                              <div className="mt-1">
+                                <span
+                                  className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle fw-bold"
+                                  style={{ fontSize: "10px", padding: "3px 7px" }}
+                                  title={`Discount ₹${discInfo.amount.toLocaleString("en-IN")} pending approval`}
+                                >
+                                  <i className="bi bi-hourglass-split me-1 text-warning"></i>
+                                  Disc: ₹{discInfo.amount.toLocaleString("en-IN")} (Pending)
+                                </span>
+                              </div>
+                            );
+                          }
+                          if (discInfo.status === "approved") {
+                            return (
+                              <div className="mt-1">
+                                <span
+                                  className="badge bg-success text-white fw-bold"
+                                  style={{ fontSize: "10px", padding: "3px 7px" }}
+                                  title={`Discount ₹${discInfo.amount.toLocaleString("en-IN")} Approved`}
+                                >
+                                  <i className="bi bi-patch-check-fill me-1"></i>
+                                  Disc: ₹{discInfo.amount.toLocaleString("en-IN")} (Approved)
+                                </span>
+                              </div>
+                            );
+                          }
+                          if (discInfo.status === "rejected") {
+                            return (
+                              <div className="mt-1">
+                                <span
+                                  className="badge bg-danger-subtle text-danger border border-danger-subtle fw-semibold"
+                                  style={{ fontSize: "10px", padding: "3px 7px" }}
+                                  title="Discount request was rejected"
+                                >
+                                  <i className="bi bi-x-circle-fill me-1"></i>
+                                  Disc. Rejected
+                                </span>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
                         <div className="text-muted small mt-1 text-truncate" style={{ fontSize: "0.75rem", maxWidth: "220px" }} title={item.outcomeDesc}>
                           {item.outcomeDesc}
                         </div>
@@ -914,6 +1095,64 @@ export default function FollowUpPage() {
                         value={callLog.notes}
                         onChange={(e) => setCallLog({ ...callLog, notes: e.target.value })}
                       ></textarea>
+                    </div>
+
+                    {/* Customer Demanded Discount Switch & Fields */}
+                    <div className="col-12">
+                      <div className="p-3 rounded-3 border" style={{ backgroundColor: "#F8FAFC", borderColor: "#E2E8F0" }}>
+                        <div className="form-check form-switch d-flex align-items-center justify-content-between p-0 m-0">
+                          <label className="form-check-label fw-bold text-dark d-flex align-items-center gap-2 mb-0" htmlFor="followUpReqDiscountSwitch" style={{ cursor: "pointer" }}>
+                            <i className="bi bi-tag-fill text-danger"></i>
+                            <span>Customer Demanded Discount? (Send to Sales Manager & Admin for Approval)</span>
+                          </label>
+                          <input
+                            className="form-check-input ms-3"
+                            type="checkbox"
+                            role="switch"
+                            id="followUpReqDiscountSwitch"
+                            style={{ width: "2.6rem", height: "1.3rem", cursor: "pointer" }}
+                            checked={callLog.request_discount}
+                            onChange={(e) => setCallLog({ ...callLog, request_discount: e.target.checked })}
+                          />
+                        </div>
+
+                        {callLog.request_discount && (
+                          <div className="mt-3 pt-3 border-top">
+                            <div className="row g-3">
+                              <div className="col-12">
+                                <label className="form-label text-dark fw-semibold small">
+                                  Requested Discount Amount (₹) <span className="text-danger">*</span>
+                                </label>
+                                <div className="input-group">
+                                  <span className="input-group-text bg-white fw-bold">₹</span>
+                                  <input
+                                    type="number"
+                                    className="form-control"
+                                    placeholder="e.g. 25000"
+                                    value={callLog.discount_amount}
+                                    onChange={(e) => setCallLog({ ...callLog, discount_amount: e.target.value })}
+                                    required={callLog.request_discount}
+                                  />
+                                </div>
+                              </div>
+                              <div className="col-12">
+                                <label className="form-label text-dark fw-semibold small">Discount Reason / Justification</label>
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  placeholder="e.g. Customer ready to pay token advance today if 25k discount approved"
+                                  value={callLog.discount_reason}
+                                  onChange={(e) => setCallLog({ ...callLog, discount_reason: e.target.value })}
+                                />
+                                <div className="form-text small text-muted mt-1">
+                                  <i className="bi bi-info-circle me-1 text-primary"></i>
+                                  Request status will default to <strong>Pending</strong> and appear on both Super Admin and Sales Manager Dashboards for approval.
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

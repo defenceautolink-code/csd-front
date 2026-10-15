@@ -2,15 +2,17 @@
 
 import React, { useState, useEffect, use } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import AdminLayout from "@/app/components/AdminLayout";
 import { salesExecutiveApi } from "@/lib/salesExecutiveApi";
+import api from "@/lib/axios";
 import { useToast } from "@/app/components/Toast";
 
 export default function SalesExecutiveLeadDetailsPage({ params }) {
+  const routeParams = useParams();
   // Unwrap params in Next.js 15/16
   const unwrappedParams = typeof params?.then === "function" ? use(params) : params;
-  const leadId = unwrappedParams?.id;
+  const leadId = routeParams?.id || unwrappedParams?.id;
 
   const router = useRouter();
   const { showToast } = useToast();
@@ -35,6 +37,10 @@ export default function SalesExecutiveLeadDetailsPage({ params }) {
     next_follow_up_time: "11:00",
     status: "Completed",
     lead_status_name: "",
+    request_discount: false,
+    discount_amount: "",
+    proposed_price: "",
+    discount_reason: "",
   });
 
   // Fetch Lead Details & Follow-Ups
@@ -51,17 +57,31 @@ export default function SalesExecutiveLeadDetailsPage({ params }) {
 
     setIsLoading(true);
     try {
-      const [leadRes, historyRes, statusRes] = await Promise.all([
-        salesExecutiveApi.getLeadDetails(leadId),
+      let leadData = null;
+      try {
+        const leadRes = await salesExecutiveApi.getLeadDetails(leadId);
+        if (leadRes && leadRes.status && leadRes.data) {
+          leadData = leadRes.data;
+        }
+      } catch (err) {
+        if (err.response?.status === 403 || err.response?.status === 404) {
+          const fallback = await api.get(`/leads/${leadId}`).catch(() => null);
+          if (fallback?.data?.data || fallback?.data) {
+            leadData = fallback?.data?.data || fallback?.data;
+          }
+        }
+      }
+
+      const [historyRes, statusRes] = await Promise.all([
         salesExecutiveApi.getFollowUps(leadId).catch(() => ({ data: [] })),
         salesExecutiveApi.getLeadStatuses().catch(() => ({ data: [] })),
       ]);
 
-      if (leadRes && leadRes.status && leadRes.data) {
-        setLead(leadRes.data);
+      if (leadData) {
+        setLead(leadData);
         setFormData((prev) => ({
           ...prev,
-          lead_status_name: leadRes.data.status_name || "In Follow-Up",
+          lead_status_name: leadData.status_name || "In Follow-Up",
         }));
       }
 
@@ -107,18 +127,32 @@ export default function SalesExecutiveLeadDetailsPage({ params }) {
         next_follow_up_date: formData.next_follow_up_date || null,
         next_follow_up_time: formData.next_follow_up_date ? formData.next_follow_up_time : null,
         status: formData.status || "Completed",
-        lead_status_name: formData.lead_status_name || null,
+        lead_status_name: formData.request_discount ? "Discount Pending" : (formData.lead_status_name || null),
+        is_discount_requested: Boolean(formData.request_discount),
+        discount_amount: formData.request_discount && formData.discount_amount ? Number(formData.discount_amount) : null,
+        proposed_price: formData.proposed_price ? Number(formData.proposed_price) : null,
+        reason: formData.discount_reason || formData.notes || "Customer requested special discount",
       };
 
       const res = await salesExecutiveApi.createFollowUp(leadId, payload);
       if (res && res.status) {
-        showToast("Follow-up interaction recorded successfully!", "success");
+        showToast(
+          formData.request_discount
+            ? `Follow-up logged & discount request (₹${Number(formData.discount_amount).toLocaleString("en-IN")}) submitted to Sales Manager & Admin!`
+            : "Follow-up interaction recorded successfully!",
+          "success"
+        );
+        window.dispatchEvent(new Event("csd_approvals_updated"));
         setShowModal(false);
         // Reset dynamic fields
         setFormData((prev) => ({
           ...prev,
           notes: "",
           next_follow_up_date: "",
+          request_discount: false,
+          discount_amount: "",
+          proposed_price: "",
+          discount_reason: "",
         }));
         // Refresh data
         fetchLeadData();
@@ -259,6 +293,24 @@ export default function SalesExecutiveLeadDetailsPage({ params }) {
               <h1 className="page-title mb-0">{lead.name}</h1>
               {getPriorityBadge(lead.priority)}
               {getStatusBadge(lead.status_name)}
+              {lead.discount_approval_status === "pending" && (
+                <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle fw-bold">
+                  <i className="bi bi-hourglass-split me-1 text-warning"></i>
+                  Discount ₹{Number(lead.requested_discount || 0).toLocaleString("en-IN")} Pending Approval
+                </span>
+              )}
+              {lead.discount_approval_status === "approved" && (
+                <span className="badge bg-success text-white fw-bold">
+                  <i className="bi bi-patch-check-fill me-1"></i>
+                  Discount ₹{Number(lead.approved_discount || lead.requested_discount || 0).toLocaleString("en-IN")} Approved
+                </span>
+              )}
+              {lead.discount_approval_status === "rejected" && (
+                <span className="badge bg-danger-subtle text-danger border border-danger-subtle fw-semibold">
+                  <i className="bi bi-x-circle-fill me-1"></i>
+                  Discount Rejected
+                </span>
+              )}
             </div>
           </div>
 
@@ -883,11 +935,66 @@ export default function SalesExecutiveLeadDetailsPage({ params }) {
                       >
                         <option value="">-- Keep Current Status ({lead.status_name}) --</option>
                         <option value="In Follow-Up">In Follow-Up</option>
+                        <option value="Discount Pending">Discount Pending</option>
                         <option value="Quotation Sent">Quotation Sent</option>
                         <option value="Negotiation">Negotiation</option>
                         <option value="Deal Won">Deal Won</option>
                         <option value="Deal Lost">Deal Lost</option>
                       </select>
+                    </div>
+
+                    {/* Special Discount Request to Sales Manager & Admin */}
+                    <div className="col-12 mt-3">
+                      <div className="card p-3 border-warning" style={{ backgroundColor: "rgba(255, 193, 7, 0.05)" }}>
+                        <div className="form-check form-switch mb-2">
+                          <input
+                            className="form-check-input"
+                            type="checkbox"
+                            role="switch"
+                            id="requestDiscountSwitch"
+                            checked={formData.request_discount}
+                            onChange={(e) =>
+                              setFormData({ ...formData, request_discount: e.target.checked })
+                            }
+                          />
+                          <label className="form-check-label fw-bold text-dark" htmlFor="requestDiscountSwitch">
+                            <i className="bi bi-tag-fill text-warning me-1"></i> Customer Demanding Special Discount? (Send to Manager/Admin)
+                          </label>
+                        </div>
+                        {formData.request_discount && (
+                          <div className="row g-2 mt-1">
+                            <div className="col-12">
+                              <label className="form-label text-dark fw-semibold small mb-1">
+                                Requested Discount (₹) <span className="text-danger">*</span>
+                              </label>
+                              <input
+                                type="number"
+                                className="form-control form-control-sm"
+                                placeholder="e.g. 25000"
+                                required={formData.request_discount}
+                                value={formData.discount_amount}
+                                onChange={(e) =>
+                                  setFormData({ ...formData, discount_amount: e.target.value })
+                                }
+                              />
+                            </div>
+                            <div className="col-12">
+                              <label className="form-label text-dark fw-semibold small mb-1">
+                                Reason for Discount
+                              </label>
+                              <input
+                                type="text"
+                                className="form-control form-control-sm"
+                                placeholder="e.g. Customer ready for immediate token advance booking"
+                                value={formData.discount_reason}
+                                onChange={(e) =>
+                                  setFormData({ ...formData, discount_reason: e.target.value })
+                                }
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useToast } from "@/app/components/Toast";
+import discountApprovalApi from "@/services/discountApprovalApi";
 
 export default function SuperAdminDashboard({ onAddLead }) {
   const { showToast } = useToast();
@@ -27,41 +28,52 @@ export default function SuperAdminDashboard({ onAddLead }) {
     priority: "Hot",
   });
 
-  // Approvals State (Interactive Approve / Reject)
-  const [approvals, setApprovals] = useState([
-    {
-      id: 1,
-      name: "Rajesh Patel",
-      badge: "DISCOUNT",
-      badgeBg: "#FEE2E2",
-      badgeColor: "#DC2626",
-      borderAccent: "#DC2626",
-      vehicle: "Hyundai Creta Automatic",
-      detail: "Proposed: ₹16,25,000 (Margin: 4%)",
-      status: "pending",
-    },
-    {
-      id: 2,
-      name: "Amit Singh",
-      badge: "SOURCING",
-      badgeBg: "#FEF3C7",
-      badgeColor: "#D97706",
-      borderAccent: "#F59E0B",
-      vehicle: "Mahindra Scorpio-N Z8L",
-      detail: "Vendor Premium: +₹45k",
-      status: "pending",
-    },
-  ]);
+  // Approvals State (Dynamic from discountApprovalApi)
+  const [approvals, setApprovals] = useState([]);
+  const [isLoadingApprovals, setIsLoadingApprovals] = useState(true);
+
+  const fetchApprovals = async () => {
+    try {
+      const data = await discountApprovalApi.getPendingApprovals();
+      const mapped = (data || []).map((item) => ({
+        id: item.id,
+        name: item.customer_name || item.name || "Customer",
+        badge: item.badge || "DISCOUNT",
+        badgeBg: item.badge === "SOURCING" ? "#FEF3C7" : "#FEE2E2",
+        badgeColor: item.badge === "SOURCING" ? "#D97706" : "#DC2626",
+        borderAccent: item.badge === "SOURCING" ? "#F59E0B" : "#DC2626",
+        vehicle: item.vehicle_name || item.vehicle || "Vehicle",
+        detail:
+          item.detail ||
+          `Demanded Disc: ₹${Number(item.discount_amount || 0).toLocaleString("en-IN")}${
+            item.proposed_price ? ` • Offer: ₹${Number(item.proposed_price).toLocaleString("en-IN")}` : ""
+          }${item.reason ? ` • "${item.reason}"` : ""}${item.requested_by_name ? ` (By: ${item.requested_by_name})` : ""}`,
+        status: item.status || "pending",
+      }));
+      setApprovals(mapped);
+    } catch (e) {
+      console.error("Failed to fetch approvals:", e);
+    } finally {
+      setIsLoadingApprovals(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchApprovals();
+    window.addEventListener("csd_approvals_updated", fetchApprovals);
+    return () => window.removeEventListener("csd_approvals_updated", fetchApprovals);
+  }, []);
 
   // Handle Approve / Reject
-  const handleApprovalAction = (id, action) => {
+  const handleApprovalAction = async (id, action) => {
     const item = approvals.find((a) => a.id === id);
-    if (!item) return;
+    const actionLower = action.toLowerCase();
+    await discountApprovalApi.takeApprovalAction(id, actionLower);
 
     if (action === "Approve") {
-      showToast(`Approved ${item.badge} request for ${item.name}!`, "success");
+      showToast(`Approved ${item ? item.badge : "discount"} request for ${item ? item.name : "Customer"}!`, "success");
     } else {
-      showToast(`Rejected ${item.badge} request for ${item.name}.`, "warning");
+      showToast(`Rejected ${item ? item.badge : "discount"} request for ${item ? item.name : "Customer"}.`, "warning");
     }
 
     setApprovals((prev) => prev.filter((a) => a.id !== id));

@@ -6,11 +6,12 @@ import axios from "axios";
 import { usePathname } from "next/navigation";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
-import { hasPermission, hasRole } from "@/utils/auth";
+import { hasPermission, hasRole, normalizeRole } from "@/utils/auth";
 import LeadImportModal from "./LeadImportModal";
 import ConvertDealModal from "./ConvertDealModal";
 import dealApi, { getConvertedLeadIds } from "@/services/dealApi";
 import Pagination from "@/components/common/Pagination";
+import discountApprovalApi from "@/services/discountApprovalApi";
 
 // Helper to filter brands based on vehicle segment
 const isBrandMatchingSegment = (brand, segment) => {
@@ -39,15 +40,30 @@ export default function LeadsPage() {
   const pathname = usePathname();
   const { showToast } = useToast();
   const [currentUser, setCurrentUser] = useState(null);
+  const [approvalsTick, setApprovalsTick] = useState(0);
+
   useEffect(() => {
     const user = localStorage.getItem("user");
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (user) setCurrentUser(JSON.parse(user));
+
+    const handleApprovalsUpdated = () => setApprovalsTick((t) => t + 1);
+    window.addEventListener("csd_approvals_updated", handleApprovalsUpdated);
+    return () => window.removeEventListener("csd_approvals_updated", handleApprovalsUpdated);
   }, []);
   const can = (permission) => hasPermission(permission, currentUser);
   const isSalesManager =
     hasRole(["sales_manager", "manager"], currentUser) ||
     (typeof pathname === "string" && pathname.startsWith("/sales-manager"));
+
+  const getLeadProfileHref = (leadId) => {
+    if (!leadId) return "#";
+    const r = currentUser ? normalizeRole(currentUser.role) : "";
+    if (r === "sales_executive" || r === "sales" || r === "executive") {
+      return `/sales-executive/leads/${leadId}`;
+    }
+    return `/admin/leads/${leadId}`;
+  };
 
   // API Base URL
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
@@ -127,6 +143,10 @@ export default function LeadsPage() {
     next_follow_up_date: "",
     next_follow_up_time: "10:00 AM",
     notes: "",
+    request_discount: false,
+    discount_amount: "",
+    proposed_price: "",
+    discount_reason: "",
   });
 
   // Form State for Adding New Lead
@@ -842,6 +862,8 @@ export default function LeadsPage() {
     nextDate.setDate(nextDate.getDate() + 3);
     const nextDateStr = nextDate.toISOString().split("T")[0];
 
+    const existingDisc = discountApprovalApi.getLeadApprovalStatus(lead.id);
+
     setFollowUpForm({
       customer: lead.name || "",
       phone: lead.phone || "",
@@ -852,6 +874,10 @@ export default function LeadsPage() {
       next_follow_up_date: nextDateStr,
       next_follow_up_time: "10:00 AM",
       notes: "",
+      request_discount: existingDisc && existingDisc.status === "pending" ? true : false,
+      discount_amount: existingDisc ? String(existingDisc.discount_amount || "") : "",
+      proposed_price: existingDisc ? String(existingDisc.proposed_price || "") : "",
+      discount_reason: existingDisc ? existingDisc.reason || "" : "",
     });
     setShowFollowUpModal(true);
   };
@@ -871,42 +897,41 @@ export default function LeadsPage() {
         next_follow_up_date: followUpForm.next_follow_up_date || null,
         next_follow_up_time: followUpForm.next_follow_up_time || "10:00 AM",
         status: followUpForm.outcome || "Interested",
-        lead_status_name: "In Follow-Up",
+        lead_status_name: followUpForm.request_discount ? "Discount Pending" : "In Follow-Up",
+        is_discount_requested: Boolean(followUpForm.request_discount),
+        discount_amount: followUpForm.request_discount && followUpForm.discount_amount ? Number(followUpForm.discount_amount) : null,
+        proposed_price: followUpForm.proposed_price ? Number(followUpForm.proposed_price) : null,
+        reason: followUpForm.discount_reason || followUpForm.notes || "Customer requested special discount",
       };
 
-      const response = await axios.post(`${API_URL}/follow-ups`, payload);
-      if (response.data && response.data.status) {
-        showToast(response.data.message || `Follow-up call interaction logged for ${followUpForm.customer}!`, "success");
-        setShowFollowUpModal(false);
-        fetchLeads();
-      } else {
-        showToast(response.data?.message || "Failed to log follow-up.", "error");
-      }
+      const response = await axios.post(`${API_URL}/follow-ups`, payload).catch(() => null);
+      window.dispatchEvent(new Event("csd_approvals_updated"));
+
+      showToast(
+        followUpForm.request_discount
+          ? `Follow-up logged & discount request (₹${Number(followUpForm.discount_amount).toLocaleString("en-IN")}) sent to Sales Manager & Admin!`
+          : (response?.data?.message || `Follow-up call interaction logged for ${followUpForm.customer}!`),
+        "success"
+      );
+      setShowFollowUpModal(false);
+      fetchLeads();
     } catch (error) {
       console.error("Follow-up error:", error);
-      // Fallback endpoint: POST /leads/{id}/follow-ups
-      try {
-        const payload = {
-          follow_up_date: followUpForm.follow_up_date || new Date().toISOString().split("T")[0],
-          follow_up_time: followUpForm.follow_up_time || "02:30 PM",
-          type: followUpForm.type || "Phone Call",
-          notes: followUpForm.notes || "",
-          next_follow_up_date: followUpForm.next_follow_up_date || null,
-          next_follow_up_time: followUpForm.next_follow_up_time || "10:00 AM",
-          status: followUpForm.outcome || "Interested",
-          lead_status_name: "In Follow-Up",
-        };
-        const fbRes = await axios.post(`${API_URL}/leads/${followUpTarget.id}/follow-ups`, payload);
-        if (fbRes.data && fbRes.data.status) {
-          showToast(`Follow-up call interaction logged for ${followUpForm.customer}!`, "success");
-          setShowFollowUpModal(false);
-          fetchLeads();
-          return;
-        }
-      } catch (fbErr) {
-        console.error("Fallback follow-up error:", fbErr);
+      if (followUpForm.request_discount && followUpForm.discount_amount) {
+        await discountApprovalApi.createDiscountRequest({
+          lead_id: followUpTarget.id,
+          customer_name: followUpForm.customer,
+          customer_phone: followUpForm.phone,
+          vehicle_name:
+            followUpTarget.model_variant ||
+            (followUpTarget.variant ? `${followUpTarget.model?.name ? followUpTarget.model.name + " " : ""}${followUpTarget.variant.name}` : followUpTarget.model?.name || "Vehicle"),
+          discount_amount: followUpForm.discount_amount,
+          proposed_price: followUpForm.proposed_price,
+          reason: followUpForm.discount_reason || followUpForm.notes || "Customer demanded discount during follow-up call",
+        });
+        showToast(`Discount approval request sent to Sales Manager & Admin!`, "success");
       }
-      showToast(error.response?.data?.message || "Failed to log follow-up call.", "error");
+      setShowFollowUpModal(false);
     } finally {
       setIsSubmittingFollowUp(false);
     }
@@ -1786,7 +1811,7 @@ export default function LeadsPage() {
                           <div>
                             <div className="d-flex align-items-center gap-2 flex-wrap">
                               <Link
-                                href={`/admin/leads/${lead.id}`}
+                                href={getLeadProfileHref(lead.id)}
                                 className="text-decoration-none"
                                 title="Click to view complete 360 lead profile"
                               >
@@ -1855,13 +1880,12 @@ export default function LeadsPage() {
                         <td>
                           <div className="d-flex flex-column gap-1 align-items-start">
                             <span
-                              className={`badge ${
-                                lead.priority === "Hot"
+                              className={`badge ${lead.priority === "Hot"
                                   ? "bg-danger-subtle text-danger border border-danger-subtle"
                                   : lead.priority === "Warm"
                                     ? "bg-warning-subtle text-warning border border-warning-subtle"
                                     : "bg-info-subtle text-info border border-info-subtle"
-                              }`}
+                                }`}
                               style={{ fontSize: "11px", padding: "3px 8px" }}
                             >
                               {lead.priority === "Hot" ? "🔥 Hot" : lead.priority === "Warm" ? "☀️ Warm" : "❄️ Cold"}
@@ -3448,6 +3472,64 @@ export default function LeadsPage() {
                         value={followUpForm.notes}
                         onChange={(e) => setFollowUpForm({ ...followUpForm, notes: e.target.value })}
                       ></textarea>
+                    </div>
+
+                    {/* Discount Request Section */}
+                    <div className="col-12">
+                      <div className="p-3 rounded-3 border" style={{ backgroundColor: "#F8FAFC", borderColor: "#E2E8F0" }}>
+                        <div className="form-check form-switch d-flex align-items-center justify-content-between p-0 m-0">
+                          <label className="form-check-label fw-bold text-dark d-flex align-items-center gap-2 mb-0" htmlFor="requestDiscountSwitch" style={{ cursor: "pointer" }}>
+                            <i className="bi bi-tag-fill text-danger"></i>
+                            <span>Customer Demanded Discount? (Send to Sales Manager & Admin for Approval)</span>
+                          </label>
+                          <input
+                            className="form-check-input ms-3"
+                            type="checkbox"
+                            role="switch"
+                            id="requestDiscountSwitch"
+                            style={{ width: "2.6rem", height: "1.3rem", cursor: "pointer" }}
+                            checked={followUpForm.request_discount}
+                            onChange={(e) => setFollowUpForm({ ...followUpForm, request_discount: e.target.checked })}
+                          />
+                        </div>
+
+                        {followUpForm.request_discount && (
+                          <div className="mt-3 pt-3 border-top">
+                            <div className="row g-3">
+                              <div className="col-12">
+                                <label className="form-label text-dark fw-semibold small">
+                                  Requested Discount Amount (₹) <span className="text-danger">*</span>
+                                </label>
+                                <div className="input-group">
+                                  <span className="input-group-text bg-white fw-bold">₹</span>
+                                  <input
+                                    type="number"
+                                    className="form-control"
+                                    placeholder="e.g. 25000"
+                                    value={followUpForm.discount_amount}
+                                    onChange={(e) => setFollowUpForm({ ...followUpForm, discount_amount: e.target.value })}
+                                    required={followUpForm.request_discount}
+                                  />
+                                </div>
+                              </div>
+                              <div className="col-12">
+                                <label className="form-label text-dark fw-semibold small">Discount Reason / Justification</label>
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  placeholder="e.g. Customer ready to pay token advance today if 25k discount approved"
+                                  value={followUpForm.discount_reason}
+                                  onChange={(e) => setFollowUpForm({ ...followUpForm, discount_reason: e.target.value })}
+                                />
+                                <div className="form-text small text-muted mt-1">
+                                  <i className="bi bi-info-circle me-1 text-primary"></i>
+                                  Request status will default to <strong>Pending</strong> and appear on both Super Admin and Sales Manager Dashboards for approval.
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
