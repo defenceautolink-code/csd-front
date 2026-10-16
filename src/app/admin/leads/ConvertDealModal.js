@@ -592,14 +592,7 @@ export default function ConvertDealModal({
                   </div>
                 </div>
 
-                {formData.has_insurance === "Yes" && (
-                  <div className="mt-2 pt-2 border-top d-flex align-items-center gap-2 text-success small">
-                    <i className="bi bi-info-circle-fill"></i>
-                    <span>
-                      <strong>Yes selected:</strong> Insurance policy details popup will open upon clicking <strong>"Confirm & Convert Deal"</strong> below to enter details and save both together.
-                    </span>
-                  </div>
-                )}
+                
               </div>
             </div>
 

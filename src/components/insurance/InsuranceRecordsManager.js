@@ -1224,7 +1224,7 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
                 <div className="modal-header bg-dark text-white py-3 px-4">
                   <h5 className="modal-title fw-bold fs-6 d-flex align-items-center gap-2">
                     <i className="bi bi-shield-check"></i>
-                    <span>Insurance Details: Record #{selectedRecord.id}</span>
+                    <span>Insurance Details</span>
                   </h5>
                   <button
                     type="button"
@@ -1273,8 +1273,6 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
                           </span>
                         </div>
                         <div className="small mb-1">
-                          <span className="text-muted">Deal ID:</span>{" "}
-                          <span>#{selectedRecord.deal_id || "N/A"}</span>
                         </div>
                       </div>
                     </div>
