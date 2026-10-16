@@ -195,6 +195,16 @@ const insuranceApi = {
 
     return response.data;
   },
+
+  /**
+   * 4️⃣ Get Insurance KPI Statistics from Database
+   * Method: GET
+   * Endpoint: /api/insurances/stats
+   */
+  getInsuranceStats: async () => {
+    const response = await fetchWithRetry(() => api.get("/insurances/stats"));
+    return response.data;
+  },
 };
 
 export default insuranceApi;

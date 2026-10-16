@@ -18,6 +18,24 @@ export default function LeadSourcePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
+  // Dedicated Lead Source Stats State from Backend API
+  const [sourceStats, setSourceStats] = useState({
+    total_channels: 0,
+    active_channels: 0,
+    top_channel: "Showroom Walk-in",
+  });
+
+  const fetchSourceStats = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/lead-sources/stats`);
+      if (res.data && res.data.status && res.data.data) {
+        setSourceStats(res.data.data);
+      }
+    } catch (e) {
+      console.log("Error fetching lead source stats:", e);
+    }
+  };
+
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
@@ -38,6 +56,7 @@ export default function LeadSourcePage() {
   // 2. Fetch all lead sources from Laravel backend
   const fetchLeadSources = async () => {
     setIsLoading(true);
+    fetchSourceStats();
     try {
       const params = {
         page: currentPage,
@@ -67,6 +86,7 @@ export default function LeadSourcePage() {
   // Run on page load & pagination changes
   useEffect(() => {
     fetchLeadSources();
+    fetchSourceStats();
   }, [currentPage, perPage, searchTerm]);
 
   // 3. Create (Store) Lead Source
@@ -212,7 +232,7 @@ export default function LeadSourcePage() {
 
         {/* KPI Stat Cards */}
         <div className="row g-3 mb-4">
-          <div className="col-xl-3 col-sm-6">
+          <div className="col-md-6 col-sm-6">
             <div className="card stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">Total Channels</span>
@@ -220,25 +240,14 @@ export default function LeadSourcePage() {
                   <i className="bi bi-diagram-3-fill"></i>
                 </div>
               </div>
-              <div className="stat-card-value">{totalSources} Sources</div>
+              <div className="stat-card-value">
+                {sourceStats.total_channels || totalSources} Sources
+              </div>
               <span className="text-primary small fw-semibold">Live Database Records</span>
             </div>
           </div>
 
-          <div className="col-xl-3 col-sm-6">
-            <div className="card stat-card">
-              <div className="stat-card-header">
-                <span className="stat-card-title">Top Channel</span>
-                <div className="stat-icon-box success">
-                  <i className="bi bi-shop"></i>
-                </div>
-              </div>
-              <div className="stat-card-value">Showroom Walk-in</div>
-              <span className="text-success small fw-semibold">Primary Source</span>
-            </div>
-          </div>
-
-          <div className="col-xl-3 col-sm-6">
+          <div className="col-md-6 col-sm-6">
             <div className="card stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">Active Channels</span>
@@ -247,22 +256,9 @@ export default function LeadSourcePage() {
                 </div>
               </div>
               <div className="stat-card-value">
-                {leadSources.filter((s) => s.status === "Active").length} Active
+                {sourceStats.active_channels} Active
               </div>
               <span className="text-warning small fw-semibold">Enabled in Pipeline</span>
-            </div>
-          </div>
-
-          <div className="col-xl-3 col-sm-6">
-            <div className="card stat-card">
-              <div className="stat-card-header">
-                <span className="stat-card-title">Backend API</span>
-                <div className="stat-icon-box info">
-                  <i className="bi bi-hdd-network-fill"></i>
-                </div>
-              </div>
-              <div className="stat-card-value">Connected</div>
-              <span className="text-info small fw-semibold">REST API (/api/lead-sources)</span>
             </div>
           </div>
         </div>

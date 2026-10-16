@@ -31,6 +31,25 @@ export default function BrandPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
 
+  // Dedicated Brand Stats State from Backend API
+  const [brandStats, setBrandStats] = useState({
+    total_brands: 0,
+    four_wheeler_brands: 0,
+    two_wheeler_brands: 0,
+    active_brands: 0,
+  });
+
+  const fetchBrandStats = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/brands/stats`);
+      if (res.data && res.data.status && res.data.data) {
+        setBrandStats(res.data.data);
+      }
+    } catch (e) {
+      console.log("Error fetching brand stats:", e);
+    }
+  };
+
   // Modal States
   const [showAddModal, setShowAddModal] = useState(false);
   const [editBrand, setEditBrand] = useState(null);
@@ -48,6 +67,7 @@ export default function BrandPage() {
   // 2. Fetch all brands from Laravel backend
   const fetchBrands = async () => {
     setIsLoading(true);
+    fetchBrandStats();
     try {
       const params = {
         page: currentPage,
@@ -78,6 +98,7 @@ export default function BrandPage() {
   // Run on page load and param change
   useEffect(() => {
     fetchBrands();
+    fetchBrandStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, perPage, searchTerm, typeFilter]);
 
@@ -298,7 +319,9 @@ export default function BrandPage() {
                   <i className="bi bi-shield-shaded"></i>
                 </div>
               </div>
-              <div className="stat-card-value">{brands.length} Brands</div>
+              <div className="stat-card-value">
+                {brandStats.total_brands || totalBrands} Brands
+              </div>
               <span className="text-primary small fw-semibold">Live Database Records</span>
             </div>
           </div>
@@ -312,14 +335,7 @@ export default function BrandPage() {
                 </div>
               </div>
               <div className="stat-card-value">
-                {
-                  brands.filter((b) =>
-                    Array.isArray(b.vehicle_type)
-                      ? b.vehicle_type.includes("4 Wheeler")
-                      : String(b.vehicle_type).includes("4 Wheeler")
-                  ).length
-                }{" "}
-                Brands
+                {brandStats.four_wheeler_brands} Brands
               </div>
               <span className="text-success small fw-semibold">Car OEM Manufacturers</span>
             </div>
@@ -334,14 +350,7 @@ export default function BrandPage() {
                 </div>
               </div>
               <div className="stat-card-value">
-                {
-                  brands.filter((b) =>
-                    Array.isArray(b.vehicle_type)
-                      ? b.vehicle_type.includes("2 Wheeler")
-                      : String(b.vehicle_type).includes("2 Wheeler")
-                  ).length
-                }{" "}
-                Brands
+                {brandStats.two_wheeler_brands} Brands
               </div>
               <span className="text-warning small fw-semibold">Bikes & Scooters</span>
             </div>

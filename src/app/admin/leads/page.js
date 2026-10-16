@@ -76,6 +76,15 @@ export default function LeadsPage() {
   const [usersList, setUsersList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Dedicated Pipeline Stats State from Backend API
+  const [pipelineStats, setPipelineStats] = useState({
+    total_active_pipeline: 0,
+    hot_inquiries: 0,
+    four_wheeler_inquiries: 0,
+    two_wheeler_inquiries: 0,
+    total_leads: 0,
+  });
+
   // Convert Deal State & Three dots menu state
   const [convertDealTarget, setConvertDealTarget] = useState(null);
   const [activeActionMenuId, setActiveActionMenuId] = useState(null);
@@ -198,9 +207,31 @@ export default function LeadsPage() {
     }
   };
 
+  // Dedicated API: Fetch Live KPI Metrics for Pipeline Stat Cards
+  const fetchLeadStats = async (from = startDate, to = endDate) => {
+    try {
+      const params = {};
+      if (from) params.start_date = from;
+      if (to) params.end_date = to;
+      const converted = getConvertedLeadIds();
+      if (converted && converted.length > 0) {
+        params.converted_lead_ids = converted.join(",");
+      }
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("auth_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await axios.get(`${API_URL}/leads/stats`, { params, headers });
+      if (res.data && res.data.status && res.data.data) {
+        setPipelineStats(res.data.data);
+      }
+    } catch (e) {
+      console.log("Error fetching lead stats:", e);
+    }
+  };
+
   // 2. Fetch Leads & Master Dropdowns from Laravel backend
   const fetchLeads = async (from = startDate, to = endDate) => {
     setIsLoading(true);
+    fetchLeadStats(from, to);
     try {
       const params = {};
       if (from) {
@@ -1253,7 +1284,9 @@ export default function LeadsPage() {
                   <i className="bi bi-funnel-fill"></i>
                 </div>
               </div>
-              <div className="stat-card-value">{activeLeads.length} Leads</div>
+              <div className="stat-card-value">
+                {activeLeads.length > 0 ? activeLeads.length : (pipelineStats.total_active_pipeline || 0)} Leads
+              </div>
               <span className="text-primary small fw-semibold">Live Database Records</span>
             </div>
           </div>
@@ -1267,7 +1300,9 @@ export default function LeadsPage() {
                 </div>
               </div>
               <div className="stat-card-value">
-                {activeLeads.filter((l) => String(l.priority).toLowerCase() === "hot").length} Hot
+                {activeLeads.length > 0
+                  ? activeLeads.filter((l) => String(l.priority).toLowerCase() === "hot").length
+                  : (pipelineStats.hot_inquiries ?? 0)} Hot
               </div>
               <span className="text-danger small fw-semibold">Immediate Buying Interest</span>
             </div>
@@ -1282,7 +1317,12 @@ export default function LeadsPage() {
                 </div>
               </div>
               <div className="stat-card-value">
-                {activeLeads.filter((l) => String(l.vehicle_segment).toLowerCase() === "4 wheeler").length} Leads
+                {activeLeads.length > 0
+                  ? activeLeads.filter((l) => {
+                    const seg = String(l.vehicle_segment || "").toLowerCase();
+                    return seg === "4 wheeler" || seg === "4w" || seg.includes("4");
+                  }).length
+                  : (pipelineStats.four_wheeler_inquiries ?? 0)} Leads
               </div>
               <span className="text-success small fw-semibold">Cars & SUVs Inquiries</span>
             </div>

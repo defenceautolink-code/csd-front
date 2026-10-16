@@ -18,6 +18,24 @@ export default function LeadStatusPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
+  // Dedicated Lead Status Stats State from Backend API
+  const [statusStats, setStatusStats] = useState({
+    configured_stages: 0,
+    active_stages: 0,
+    initial_stage: "New Lead",
+  });
+
+  const fetchStatusStats = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/lead-statuses/stats`);
+      if (res.data && res.data.status && res.data.data) {
+        setStatusStats(res.data.data);
+      }
+    } catch (e) {
+      console.log("Error fetching lead status stats:", e);
+    }
+  };
+
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
@@ -38,6 +56,7 @@ export default function LeadStatusPage() {
   // 2. Fetch all lead statuses from Laravel backend
   const fetchLeadStatuses = async () => {
     setIsLoading(true);
+    fetchStatusStats();
     try {
       const params = {
         page: currentPage,
@@ -67,6 +86,7 @@ export default function LeadStatusPage() {
   // Run on page load & pagination changes
   useEffect(() => {
     fetchLeadStatuses();
+    fetchStatusStats();
   }, [currentPage, perPage, searchTerm]);
 
   // 3. Create (Store) Lead Status
@@ -212,7 +232,7 @@ export default function LeadStatusPage() {
 
         {/* KPI Stat Cards */}
         <div className="row g-3 mb-4">
-          <div className="col-xl-3 col-sm-6">
+          <div className="col-md-6 col-sm-6">
             <div className="card stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">Configured Stages</span>
@@ -220,12 +240,14 @@ export default function LeadStatusPage() {
                   <i className="bi bi-tag-fill"></i>
                 </div>
               </div>
-              <div className="stat-card-value">{leadStatuses.length} Stages</div>
+              <div className="stat-card-value">
+                {statusStats.configured_stages || totalStatuses} Stages
+              </div>
               <span className="text-primary small fw-semibold">Live Database Records</span>
             </div>
           </div>
 
-          <div className="col-xl-3 col-sm-6">
+          <div className="col-md-6 col-sm-6">
             <div className="card stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">Active Stages</span>
@@ -234,35 +256,9 @@ export default function LeadStatusPage() {
                 </div>
               </div>
               <div className="stat-card-value">
-                {leadStatuses.filter((s) => s.status === "Active").length} Active
+                {statusStats.active_stages} Active
               </div>
               <span className="text-success small fw-semibold">Active in Pipeline</span>
-            </div>
-          </div>
-
-          <div className="col-xl-3 col-sm-6">
-            <div className="card stat-card">
-              <div className="stat-card-header">
-                <span className="stat-card-title">Initial Stage</span>
-                <div className="stat-icon-box warning">
-                  <i className="bi bi-lightning-charge-fill"></i>
-                </div>
-              </div>
-              <div className="stat-card-value">New Lead</div>
-              <span className="text-warning small fw-semibold">Default Ingestion Stage</span>
-            </div>
-          </div>
-
-          <div className="col-xl-3 col-sm-6">
-            <div className="card stat-card">
-              <div className="stat-card-header">
-                <span className="stat-card-title">Backend API</span>
-                <div className="stat-icon-box info">
-                  <i className="bi bi-hdd-network-fill"></i>
-                </div>
-              </div>
-              <div className="stat-card-value">Connected</div>
-              <span className="text-info small fw-semibold">REST API (/api/lead-statuses)</span>
             </div>
           </div>
         </div>

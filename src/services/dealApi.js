@@ -315,8 +315,8 @@ export const dealApi = {
   /**
    * Get overall analytics & deal metrics directly from database
    */
-  getDealStats: async () => {
-    const response = await api.get("/deals/stats");
+  getDealStats: async (params = {}) => {
+    const response = await api.get("/deals/stats", { params });
     return response.data;
   },
 

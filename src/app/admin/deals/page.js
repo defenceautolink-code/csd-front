@@ -93,9 +93,12 @@ export default function DealsPage() {
   }, []);
 
   // Fetch Live KPI Metrics from Backend Analytics API
-  const fetchMetrics = async () => {
+  const fetchMetrics = async (from = startDate, to = endDate) => {
     try {
-      const statsRes = await dealApi.getDealStats();
+      const params = {};
+      if (from) params.start_date = from;
+      if (to) params.end_date = to;
+      const statsRes = await dealApi.getDealStats(params);
       if (statsRes && statsRes.status && statsRes.data) {
         const s = statsRes.data;
         setMetrics({
@@ -172,7 +175,7 @@ export default function DealsPage() {
 
   // Debounced auto-fetch on search or filter change
   useEffect(() => {
-    fetchMetrics();
+    fetchMetrics(startDate, endDate);
     const timer = setTimeout(() => {
       fetchDeals(1, searchTerm, stageFilter, startDate, endDate, pagination.per_page);
     }, 300);

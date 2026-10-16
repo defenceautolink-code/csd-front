@@ -33,6 +33,25 @@ export default function VariantPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
 
+  // Dedicated Variant Stats State from Backend API
+  const [variantStats, setVariantStats] = useState({
+    total_variants: 0,
+    active_trims: 0,
+    mapped_models: 0,
+    inactive_trims: 0,
+  });
+
+  const fetchVariantStats = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/variants/stats`);
+      if (res.data && res.data.status && res.data.data) {
+        setVariantStats(res.data.data);
+      }
+    } catch (e) {
+      console.log("Error fetching variant stats:", e);
+    }
+  };
+
   // Modal States
   const [showAddModal, setShowAddModal] = useState(false);
   const [editVariant, setEditVariant] = useState(null);
@@ -51,6 +70,7 @@ export default function VariantPage() {
   // 2. Fetch all variants from Laravel backend
   const fetchVariants = async () => {
     setIsLoading(true);
+    fetchVariantStats();
     try {
       const params = {
         page: currentPage,
@@ -317,7 +337,7 @@ export default function VariantPage() {
 
         {/* KPI Stat Cards */}
         <div className="row g-3 mb-4">
-          <div className="col-md-4 col-sm-6">
+          <div className="col-md-6 col-sm-6">
             <div className="card stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">Total Variants</span>
@@ -325,12 +345,14 @@ export default function VariantPage() {
                   <i className="bi bi-tag-fill"></i>
                 </div>
               </div>
-              <div className="stat-card-value">{variants.length} Variants</div>
+              <div className="stat-card-value">
+                {variantStats.total_variants || totalVariants} Variants
+              </div>
               <span className="text-primary small fw-semibold">Live Database Records</span>
             </div>
           </div>
 
-          <div className="col-md-4 col-sm-6">
+          <div className="col-md-6 col-sm-6">
             <div className="card stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">Active Trims</span>
@@ -339,22 +361,9 @@ export default function VariantPage() {
                 </div>
               </div>
               <div className="stat-card-value">
-                {variants.filter((v) => v.status === "Active").length} Active
+                {variantStats.active_trims} Active
               </div>
               <span className="text-success small fw-semibold">Available for Quotations</span>
-            </div>
-          </div>
-
-          <div className="col-md-4 col-sm-6">
-            <div className="card stat-card">
-              <div className="stat-card-header">
-                <span className="stat-card-title">Mapped Models</span>
-                <div className="stat-icon-box warning">
-                  <i className="bi bi-car-front-fill"></i>
-                </div>
-              </div>
-              <div className="stat-card-value">{new Set(variants.map((v) => v.model_id)).size} Models</div>
-              <span className="text-warning small fw-semibold">Configured with Variants</span>
             </div>
           </div>
         </div>

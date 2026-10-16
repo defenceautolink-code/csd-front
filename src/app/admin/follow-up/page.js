@@ -145,6 +145,28 @@ export default function FollowUpPage() {
     discount_reason: "",
   });
 
+  // Dedicated API: Fetch Live KPI Metrics for Follow-Up Cards
+  const fetchFollowUpStats = async (from = startDate, to = endDate) => {
+    try {
+      const params = {};
+      if (from) params.start_date = from;
+      if (to) params.end_date = to;
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("auth_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await axios.get(`${API_URL}/follow-ups/stats`, { params, headers });
+      if (res.data && res.data.status && res.data.data) {
+        setKpis({
+          overdue: Number(res.data.data.overdue) || 0,
+          due_today: Number(res.data.data.due_today) || 0,
+          upcoming: Number(res.data.data.upcoming) || 0,
+          total: Number(res.data.data.total) || 0,
+        });
+      }
+    } catch (e) {
+      console.log("Error fetching follow-up stats:", e);
+    }
+  };
+
   // Fetch follow-ups from live backend API following backend contract
   const fetchFollowUps = async (
     page = currentPage,
@@ -156,6 +178,7 @@ export default function FollowUpPage() {
   ) => {
     try {
       setLoading(true);
+      fetchFollowUpStats(from, to);
       const params = {
         page: page,
         per_page: limit,
@@ -173,6 +196,7 @@ export default function FollowUpPage() {
       }
       if (tab && tab !== "all") {
         params.tab = tab;
+        params.due_filter = tab;
       }
 
       const res = await axios.get(`${API_URL}/follow-ups`, { params });
@@ -455,8 +479,8 @@ export default function FollowUpPage() {
     }
   };
 
-  // Filtered items by tab if local filter active
-  const displayedList = activeTab === "all" ? followUpsList : followUpsList.filter((item) => item.tab === activeTab);
+  // Display live items directly from backend server pagination
+  const displayedList = followUpsList;
 
   return (
     <AdminLayout>
@@ -517,7 +541,17 @@ export default function FollowUpPage() {
         {/* KPI Counter Cards */}
         <div className="row g-3 mb-4">
           <div className="col-xl-3 col-sm-6">
-            <div className="card stat-card" style={{ borderLeft: "4px solid #ef4444" }}>
+            <div
+              className={`card stat-card ${activeTab === "overdue" ? "border-danger shadow-sm ring-1" : ""}`}
+              style={{ borderLeft: "4px solid #ef4444", cursor: "pointer" }}
+              onClick={() => {
+                if (activeTab !== "overdue") {
+                  setActiveTab("overdue");
+                  setCurrentPage(1);
+                }
+              }}
+              title="Click to view Overdue Calls"
+            >
               <div className="stat-card-header">
                 <span className="stat-card-title">Overdue Calls</span>
                 <div className="stat-icon-box danger">
@@ -530,7 +564,17 @@ export default function FollowUpPage() {
           </div>
 
           <div className="col-xl-3 col-sm-6">
-            <div className="card stat-card" style={{ borderLeft: "4px solid #fb923c" }}>
+            <div
+              className={`card stat-card ${activeTab === "today" ? "border-warning shadow-sm ring-1" : ""}`}
+              style={{ borderLeft: "4px solid #fb923c", cursor: "pointer" }}
+              onClick={() => {
+                if (activeTab !== "today") {
+                  setActiveTab("today");
+                  setCurrentPage(1);
+                }
+              }}
+              title="Click to view Calls Scheduled for Today"
+            >
               <div className="stat-card-header">
                 <span className="stat-card-title">Due Today</span>
                 <div className="stat-icon-box warning">
@@ -543,7 +587,17 @@ export default function FollowUpPage() {
           </div>
 
           <div className="col-xl-3 col-sm-6">
-            <div className="card stat-card" style={{ borderLeft: "4px solid #38bdf8" }}>
+            <div
+              className={`card stat-card ${activeTab === "upcoming" ? "border-info shadow-sm ring-1" : ""}`}
+              style={{ borderLeft: "4px solid #38bdf8", cursor: "pointer" }}
+              onClick={() => {
+                if (activeTab !== "upcoming") {
+                  setActiveTab("upcoming");
+                  setCurrentPage(1);
+                }
+              }}
+              title="Click to view Upcoming Calls"
+            >
               <div className="stat-card-header">
                 <span className="stat-card-title">Upcoming (7 Days)</span>
                 <div className="stat-icon-box info">
@@ -556,7 +610,17 @@ export default function FollowUpPage() {
           </div>
 
           <div className="col-xl-3 col-sm-6">
-            <div className="card stat-card" style={{ borderLeft: "4px solid #22c55e" }}>
+            <div
+              className={`card stat-card ${activeTab === "all" ? "border-success shadow-sm ring-1" : ""}`}
+              style={{ borderLeft: "4px solid #22c55e", cursor: "pointer" }}
+              onClick={() => {
+                if (activeTab !== "all") {
+                  setActiveTab("all");
+                  setCurrentPage(1);
+                }
+              }}
+              title="Click to view All Follow-Ups"
+            >
               <div className="stat-card-header">
                 <span className="stat-card-title">Total Follow-Ups</span>
                 <div className="stat-icon-box success">
@@ -593,7 +657,12 @@ export default function FollowUpPage() {
                         gap: "6px",
                         fontSize: "0.82rem",
                       }}
-                      onClick={() => setActiveTab(tab.id)}
+                      onClick={() => {
+                        if (activeTab !== tab.id) {
+                          setActiveTab(tab.id);
+                          setCurrentPage(1);
+                        }
+                      }}
                     >
                       <span>{tab.label}</span>
                       <span

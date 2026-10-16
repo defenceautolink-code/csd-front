@@ -55,6 +55,25 @@ export default function ModelPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
 
+  // Dedicated Model Stats State from Backend API
+  const [modelStats, setModelStats] = useState({
+    total_models: 0,
+    four_wheeler_models: 0,
+    two_wheeler_models: 0,
+    active_models: 0,
+  });
+
+  const fetchModelStats = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/models/stats`);
+      if (res.data && res.data.status && res.data.data) {
+        setModelStats(res.data.data);
+      }
+    } catch (e) {
+      console.log("Error fetching model stats:", e);
+    }
+  };
+
   // Modal States
   const [showAddModal, setShowAddModal] = useState(false);
   const [editModel, setEditModel] = useState(null);
@@ -72,6 +91,7 @@ export default function ModelPage() {
   // 2. Fetch all models from Laravel backend
   const fetchModels = async () => {
     setIsLoading(true);
+    fetchModelStats();
     try {
       const params = {
         page: currentPage,
@@ -298,7 +318,9 @@ export default function ModelPage() {
                   <i className="bi bi-car-front-fill"></i>
                 </div>
               </div>
-              <div className="stat-card-value">{models.length} Models</div>
+              <div className="stat-card-value">
+                {modelStats.total_models || totalModels} Models
+              </div>
               <span className="text-primary small fw-semibold">Live Database Records</span>
             </div>
           </div>
@@ -312,7 +334,7 @@ export default function ModelPage() {
                 </div>
               </div>
               <div className="stat-card-value">
-                {models.filter((m) => m.vehicle_segment === "4 Wheeler").length} Models
+                {modelStats.four_wheeler_models} Models
               </div>
               <span className="text-success small fw-semibold">Cars, SUVs & Sedans</span>
             </div>
@@ -327,7 +349,7 @@ export default function ModelPage() {
                 </div>
               </div>
               <div className="stat-card-value">
-                {models.filter((m) => m.vehicle_segment === "2 Wheeler").length} Models
+                {modelStats.two_wheeler_models} Models
               </div>
               <span className="text-warning small fw-semibold">Bikes & Scooters</span>
             </div>

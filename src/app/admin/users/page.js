@@ -46,6 +46,26 @@ export default function UsersPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
 
+  // Dedicated User Stats State from Backend API
+  const [userStats, setUserStats] = useState({
+    total_users: 0,
+    super_admins: 0,
+    sales_team: 0,
+    registered_customers: 0,
+    active_users: 0,
+  });
+
+  const fetchUserStats = async () => {
+    try {
+      const res = await api.get("/users/stats");
+      if (res.data && res.data.status && res.data.data) {
+        setUserStats(res.data.data);
+      }
+    } catch (e) {
+      console.log("Error fetching user stats:", e);
+    }
+  };
+
   // Modal States
   const [showAddModal, setShowAddModal] = useState(false);
   const [editUser, setEditUser] = useState(null);
@@ -76,6 +96,7 @@ export default function UsersPage() {
   // 2. Fetch all users from Laravel backend
   const fetchUsers = async () => {
     setIsLoading(true);
+    fetchUserStats();
     try {
       const params = {
         page: currentPage,
@@ -107,6 +128,7 @@ export default function UsersPage() {
   // Run on page load and parameter change
   useEffect(() => {
     fetchUsers();
+    fetchUserStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, perPage, searchTerm, roleFilter, statusFilter]);
 
@@ -381,7 +403,7 @@ export default function UsersPage() {
 
         {/* User KPI Summary Cards */}
         <div className="row g-3 mb-4">
-          <div className="col-xl-3 col-sm-6">
+          <div className="col-md-4 col-sm-6">
             <div className="card stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">Total Users</span>
@@ -389,12 +411,14 @@ export default function UsersPage() {
                   <i className="bi bi-people-fill"></i>
                 </div>
               </div>
-              <div className="stat-card-value">{users.length} Users</div>
+              <div className="stat-card-value">
+                {userStats.total_users || totalUsers} Users
+              </div>
               <span className="text-primary small fw-semibold">Live Database Records</span>
             </div>
           </div>
 
-          <div className="col-xl-3 col-sm-6">
+          <div className="col-md-4 col-sm-6">
             <div className="card stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">Super Admins</span>
@@ -403,13 +427,13 @@ export default function UsersPage() {
                 </div>
               </div>
               <div className="stat-card-value">
-                {users.filter((u) => u.role === "Super Admin").length} Admins
+                {userStats.super_admins} Admins
               </div>
               <span className="text-success small fw-semibold">Full System Access</span>
             </div>
           </div>
 
-          <div className="col-xl-3 col-sm-6">
+          <div className="col-md-4 col-sm-6">
             <div className="card stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">Sales Team</span>
@@ -418,29 +442,9 @@ export default function UsersPage() {
                 </div>
               </div>
               <div className="stat-card-value">
-                {
-                  users.filter(
-                    (u) => u.role === "Sales Executive" || u.role === "Sales Manager"
-                  ).length
-                }{" "}
-                Staff
+                {userStats.sales_team} Staff
               </div>
               <span className="text-warning small fw-semibold">Sales Executives & Managers</span>
-            </div>
-          </div>
-
-          <div className="col-xl-3 col-sm-6">
-            <div className="card stat-card">
-              <div className="stat-card-header">
-                <span className="stat-card-title">Registered Customers</span>
-                <div className="stat-icon-box info">
-                  <i className="bi bi-person-check-fill"></i>
-                </div>
-              </div>
-              <div className="stat-card-value">
-                {users.filter((u) => u.role === "Customer").length} Customers
-              </div>
-              <span className="text-info small fw-semibold">Role: Customer Enum</span>
             </div>
           </div>
         </div>

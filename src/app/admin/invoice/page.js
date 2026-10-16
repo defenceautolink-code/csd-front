@@ -121,14 +121,31 @@ export default function GenerateInvoicePage() {
     }
   }, [showToast]);
 
+  const [invoiceStats, setInvoiceStats] = useState(null);
+
+  const fetchInvoiceStats = useCallback(async () => {
+    try {
+      const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api"}/invoices/stats`);
+      if (res.data && res.data.status && res.data.data) {
+        setInvoiceStats(res.data.data);
+      }
+    } catch (e) {
+      console.log("Error fetching invoice stats:", e);
+    }
+  }, []);
+
   useEffect(() => {
     loadDealsData();
+    fetchInvoiceStats();
 
     // Listen to global CRM deal update events
-    const handleUpdate = () => loadDealsData();
+    const handleUpdate = () => {
+      loadDealsData();
+      fetchInvoiceStats();
+    };
     window.addEventListener("csd_deals_updated", handleUpdate);
     return () => window.removeEventListener("csd_deals_updated", handleUpdate);
-  }, [loadDealsData]);
+  }, [loadDealsData, fetchInvoiceStats]);
 
   // Enrich deals with formatted invoices from their payments array
   const enrichedDeals = useMemo(() => {
@@ -221,8 +238,18 @@ export default function GenerateInvoicePage() {
     return list.sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [enrichedDeals]);
 
-  // Overall KPI Metrics
+  // Overall KPI Metrics from Dedicated Backend API (Fallback to computed)
   const metrics = useMemo(() => {
+    if (invoiceStats) {
+      return {
+        totalInvoicesCount: invoiceStats.total_invoices_count,
+        totalCollected: invoiceStats.total_collected,
+        totalDealVolume: invoiceStats.total_deal_volume,
+        totalPending: invoiceStats.total_pending,
+        totalDealsCount: invoiceStats.total_deals_count,
+      };
+    }
+
     const totalInvoicesCount = allInvoicesList.length;
     const totalCollected = allInvoicesList.reduce((sum, i) => sum + Number(i.amountPaid || 0), 0);
     const totalDealVolume = enrichedDeals.reduce((sum, d) => sum + Number(d.net_amount || d.total_amount || 0), 0);
@@ -236,7 +263,7 @@ export default function GenerateInvoicePage() {
       totalPending,
       totalDealsCount,
     };
-  }, [allInvoicesList, enrichedDeals]);
+  }, [invoiceStats, allInvoicesList, enrichedDeals]);
 
   // Filtered Deals for Tab 1 (Search + Stage Filter + Payment Filter + Date Range)
   const filteredDeals = useMemo(() => {

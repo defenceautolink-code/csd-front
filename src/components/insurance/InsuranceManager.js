@@ -27,14 +27,6 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
   });
   const [isLoading, setIsLoading] = useState(true);
 
-  // Overall Stats for Top Cards
-  const [overallStats, setOverallStats] = useState({
-    total: 0,
-    expiringSoon: 0,
-    active: 0,
-    expired: 0,
-  });
-
   // Filter States (Clean & Compact: Search + Date Range only)
   const [searchTerm, setSearchTerm] = useState("");
   const [fromDate, setFromDate] = useState("");
@@ -142,32 +134,6 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
     toDate,
   ]);
 
-  // Load Overall Stats for Non-Clickable KPI Cards
-  const loadOverallStats = useCallback(async () => {
-    try {
-      const res = await insuranceApi.getInsurances({ per_page: 100 });
-      if (res && res.status && Array.isArray(res.data)) {
-        let expSoon = 0;
-        let act = 0;
-        let expd = 0;
-        res.data.forEach((item) => {
-          const s = String(item.status || "").toLowerCase();
-          if (s === "expiring_soon") expSoon += 1;
-          else if (s === "expired") expd += 1;
-          else act += 1;
-        });
-        setOverallStats({
-          total: res.pagination?.total || res.data.length,
-          expiringSoon: expSoon,
-          active: act,
-          expired: expd,
-        });
-      }
-    } catch (e) {
-      console.warn("Failed to load overall stats:", e);
-    }
-  }, []);
-
   // Load Deals for 1-Click Auto-Fill Dropdown
   const loadDeals = useCallback(async () => {
     setIsLoadingDeals(true);
@@ -188,11 +154,10 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
     loadInsurances();
   }, [loadInsurances]);
 
-  // Load deals & overall stats once on component mount
+  // Load deals once on component mount
   useEffect(() => {
     loadDeals();
-    loadOverallStats();
-  }, [loadDeals, loadOverallStats]);
+  }, [loadDeals]);
 
   // Handle Deal Selection in Add Modal (Auto-fill all details including Color from Deals Table)
   const handleDealSelection = (selectedDealId) => {
@@ -492,109 +457,7 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
           </div>
         </div>
 
-        {/* ===================================================================
-            2. KPI SUMMARY CARDS
-            =================================================================== */}
-        {/* ===================================================================
-            2. KPI SUMMARY CARDS (Informational, NOT Clickable)
-            =================================================================== */}
-        <div className="row g-3 mb-4">
-          <div className="col-12 col-sm-6 col-xl-3">
-            <div
-              className="card border-0 shadow-sm rounded-3 h-100 p-3 border-start border-4 border-primary"
-              style={{
-                background: "#ffffff",
-                transition: "all 0.2s ease",
-              }}
-            >
-              <div className="d-flex align-items-center justify-content-between">
-                <div>
-                  <div className="text-muted small fw-medium">Total Insurance Records</div>
-                  <h3 className="fw-bold text-dark mt-1 mb-0">{overallStats.total || pagination.total || insurances.length}</h3>
-                  <div className="text-muted extra-small mt-1">All registered vehicles</div>
-                </div>
-                <div
-                  className="rounded-3 p-3 text-primary bg-primary-subtle"
-                  style={{ width: 48, height: 48, display: "flex", alignItems: "center", justifyContent: "center" }}
-                >
-                  <i className="bi bi-shield-shaded fs-4"></i>
-                </div>
-              </div>
-            </div>
-          </div>
 
-          <div className="col-12 col-sm-6 col-xl-3">
-            <div
-              className="card border-0 shadow-sm rounded-3 h-100 p-3 border-start border-4 border-warning"
-              style={{
-                background: "#ffffff",
-                transition: "all 0.2s ease",
-              }}
-            >
-              <div className="d-flex align-items-center justify-content-between">
-                <div>
-                  <div className="text-muted small fw-medium">Due Reminders (15 Days)</div>
-                  <h3 className="fw-bold text-warning-emphasis mt-1 mb-0">{overallStats.expiringSoon}</h3>
-                  <div className="text-warning extra-small mt-1 fw-medium">Action Needed for Renewal</div>
-                </div>
-                <div
-                  className="rounded-3 p-3 text-warning-emphasis bg-warning-subtle"
-                  style={{ width: 48, height: 48, display: "flex", alignItems: "center", justifyContent: "center" }}
-                >
-                  <i className="bi bi-bell-fill fs-4"></i>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="col-12 col-sm-6 col-xl-3">
-            <div
-              className="card border-0 shadow-sm rounded-3 h-100 p-3 border-start border-4 border-success"
-              style={{
-                background: "#ffffff",
-                transition: "all 0.2s ease",
-              }}
-            >
-              <div className="d-flex align-items-center justify-content-between">
-                <div>
-                  <div className="text-muted small fw-medium">Active Policies</div>
-                  <h3 className="fw-bold text-success mt-1 mb-0">{overallStats.active}</h3>
-                  <div className="text-muted extra-small mt-1">Valid &amp; Protected</div>
-                </div>
-                <div
-                  className="rounded-3 p-3 text-success bg-success-subtle"
-                  style={{ width: 48, height: 48, display: "flex", alignItems: "center", justifyContent: "center" }}
-                >
-                  <i className="bi bi-check-circle-fill fs-4"></i>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="col-12 col-sm-6 col-xl-3">
-            <div
-              className="card border-0 shadow-sm rounded-3 h-100 p-3 border-start border-4 border-danger"
-              style={{
-                background: "#ffffff",
-                transition: "all 0.2s ease",
-              }}
-            >
-              <div className="d-flex align-items-center justify-content-between">
-                <div>
-                  <div className="text-muted small fw-medium">Expired Policies</div>
-                  <h3 className="fw-bold text-danger mt-1 mb-0">{overallStats.expired}</h3>
-                  <div className="text-muted extra-small mt-1">Lapsed coverage</div>
-                </div>
-                <div
-                  className="rounded-3 p-3 text-danger bg-danger-subtle"
-                  style={{ width: 48, height: 48, display: "flex", alignItems: "center", justifyContent: "center" }}
-                >
-                  <i className="bi bi-exclamation-octagon-fill fs-4"></i>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
 
         {/* ===================================================================
             3. SEARCH & DATE FILTER CONTROLS (SINGLE LINE)
