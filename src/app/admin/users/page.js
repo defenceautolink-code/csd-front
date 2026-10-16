@@ -461,7 +461,7 @@ export default function UsersPage() {
                 onChange={(e) => setRoleFilter(e.target.value)}
                 style={{ width: "170px" }}
               >
-                <option value="">All Roles (Enum)</option>
+                <option value="">All Roles</option>
                 {ROLE_OPTIONS.map((r) => (
                   <option key={r} value={r}>
                     {r}
