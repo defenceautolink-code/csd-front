@@ -128,15 +128,15 @@ export function normalizeDeal(d) {
     notes: d.notes || "",
     has_insurance:
       d.has_insurance === true ||
-      d.has_insurance === 1 ||
-      d.has_insurance === "Yes" ||
-      d.insurance === "Yes" ||
-      d.insurance === true ||
-      (typeof d.notes === "string" &&
-        (d.notes.toLowerCase().includes("insurance included: yes") ||
-         d.notes.toLowerCase().includes("insurance: yes") ||
-         d.notes.toLowerCase().includes("insurance:yes") ||
-         /insurance.*yes/i.test(d.notes)))
+        d.has_insurance === 1 ||
+        d.has_insurance === "Yes" ||
+        d.insurance === "Yes" ||
+        d.insurance === true ||
+        (typeof d.notes === "string" &&
+          (d.notes.toLowerCase().includes("insurance included: yes") ||
+            d.notes.toLowerCase().includes("insurance: yes") ||
+            d.notes.toLowerCase().includes("insurance:yes") ||
+            /insurance.*yes/i.test(d.notes)))
         ? "Yes"
         : "No",
     insurance_amount: Number(d.insurance_amount || 0),
@@ -184,15 +184,15 @@ export const dealApi = {
           const userObj = JSON.parse(userStr);
           if (userObj?.id) currentUserId = Number(userObj.id);
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     const validExecId =
       payload.sales_executive_id && Number(payload.sales_executive_id) !== 5
         ? Number(payload.sales_executive_id)
         : leadContext?.assigned_to && Number(leadContext.assigned_to) !== 5
-        ? Number(leadContext.assigned_to)
-        : currentUserId || 1;
+          ? Number(leadContext.assigned_to)
+          : currentUserId || 1;
 
     const apiPayload = {
       lead_id: Number(payload.lead_id),
@@ -206,10 +206,23 @@ export const dealApi = {
       quotation_id: payload.quotation_id ? Number(payload.quotation_id) : null,
       sales_executive_id: validExecId,
       user_id: currentUserId,
-      created_by: currentUserId,
       notes: payload.has_insurance
         ? "Insurance Included: Yes"
         : "Insurance Included: No",
+      // Insurance Policy Details
+      insurance_company: payload.insurance_company || "",
+      policy_number: payload.policy_number || "",
+      insurance_type: payload.insurance_type || "Comprehensive",
+      policy_start_date: payload.policy_start_date || payload.expected_delivery_date || null,
+      policy_expiry_date: payload.policy_expiry_date || null,
+      premium_amount: Number(payload.premium_amount || 0),
+      insurance_premium: Number(payload.insurance_premium || payload.premium_amount || 0),
+      insurance_amount: Number(payload.insurance_amount || payload.premium_amount || 0),
+      reminder_days_before: Number(payload.reminder_days_before || 15),
+      reminder_date: payload.reminder_date || null,
+      vehicle_number: payload.vehicle_number || payload.registration_number || "",
+      registration_number: payload.registration_number || payload.vehicle_number || "",
+      insurance_notes: payload.insurance_notes || "",
     };
 
     const initialAmount = Number(payload.initial_payment?.amount || 0);
@@ -281,7 +294,7 @@ export const dealApi = {
       if (createdPaymentId) {
         try {
           await api.post(`/payments/${createdPaymentId}/verify`, { action: "clear" });
-        } catch (_) {}
+        } catch (_) { }
       }
       markLeadAsConverted(payload.lead_id);
       window.dispatchEvent(new Event("csd_deals_updated"));
@@ -315,8 +328,8 @@ export const dealApi = {
   /**
    * Get overall analytics & deal metrics directly from database
    */
-  getDealStats: async (params = {}) => {
-    const response = await api.get("/deals/stats", { params });
+  getDealStats: async () => {
+    const response = await api.get("/deals/stats");
     return response.data;
   },
 
@@ -420,7 +433,7 @@ export const dealApi = {
     if (pid) {
       try {
         await api.post(`/payments/${pid}/verify`, { action: "clear" });
-      } catch (_) {}
+      } catch (_) { }
     }
     window.dispatchEvent(new Event("csd_deals_updated"));
     return response.data;

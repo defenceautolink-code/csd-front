@@ -145,6 +145,14 @@ const insuranceApi = {
       delivery_date: data.delivery_date || new Date().toISOString().split("T")[0],
       deal_id: data.deal_id ? Number(data.deal_id) : null,
       notes: data.notes || null,
+      insurance_company: data.insurance_company?.trim() || null,
+      policy_number: data.policy_number?.trim() || null,
+      insurance_type: data.insurance_type?.trim() || "Comprehensive",
+      policy_start_date: data.policy_start_date || data.delivery_date || null,
+      policy_expiry_date: data.policy_expiry_date || null,
+      reminder_days_before: data.reminder_days_before ? Number(data.reminder_days_before) : 15,
+      reminder_date: data.reminder_date || null,
+      renewal_status: data.renewal_status || "Pending",
     };
 
     if (data.premium_amount !== undefined && data.premium_amount !== "") {
@@ -153,8 +161,10 @@ const insuranceApi = {
     if (data.idv_amount !== undefined && data.idv_amount !== "") {
       payload.idv_amount = Number(data.idv_amount);
     }
-    if (data.registration_number) {
-      payload.registration_number = data.registration_number.trim();
+    const vNo = data.vehicle_number || data.registration_number;
+    if (vNo) {
+      payload.vehicle_number = vNo.trim();
+      payload.registration_number = vNo.trim();
     }
     if (data.vin_chassis_number) {
       payload.vin_chassis_number = data.vin_chassis_number.trim();
@@ -176,12 +186,53 @@ const insuranceApi = {
   },
 
   /**
+   * Fetch all insurance records directly from insurances table (Separate API)
+   * Method: GET
+   * Endpoint: /api/insurance-records
+   */
+  getInsuranceRecords: async (params = {}) => {
+    const cleanParams = {};
+    Object.keys(params).forEach((key) => {
+      const val = params[key];
+      if (val !== undefined && val !== null && val !== "" && val !== "all_status") {
+        cleanParams[key] = val;
+      }
+    });
+
+    const response = await fetchWithRetry(() =>
+      api.get("/insurance-records", {
+        params: cleanParams,
+        headers: {
+          Accept: "application/json",
+        },
+      })
+    );
+
+    return response.data;
+  },
+
+  /**
+   * Update existing insurance policy
+   * Method: PUT
+   * Endpoint: /api/insurances/{id}
+   */
+  updateInsurance: async (id, data = {}) => {
+    const response = await fetchWithRetry(() =>
+      api.put(`/insurances/${id}`, data, {
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+      })
+    );
+
+    return response.data;
+  },
+
+  /**
    * 3️⃣ Renew / Update Insurance Policy
-   * Method: POST (or PUT)
+   * Method: POST
    * Endpoint: /api/insurances/{id}/renew
-   * 
-   * Path Parameter: id
-   * Request Body: {}
    */
   renewInsurance: async (id, data = {}) => {
     const response = await fetchWithRetry(() =>
@@ -197,7 +248,7 @@ const insuranceApi = {
   },
 
   /**
-   * 4️⃣ Get Insurance KPI Statistics from Database
+   * 5️⃣ Get Insurance KPI Statistics from Database
    * Method: GET
    * Endpoint: /api/insurances/stats
    */

@@ -39,6 +39,48 @@ export default function ConvertDealModal({
     },
   });
 
+  // Insurance Popup State (opens on Confirm & Convert when Yes is selected)
+  const [showInsurancePopup, setShowInsurancePopup] = useState(false);
+
+  // Detailed Insurance Policy State (when has_insurance === 'Yes')
+  const [insuranceDetails, setInsuranceDetails] = useState({
+    insurance_company: "HDFC ERGO General Insurance",
+    policy_number: "",
+    insurance_type: "Comprehensive",
+    policy_start_date: "",
+    policy_expiry_date: "",
+    premium_amount: "",
+    reminder_days_before: "15",
+    reminder_date: "",
+    vehicle_number: "",
+    notes: "",
+  });
+
+  const handleInsuranceChange = (field, value) => {
+    setInsuranceDetails((prev) => {
+      const updated = { ...prev, [field]: value };
+      if (field === "policy_start_date" && value) {
+        const d = new Date(value);
+        d.setDate(d.getDate() + 365);
+        const exp = d.toISOString().split("T")[0];
+        updated.policy_expiry_date = exp;
+
+        const remD = new Date(exp);
+        remD.setDate(remD.getDate() - Number(updated.reminder_days_before || 15));
+        updated.reminder_date = remD.toISOString().split("T")[0];
+      } else if (field === "policy_expiry_date" && value) {
+        const remD = new Date(value);
+        remD.setDate(remD.getDate() - Number(updated.reminder_days_before || 15));
+        updated.reminder_date = remD.toISOString().split("T")[0];
+      } else if (field === "reminder_days_before" && updated.policy_expiry_date) {
+        const remD = new Date(updated.policy_expiry_date);
+        remD.setDate(remD.getDate() - Number(value || 15));
+        updated.reminder_date = remD.toISOString().split("T")[0];
+      }
+      return updated;
+    });
+  };
+
   // Pre-fill dynamically when lead opens & fetch customer's quotations
   useEffect(() => {
     if (lead && isOpen) {
@@ -54,7 +96,7 @@ export default function ConvertDealModal({
         try {
           const userObj = JSON.parse(localStorage.getItem("user") || "{}");
           currentUserName = userObj?.name || "";
-        } catch (e) {}
+        } catch (e) { }
       }
 
       setFormData({
@@ -75,6 +117,22 @@ export default function ConvertDealModal({
           notes: "",
         },
       });
+
+      // Initialize default insurance dates based on expected delivery date
+      const insExp = new Date(delivery);
+      insExp.setDate(insExp.getDate() + 365);
+      const insExpStr = insExp.toISOString().split("T")[0];
+      const insRem = new Date(insExp);
+      insRem.setDate(insRem.getDate() - 15);
+      const insRemStr = insRem.toISOString().split("T")[0];
+
+      setInsuranceDetails((prev) => ({
+        ...prev,
+        policy_start_date: deliveryStr,
+        policy_expiry_date: insExpStr,
+        reminder_date: insRemStr,
+        vehicle_number: lead.registration_number || lead.vehicle_number || "",
+      }));
 
       // Load all quotations generated for this customer
       const fetchQuotations = async () => {
@@ -171,6 +229,17 @@ export default function ConvertDealModal({
       return;
     }
 
+    // If Insurance is selected as "Yes", open the Insurance Details popup instead of saving directly!
+    if (formData.has_insurance === "Yes") {
+      setShowInsurancePopup(true);
+      return;
+    }
+
+    // If Insurance is "No", proceed to direct deal save
+    await executeConvertDeal(false);
+  };
+
+  const executeConvertDeal = async (withInsurance = false) => {
     setIsSubmitting(true);
 
     const payload = {
@@ -178,8 +247,8 @@ export default function ConvertDealModal({
       quotation_id: formData.quotation_id ? Number(formData.quotation_id) : null,
       total_amount: totalNum,
       discount_amount: discountNum,
-      has_insurance: formData.has_insurance === "Yes",
-      insurance: formData.has_insurance,
+      has_insurance: withInsurance,
+      insurance: withInsurance ? "Yes" : "No",
       color: formData.color.trim(),
       vin_chassis_number: formData.vin_chassis_number.trim(),
       expected_delivery_date: formData.expected_delivery_date,
@@ -195,10 +264,28 @@ export default function ConvertDealModal({
       },
     };
 
+    // If Insurance is Included, append full insurance policy details
+    if (withInsurance) {
+      payload.insurance_company = (insuranceDetails.insurance_company || "").trim();
+      payload.policy_number = (insuranceDetails.policy_number || "").trim();
+      payload.insurance_type = insuranceDetails.insurance_type || "Comprehensive";
+      payload.policy_start_date = insuranceDetails.policy_start_date || formData.expected_delivery_date;
+      payload.policy_expiry_date = insuranceDetails.policy_expiry_date;
+      payload.premium_amount = Number(insuranceDetails.premium_amount || 0);
+      payload.insurance_premium = Number(insuranceDetails.premium_amount || 0);
+      payload.insurance_amount = Number(insuranceDetails.premium_amount || 0);
+      payload.reminder_days_before = Number(insuranceDetails.reminder_days_before || 15);
+      payload.reminder_date = insuranceDetails.reminder_date;
+      payload.vehicle_number = (insuranceDetails.vehicle_number || "").trim();
+      payload.registration_number = (insuranceDetails.vehicle_number || "").trim();
+      payload.insurance_notes = (insuranceDetails.notes || "").trim();
+    }
+
     try {
       const res = await dealApi.convertLead(payload, lead);
       showToast(res.message || `Lead "${lead.name}" converted to Deal successfully!`, "success");
       setIsSubmitting(false);
+      setShowInsurancePopup(false);
       onSuccess(lead.id);
       onClose();
 
@@ -332,11 +419,10 @@ export default function ConvertDealModal({
                     return (
                       <div className="col-12 col-md-6" key={quote.id}>
                         <div
-                          className={`p-3 rounded-3 border transition-all h-100 d-flex flex-column justify-content-between position-relative ${
-                            isSelected
+                          className={`p-3 rounded-3 border transition-all h-100 d-flex flex-column justify-content-between position-relative ${isSelected
                               ? "border-primary bg-primary bg-opacity-10 shadow-sm"
                               : "border-secondary border-opacity-25 bg-white hover-shadow"
-                          }`}
+                            }`}
                           style={{ cursor: "pointer" }}
                           onClick={() => handleSelectQuotation(quote)}
                         >
@@ -505,6 +591,15 @@ export default function ConvertDealModal({
                     </label>
                   </div>
                 </div>
+
+                {formData.has_insurance === "Yes" && (
+                  <div className="mt-2 pt-2 border-top d-flex align-items-center gap-2 text-success small">
+                    <i className="bi bi-info-circle-fill"></i>
+                    <span>
+                      <strong>Yes selected:</strong> Insurance policy details popup will open upon clicking <strong>"Confirm & Convert Deal"</strong> below to enter details and save both together.
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -780,6 +875,275 @@ export default function ConvertDealModal({
           </div>
         </form>
       </div>
+
+      {/* ===================================================================
+          SEPARATE INSURANCE POLICY DETAILS POPUP MODAL
+          Opens on "Confirm & Convert Deal" click when Insurance is "Yes"
+          =================================================================== */}
+      {showInsurancePopup && (
+        <div
+          className="modal fade show d-block"
+          tabIndex="-1"
+          style={{ backgroundColor: "rgba(0, 0, 0, 0.7)", zIndex: 1075 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="modal-dialog modal-lg modal-dialog-centered">
+            <div className="modal-content shadow-lg border-0 rounded-3">
+              <div className="modal-header bg-success text-white py-3 px-4">
+                <div className="d-flex align-items-center gap-2">
+                  <div
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: "50%",
+                      backgroundColor: "rgba(255,255,255,0.2)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <i className="bi bi-shield-fill-check fs-5"></i>
+                  </div>
+                  <div>
+                    <h5 className="modal-title fw-bold fs-6 mb-0">
+                      Insurance Policy & Renewal Reminder Information
+                    </h5>
+                    <span className="small text-white-50" style={{ fontSize: "11px" }}>
+                      Fill policy information to save Deal and Insurance simultaneously
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn-close btn-close-white"
+                  disabled={isSubmitting}
+                  onClick={() => setShowInsurancePopup(false)}
+                ></button>
+              </div>
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  executeConvertDeal(true);
+                }}
+              >
+                <div className="modal-body p-4" style={{ maxHeight: "72vh", overflowY: "auto" }}>
+                  {/* Summary context */}
+                  <div className="p-3 bg-light rounded-3 mb-3 border d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div>
+                      <span className="text-muted small">Customer Name:</span>
+                      <strong className="text-dark ms-2">{lead.name}</strong>
+                      <span className="text-muted small ms-3">Phone:</span>
+                      <span className="fw-semibold text-dark ms-1">{lead.phone}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted small">Vehicle:</span>
+                      <span className="fw-bold text-primary ms-2">{lead.model_variant}</span>
+                      <span className="badge bg-white text-dark border ms-2">{formData.color}</span>
+                    </div>
+                  </div>
+
+                  <div className="row g-3">
+                    {/* Insurance Company */}
+                    <div className="col-md-6">
+                      <label className="form-label text-dark fw-bold small mb-1">
+                        Insurance Company <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control form-control-sm"
+                        placeholder="e.g. HDFC ERGO, ICICI Lombard, Tata AIG"
+                        list="modalInsuranceCompanyList"
+                        value={insuranceDetails.insurance_company}
+                        onChange={(e) => handleInsuranceChange("insurance_company", e.target.value)}
+                        required
+                      />
+                      <datalist id="modalInsuranceCompanyList">
+                        <option value="HDFC ERGO General Insurance" />
+                        <option value="ICICI Lombard General Insurance" />
+                        <option value="Tata AIG General Insurance" />
+                        <option value="Bajaj Allianz General Insurance" />
+                        <option value="New India Assurance" />
+                        <option value="Reliance General Insurance" />
+                        <option value="National Insurance Company" />
+                        <option value="SBI General Insurance" />
+                        <option value="Go Digit General Insurance" />
+                      </datalist>
+                    </div>
+
+                    {/* Policy Number */}
+                    <div className="col-md-6">
+                      <label className="form-label text-dark fw-bold small mb-1">
+                        Policy Number <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control form-control-sm"
+                        placeholder="e.g. POL-2026-987654"
+                        value={insuranceDetails.policy_number}
+                        onChange={(e) => handleInsuranceChange("policy_number", e.target.value)}
+                        required
+                      />
+                    </div>
+
+                    {/* Insurance Type */}
+                    <div className="col-md-4">
+                      <label className="form-label text-dark fw-bold small mb-1">
+                        Insurance Type
+                      </label>
+                      <select
+                        className="form-select form-select-sm"
+                        value={insuranceDetails.insurance_type}
+                        onChange={(e) => handleInsuranceChange("insurance_type", e.target.value)}
+                      >
+                        <option value="Comprehensive">Comprehensive (1+3 Years)</option>
+                        <option value="Third Party">Third Party</option>
+                        <option value="Own Damage">Own Damage (OD)</option>
+                        <option value="Zero Depreciation">Zero Depreciation (Bumper to Bumper)</option>
+                      </select>
+                    </div>
+
+                    {/* Premium Amount */}
+                    <div className="col-md-4">
+                      <label className="form-label text-dark fw-bold small mb-1">
+                        Premium Amount (₹) <span className="text-danger">*</span>
+                      </label>
+                      <div className="input-group input-group-sm">
+                        <span className="input-group-text bg-light">₹</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          className="form-control form-control-sm"
+                          placeholder="e.g. 24500"
+                          value={insuranceDetails.premium_amount}
+                          onChange={(e) => handleInsuranceChange("premium_amount", e.target.value)}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    {/* Vehicle Number (Optional / Nullable) */}
+                    <div className="col-md-4">
+                      <label className="form-label text-dark fw-bold small mb-1 d-flex justify-content-between align-items-center">
+                        <span>Vehicle Number</span>
+                        <span className="text-muted extra-small" style={{ fontSize: "10px" }}>(Optional / Nullable)</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control form-control-sm"
+                        placeholder="e.g. GJ-01-AB-1234 (or leave blank)"
+                        value={insuranceDetails.vehicle_number}
+                        onChange={(e) => handleInsuranceChange("vehicle_number", e.target.value.toUpperCase())}
+                      />
+                    </div>
+
+                    {/* Policy Start Date */}
+                    <div className="col-md-4">
+                      <label className="form-label text-dark fw-bold small mb-1">
+                        Policy Start Date <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        className="form-control form-control-sm"
+                        value={insuranceDetails.policy_start_date}
+                        onChange={(e) => handleInsuranceChange("policy_start_date", e.target.value)}
+                        required
+                      />
+                    </div>
+
+                    {/* Policy Expiry Date */}
+                    <div className="col-md-4">
+                      <label className="form-label text-dark fw-bold small mb-1">
+                        Policy Expiry Date (1 Year) <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        className="form-control form-control-sm"
+                        value={insuranceDetails.policy_expiry_date}
+                        onChange={(e) => handleInsuranceChange("policy_expiry_date", e.target.value)}
+                        required
+                      />
+                    </div>
+
+                    {/* Reminder Days Before */}
+                    <div className="col-md-4">
+                      <label className="form-label text-dark fw-bold small mb-1">
+                        Reminder Days Before
+                      </label>
+                      <select
+                        className="form-select form-select-sm"
+                        value={insuranceDetails.reminder_days_before}
+                        onChange={(e) => handleInsuranceChange("reminder_days_before", e.target.value)}
+                      >
+                        <option value="15">15 Days Before Expiry</option>
+                        <option value="30">30 Days Before Expiry</option>
+                        <option value="45">45 Days Before Expiry</option>
+                        <option value="60">60 Days Before Expiry</option>
+                      </select>
+                    </div>
+
+                    {/* Calculated Reminder Date Preview */}
+                    <div className="col-md-6">
+                      <div className="p-2 rounded bg-light border d-flex align-items-center gap-2">
+                        <i className="bi bi-bell-fill text-warning fs-5"></i>
+                        <div>
+                          <div className="small text-muted" style={{ fontSize: "11px" }}>First Renewal Reminder Date:</div>
+                          <div className="fw-bold text-dark small">
+                            {insuranceDetails.reminder_date || "Calculates after expiry date"}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Additional Notes */}
+                    <div className="col-md-6">
+                      <label className="form-label text-dark fw-bold small mb-1">
+                        Insurance Notes
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control form-control-sm"
+                        placeholder="Insurance notes or IDV details (optional)..."
+                        value={insuranceDetails.notes}
+                        onChange={(e) => handleInsuranceChange("notes", e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="modal-footer bg-light py-2 px-4 border-top d-flex justify-content-between align-items-center">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-sm"
+                    disabled={isSubmitting}
+                    onClick={() => setShowInsurancePopup(false)}
+                  >
+                    <i className="bi bi-arrow-left me-1"></i> Back to Deal Form
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-success btn-sm d-inline-flex align-items-center gap-2 fw-semibold px-3"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm" role="status"></span>
+                        Saving Both...
+                      </>
+                    ) : (
+                      <>
+                        <i className="bi bi-check-circle-fill"></i>
+                        Save Deal & Insurance Together
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

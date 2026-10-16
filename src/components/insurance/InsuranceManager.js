@@ -26,20 +26,22 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
     to: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  // Filter States (Clean & Compact: Search + Date Range only)
+  // Filters (Default: Next 15 Days Reminders)
   const [searchTerm, setSearchTerm] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [perPage, setPerPage] = useState(15);
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Available Deals for 1-Click Auto-Fill
+  // Available Deals for 1-Click Auto-Fill (Add Modal)
   const [dealsList, setDealsList] = useState([]);
   const [isLoadingDeals, setIsLoadingDeals] = useState(false);
 
   // Modals & Action States
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [showRenewModal, setShowRenewModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedInsurance, setSelectedInsurance] = useState(null);
@@ -58,14 +60,51 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
     delivery_date: todayStr,
     premium_amount: "",
     idv_amount: "",
+    vehicle_number: "",
     registration_number: "",
+    insurance_company: "HDFC ERGO General Insurance",
+    policy_number: "",
+    insurance_type: "Comprehensive",
+    reminder_days_before: 15,
     vin_chassis_number: "",
     engine_number: "",
     notes: "",
   });
 
-  // Renewal Form State
+  // Comprehensive Renew Form State (Opens popup with all policy fields)
   const [renewForm, setRenewForm] = useState({
+    id: "",
+    customer_name: "",
+    vehicle_number: "",
+    insurance_company: "HDFC ERGO General Insurance",
+    policy_number: "",
+    insurance_type: "Comprehensive",
+    policy_start_date: "",
+    policy_expiry_date: "",
+    premium_amount: "",
+    reminder_days_before: 15,
+    reminder_date: "",
+    notes: "",
+  });
+
+  // Edit Form State
+  const [editForm, setEditForm] = useState({
+    id: "",
+    customer_name: "",
+    customer_phone: "",
+    customer_email: "",
+    customer_city: "",
+    model_variant: "",
+    vehicle_number: "",
+    insurance_company: "",
+    policy_number: "",
+    insurance_type: "Comprehensive",
+    policy_start_date: "",
+    policy_expiry_date: "",
+    premium_amount: "",
+    reminder_days_before: 15,
+    reminder_date: "",
+    renewal_status: "Pending",
     notes: "",
   });
 
@@ -78,15 +117,7 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
     return calculateReminderDate(computedExpiryDate);
   }, [computedExpiryDate]);
 
-  // Computed renewal dates preview for Renew modal
-  const renewalDatesPreview = useMemo(() => {
-    if (!selectedInsurance?.insurance_expire_date) return { newExpireDate: "", newReminderDate: "" };
-    return calculateRenewalDates(selectedInsurance.insurance_expire_date);
-  }, [selectedInsurance]);
-
-  const [errorMessage, setErrorMessage] = useState("");
-
-  // Load Insurances API (Default 15 records from GET API without status filter)
+  // Load Insurances API (ONLY brings records where 15 days or less are remaining)
   const loadInsurances = useCallback(async () => {
     setIsLoading(true);
     setErrorMessage("");
@@ -94,6 +125,7 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
       const params = {
         page: currentPage,
         per_page: perPage,
+        days: 15, // Specifically filter for next 15 days renewal due
       };
 
       if (searchTerm.trim()) params.search = searchTerm.trim();
@@ -117,24 +149,22 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
       } else {
         setInsurances([]);
         if (res && !res.status) {
-          setErrorMessage(res.message || "Failed to load insurance records");
+          setErrorMessage(res.message || "Failed to load reminder records");
         }
       }
     } catch (err) {
-      console.error("Failed to fetch insurances:", err);
-      setErrorMessage(err.response?.data?.message || err.message || "Failed to load insurance records");
+      console.error("Failed to fetch reminders:", err);
+      setErrorMessage(
+        err.response?.data?.message ||
+          err.message ||
+          "Failed to load insurance renewal reminders"
+      );
     } finally {
       setIsLoading(false);
     }
-  }, [
-    currentPage,
-    perPage,
-    searchTerm,
-    fromDate,
-    toDate,
-  ]);
+  }, [currentPage, perPage, searchTerm, fromDate, toDate]);
 
-  // Load Deals for 1-Click Auto-Fill Dropdown
+  // Load Deals for 1-Click Auto-Fill Dropdown in Add modal
   const loadDeals = useCallback(async () => {
     setIsLoadingDeals(true);
     try {
@@ -149,17 +179,71 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
     }
   }, []);
 
-  // Initial & Filter Data Fetch
   useEffect(() => {
     loadInsurances();
   }, [loadInsurances]);
 
-  // Load deals once on component mount
   useEffect(() => {
     loadDeals();
   }, [loadDeals]);
 
-  // Handle Deal Selection in Add Modal (Auto-fill all details including Color from Deals Table)
+  // Compute stats for 15-day reminder dashboard
+  const reminderStats = useMemo(() => {
+    const total = pagination.total || insurances.length;
+    let dueIn7Days = 0;
+    let dueIn15Days = 0;
+    let expired = 0;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    insurances.forEach((item) => {
+      const expStr = item.policy_expiry_date || item.insurance_expire_date;
+      if (!expStr) return;
+      const expDate = new Date(expStr);
+      expDate.setHours(0, 0, 0, 0);
+      const diffDays = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
+
+      if (diffDays < 0) {
+        expired++;
+      } else if (diffDays <= 7) {
+        dueIn7Days++;
+        dueIn15Days++;
+      } else if (diffDays <= 15) {
+        dueIn15Days++;
+      }
+    });
+
+    return { total, dueIn7Days, dueIn15Days, expired };
+  }, [insurances, pagination.total]);
+
+  // Open Add Insurance Modal
+  const openAddModal = () => {
+    setAddForm({
+      deal_id: "",
+      customer_name: "",
+      customer_phone: "",
+      customer_email: "",
+      customer_city: "",
+      model_variant: "",
+      color: "Standard",
+      delivery_date: todayStr,
+      premium_amount: "",
+      idv_amount: "",
+      vehicle_number: "",
+      registration_number: "",
+      insurance_company: "HDFC ERGO General Insurance",
+      policy_number: "",
+      insurance_type: "Comprehensive",
+      reminder_days_before: 15,
+      vin_chassis_number: "",
+      engine_number: "",
+      notes: "",
+    });
+    setShowAddModal(true);
+  };
+
+  // Handle Deal Selection in Add Modal
   const handleDealSelection = (selectedDealId) => {
     if (!selectedDealId) {
       setAddForm((prev) => ({
@@ -179,49 +263,24 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
       setAddForm((prev) => ({
         ...prev,
         deal_id: matchedDeal.id,
-        customer_name: matchedDeal.customer_name || prev.customer_name,
-        customer_phone: matchedDeal.customer_phone || prev.customer_phone,
-        customer_email: matchedDeal.customer_email || prev.customer_email,
-        customer_city: matchedDeal.customer_city || matchedDeal.lead?.city || prev.customer_city,
-        model_variant: matchedDeal.model_variant || prev.model_variant,
-        // Color dynamically extracted directly from deals table
-        color: matchedDeal.color || prev.color || "Standard",
+        customer_name: matchedDeal.customer_name || "",
+        customer_phone: matchedDeal.customer_phone || "",
+        customer_email: matchedDeal.customer_email || "",
+        customer_city: matchedDeal.customer_city || "",
+        model_variant: matchedDeal.model_variant || "",
+        color: matchedDeal.color || "Standard",
         delivery_date: deliveryDateVal,
-        vin_chassis_number: matchedDeal.vin_chassis_number || prev.vin_chassis_number,
-        engine_number: matchedDeal.engine_number || prev.engine_number,
-        registration_number: matchedDeal.registration_number || prev.registration_number,
-        premium_amount: matchedDeal.insurance_amount ? String(matchedDeal.insurance_amount) : prev.premium_amount,
+        registration_number: matchedDeal.registration_number || "",
+        vehicle_number: matchedDeal.registration_number || "",
+        vin_chassis_number: matchedDeal.vin_chassis_number || "",
+        engine_number: matchedDeal.engine_number || "",
       }));
-
-      showToast(`Auto-filled vehicle, color & details from Deal #${matchedDeal.id}`, "info");
     }
   };
 
-  // Open Add Insurance Modal
-  const openAddModal = () => {
-    setAddForm({
-      deal_id: "",
-      customer_name: "",
-      customer_phone: "",
-      customer_email: "",
-      customer_city: "",
-      model_variant: "",
-      color: "Standard",
-      delivery_date: todayStr,
-      premium_amount: "",
-      idv_amount: "",
-      registration_number: "",
-      vin_chassis_number: "",
-      engine_number: "",
-      notes: "",
-    });
-    setShowAddModal(true);
-  };
-
-  // Submit Add Insurance (POST /api/insurances/store)
+  // Submit Add Insurance
   const handleAddSubmit = async (e) => {
     e.preventDefault();
-
     if (!addForm.customer_name?.trim()) {
       showToast("Customer Name is required", "error");
       return;
@@ -239,37 +298,134 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
       loadInsurances();
     } catch (err) {
       console.error("Store insurance failed:", err);
-      const msg = err.response?.data?.message || err.message || "Failed to create insurance record";
-      showToast(msg, "error");
+      showToast(
+        err.response?.data?.message || err.message || "Failed to create insurance record",
+        "error"
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Open Quick Renew Modal
+  // Open Full Renewal Modal (Opens popup with all fields)
   const openRenewModal = (record) => {
     setSelectedInsurance(record);
+    const currExp = record.policy_expiry_date || record.insurance_expire_date || "";
+    const calc = calculateRenewalDates(currExp);
+
     setRenewForm({
-      notes: `Annual renewal processed for ${record.customer_name}.`,
+      id: record.id,
+      customer_name: record.customer_name || "",
+      vehicle_number: record.vehicle_number || record.registration_number || "",
+      insurance_company: record.insurance_company || "HDFC ERGO General Insurance",
+      policy_number: record.policy_number ? `${record.policy_number}-RNW` : "",
+      insurance_type: record.insurance_type || "Comprehensive",
+      policy_start_date: currExp || todayStr,
+      policy_expiry_date: calc.newExpireDate,
+      premium_amount: record.premium_amount || "",
+      reminder_days_before: record.reminder_days_before || 15,
+      reminder_date: calc.newReminderDate,
+      notes: `Renewed on ${new Date().toLocaleDateString("en-IN")}`,
     });
     setShowRenewModal(true);
   };
 
-  // Submit Renewal (POST /api/insurances/{id}/renew)
+  // Submit Full Renewal Form
   const handleRenewSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedInsurance) return;
+    if (!renewForm.id) return;
 
     setIsSubmitting(true);
     try {
-      const res = await insuranceApi.renewInsurance(selectedInsurance.id, renewForm);
-      showToast(res.message || "Insurance policy renewed successfully for next year!", "success");
+      const payload = {
+        insurance_company: renewForm.insurance_company,
+        policy_number: renewForm.policy_number,
+        insurance_type: renewForm.insurance_type,
+        policy_start_date: renewForm.policy_start_date,
+        policy_expiry_date: renewForm.policy_expiry_date,
+        next_insurance_date: renewForm.policy_expiry_date,
+        premium_amount: renewForm.premium_amount ? Number(renewForm.premium_amount) : 0,
+        reminder_days_before: Number(renewForm.reminder_days_before || 15),
+        reminder_date: renewForm.reminder_date,
+        vehicle_number: renewForm.vehicle_number,
+        renewal_status: "Renewed",
+        notes: renewForm.notes,
+      };
+
+      const res = await insuranceApi.renewInsurance(renewForm.id, payload);
+      showToast(res.message || "Insurance policy renewed successfully!", "success");
       setShowRenewModal(false);
       loadInsurances();
     } catch (err) {
       console.error("Renewal failed:", err);
-      const msg = err.response?.data?.message || err.message || "Renewal failed";
-      showToast(msg, "error");
+      showToast(err.response?.data?.message || err.message || "Renewal failed", "error");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Open Edit Modal
+  const openEditModal = (record) => {
+    setSelectedInsurance(record);
+    const startDate = record.policy_start_date || record.delivery_date || "";
+    const expiryDate = record.policy_expiry_date || record.insurance_expire_date || "";
+    const reminderDays = record.reminder_days_before || 15;
+    const reminderDate = record.reminder_date || "";
+
+    setEditForm({
+      id: record.id,
+      customer_name: record.customer_name || "",
+      customer_phone: record.customer_phone || record.customer_number || "",
+      customer_email: record.customer_email || "",
+      customer_city: record.customer_city || "",
+      model_variant: record.model_variant || record.vehicle_name || "",
+      vehicle_number: record.vehicle_number || record.registration_number || "",
+      insurance_company: record.insurance_company || "HDFC ERGO General Insurance",
+      policy_number: record.policy_number || "",
+      insurance_type: record.insurance_type || "Comprehensive",
+      policy_start_date: startDate,
+      policy_expiry_date: expiryDate,
+      premium_amount: record.premium_amount || "",
+      reminder_days_before: reminderDays,
+      reminder_date: reminderDate,
+      renewal_status: record.renewal_status || "Pending",
+      notes: record.notes || "",
+    });
+    setShowEditModal(true);
+  };
+
+  // Submit Edit Form
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    if (!editForm.id) return;
+    setIsSubmitting(true);
+    try {
+      const payload = {
+        vehicle_number: editForm.vehicle_number,
+        registration_number: editForm.vehicle_number,
+        insurance_company: editForm.insurance_company,
+        policy_number: editForm.policy_number,
+        insurance_type: editForm.insurance_type,
+        policy_start_date: editForm.policy_start_date,
+        policy_expiry_date: editForm.policy_expiry_date,
+        premium_amount: editForm.premium_amount ? Number(editForm.premium_amount) : 0,
+        reminder_days_before: Number(editForm.reminder_days_before || 15),
+        reminder_date: editForm.reminder_date,
+        renewal_status: editForm.renewal_status,
+        notes: editForm.notes,
+      };
+
+      const res = await insuranceApi.updateInsurance(editForm.id, payload);
+      if (res && res.status) {
+        showToast("Insurance record updated successfully!", "success");
+        setShowEditModal(false);
+        loadInsurances();
+      } else {
+        showToast(res?.message || "Failed to update record", "error");
+      }
+    } catch (err) {
+      console.error("Update error:", err);
+      showToast(err.response?.data?.message || err.message || "Failed to update record", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -281,7 +437,7 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
     setShowDetailModal(true);
   };
 
-  // Reset Filters (Search and Dates only)
+  // Reset Filters
   const handleResetFilters = () => {
     setSearchTerm("");
     setFromDate("");
@@ -289,206 +445,171 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
     setCurrentPage(1);
   };
 
-  // Helper: Status Badging & Days Left calculation
+  // Status & Days Left Badge Helper
   const renderStatusBadge = (item) => {
-    const status = String(item.status || "").toLowerCase();
-    const expireDateStr = item.insurance_expire_date;
+    const expireDateStr = item.policy_expiry_date || item.insurance_expire_date;
     let daysLeft = null;
 
     if (expireDateStr) {
       const expDate = new Date(expireDateStr);
       const today = new Date();
-      const diffTime = expDate.setHours(0, 0, 0, 0) - today.setHours(0, 0, 0, 0);
-      daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      today.setHours(0, 0, 0, 0);
+      expDate.setHours(0, 0, 0, 0);
+      daysLeft = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
     }
 
-    if (status === "expired" || (daysLeft !== null && daysLeft < 0)) {
+    if (daysLeft !== null && daysLeft < 0) {
       return (
-        <span className="badge rounded-pill bg-danger-subtle text-danger border border-danger-subtle px-2 py-1 fw-semibold d-inline-flex align-items-center gap-1">
-          <i className="bi bi-x-circle-fill"></i>
-          Expired {daysLeft !== null ? `(${Math.abs(daysLeft)}d ago)` : ""}
-        </span>
+        <div>
+          <span className="badge bg-danger text-white px-2 py-1">
+            <i className="bi bi-x-circle me-1"></i>Expired
+          </span>
+          <div className="text-danger extra-small fw-semibold mt-1" style={{ fontSize: "11px" }}>
+            {Math.abs(daysLeft)}d overdue
+          </div>
+        </div>
       );
     }
 
-    if (status === "expiring_soon" || (daysLeft !== null && daysLeft <= 15)) {
+    if (daysLeft !== null && daysLeft <= 15) {
       return (
-        <span className="badge rounded-pill bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1 fw-semibold d-inline-flex align-items-center gap-1">
-          <i className="bi bi-exclamation-triangle-fill text-warning"></i>
-          Expiring Soon {daysLeft !== null ? `(${daysLeft}d left)` : ""}
-        </span>
+        <div>
+          <span className="badge bg-warning text-dark px-2 py-1 fw-bold">
+            <i className="bi bi-clock-history me-1"></i>Due Soon
+          </span>
+          <div className="text-warning-emphasis extra-small fw-bold mt-1" style={{ fontSize: "11px" }}>
+            {daysLeft === 0 ? "Expires Today" : `${daysLeft} days left`}
+          </div>
+        </div>
       );
     }
 
     return (
-      <span className="badge rounded-pill bg-success-subtle text-success border border-success-subtle px-2 py-1 fw-semibold d-inline-flex align-items-center gap-1">
-        <i className="bi bi-shield-check"></i>
-        Active {daysLeft !== null ? `(${daysLeft}d)` : ""}
+      <span className="badge bg-primary text-white px-2 py-1">
+        <i className="bi bi-shield-check me-1"></i>Active
       </span>
     );
   };
 
-  // Helper: WhatsApp Reminder Link Generator
-  const generateWhatsAppLink = (item) => {
-    const phone = (item.customer_number || item.customer_phone || "").replace(/[^0-9]/g, "");
-    const cleanPhone = phone.startsWith("91") ? phone : phone.length === 10 ? `91${phone}` : phone;
-    const text = encodeURIComponent(
-      `Hello ${item.customer_name},\n\nThis is a polite reminder from Defence Auto Link regarding your vehicle ${item.model_variant || "vehicle"} (${item.color || "Standard"}).\n\nYour vehicle insurance policy is due to expire on ${item.insurance_expire_date}.\n\nPlease contact us today to complete your seamless 1-click renewal and stay covered without any penalty!\n\nBest regards,\nDefence Auto Link Team`
-    );
-    return `https://wa.me/${cleanPhone}?text=${text}`;
-  };
-
-  // Dynamic Metrics Calculated from Loaded Insurances
-  const metrics = useMemo(() => {
-    let expiringSoonCount = 0;
-    let expiredCount = 0;
-    let activeCount = 0;
-
-    insurances.forEach((item) => {
-      const s = String(item.status || "").toLowerCase();
-      if (s === "expiring_soon") expiringSoonCount += 1;
-      else if (s === "expired") expiredCount += 1;
-      else activeCount += 1;
-    });
-
-    return {
-      total: pagination.total || insurances.length,
-      expiringSoon: expiringSoonCount,
-      expired: expiredCount,
-      active: activeCount,
-    };
-  }, [insurances, pagination.total]);
-
-  // Export Table to CSV
-  const handleExportCSV = () => {
-    if (!insurances.length) {
-      showToast("No insurance records to export", "info");
-      return;
-    }
-
-    const headers = [
-      "ID",
-      "Deal ID",
-      "Customer Name",
-      "Customer Number",
-      "Customer Email",
-      "Customer City",
-      "Model Variant",
-      "Color",
-      "Delivery Date",
-      "Insurance Expire Date",
-      "Reminder Date",
-      "Status",
-    ];
-
-    const rows = insurances.map((item) => [
-      item.id,
-      item.deal_id || "-",
-      `"${(item.customer_name || "").replace(/"/g, '""')}"`,
-      `"${item.customer_number || item.customer_phone || ""}"`,
-      item.customer_email || "",
-      `"${item.customer_city || ""}"`,
-      `"${(item.model_variant || "").replace(/"/g, '""')}"`,
-      `"${item.color || "Standard"}"`,
-      item.delivery_date || "",
-      item.insurance_expire_date || "",
-      item.reminder_date || "",
-      item.status || "active",
-    ]);
-
-    const csvContent =
-      "data:text/csv;charset=utf-8," +
-      [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `CSD_Insurance_Records_${todayStr}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToast("Insurance records exported to CSV", "success");
-  };
-
   return (
     <AdminLayout>
-      <div className="container-fluid px-3 px-md-4 py-3 py-md-4">
-        {/* ===================================================================
-            1. PAGE HEADER & QUICK ACTIONS
-            =================================================================== */}
-        <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
+      <div className="container-fluid p-3 p-md-4">
+        {/* Page Header */}
+        <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
           <div>
-            <div className="d-flex align-items-center gap-2 mb-1">
-              <span
-                style={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: "10px",
-                  background: "linear-gradient(135deg, #58632A, #3F4912)",
-                  color: "#fff",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "20px",
-                  boxShadow: "0 4px 12px rgba(88, 99, 42, 0.25)",
-                }}
-              >
-                <i className="bi bi-shield-check"></i>
+            <div className="d-flex align-items-center gap-2">
+              <h1 className="h4 fw-bold text-dark mb-0">Insurance & Renewal Reminders</h1>
+              <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill px-3 py-1 fw-semibold">
+                15 Days Expiry Window ({pagination.total})
               </span>
-              <h3 className="fw-bold mb-0 text-dark" style={{ letterSpacing: "-0.5px" }}>
-                Insurance & Renewal Reminders
-              </h3>
             </div>
-            <p className="text-muted small mb-0 ms-1">
-              Automated renewal notifications, 365-day expiry calculation & deal color integration
+            <p className="text-muted small mb-0 mt-1">
+              Vehicle policies expiring within the next 15 days requiring customer renewal reminders.
             </p>
           </div>
 
-          <div className="d-flex align-items-center gap-2 flex-wrap">
+          <div className="d-flex align-items-center gap-2">
             <button
               type="button"
-              className="btn btn-outline-success btn-sm d-flex align-items-center gap-1 shadow-sm bg-white"
-              onClick={handleExportCSV}
-              title="Export Current Table as CSV"
+              className="btn btn-primary btn-sm d-inline-flex align-items-center gap-1 shadow-sm fw-semibold"
+              onClick={openAddModal}
             >
-              <i className="bi bi-file-earmark-excel"></i>
-              <span className="d-none d-sm-inline">Export CSV</span>
+              <i className="bi bi-plus-circle"></i>
+              <span>Add Insurance</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1 shadow-sm"
+              onClick={() => loadInsurances()}
+              disabled={isLoading}
+            >
+              <i className={`bi bi-arrow-clockwise ${isLoading ? "spin" : ""}`}></i>
+              <span>Refresh</span>
             </button>
           </div>
         </div>
 
+        {/* Stats Row (15-Day Reminder View) */}
+        <div className="row g-3 mb-4">
+          <div className="col-6 col-md-3">
+            <div className="card border-0 shadow-sm rounded-3 bg-white p-3 border-start border-warning border-4">
+              <div className="d-flex justify-content-between align-items-center">
+                <div>
+                  <div className="text-muted small fw-medium">Due in Next 15 Days</div>
+                  <div className="h4 fw-bold text-warning mb-0 mt-1">{reminderStats.dueIn15Days}</div>
+                </div>
+                <div className="bg-warning-subtle text-warning p-2 rounded-circle">
+                  <i className="bi bi-bell-fill fs-5"></i>
+                </div>
+              </div>
+            </div>
+          </div>
 
+          <div className="col-6 col-md-3">
+            <div className="card border-0 shadow-sm rounded-3 bg-white p-3 border-start border-danger border-4">
+              <div className="d-flex justify-content-between align-items-center">
+                <div>
+                  <div className="text-muted small fw-medium">Expiring This Week (&lt;7d)</div>
+                  <div className="h4 fw-bold text-danger mb-0 mt-1">{reminderStats.dueIn7Days}</div>
+                </div>
+                <div className="bg-danger-subtle text-danger p-2 rounded-circle">
+                  <i className="bi bi-exclamation-triangle-fill fs-5"></i>
+                </div>
+              </div>
+            </div>
+          </div>
 
-        {/* ===================================================================
-            3. SEARCH & DATE FILTER CONTROLS (SINGLE LINE)
-            =================================================================== */}
+          <div className="col-6 col-md-3">
+            <div className="card border-0 shadow-sm rounded-3 bg-white p-3 border-start border-secondary border-4">
+              <div className="d-flex justify-content-between align-items-center">
+                <div>
+                  <div className="text-muted small fw-medium">Already Expired</div>
+                  <div className="h4 fw-bold text-secondary mb-0 mt-1">{reminderStats.expired}</div>
+                </div>
+                <div className="bg-secondary-subtle text-secondary p-2 rounded-circle">
+                  <i className="bi bi-shield-x fs-5"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="col-6 col-md-3">
+            <div className="card border-0 shadow-sm rounded-3 bg-white p-3 border-start border-primary border-4">
+              <div className="d-flex justify-content-between align-items-center">
+                <div>
+                  <div className="text-muted small fw-medium">Total Reminder Queue</div>
+                  <div className="h4 fw-bold text-primary mb-0 mt-1">{pagination.total}</div>
+                </div>
+                <div className="bg-primary-subtle text-primary p-2 rounded-circle">
+                  <i className="bi bi-shield-check fs-5"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Filters Card */}
         <div className="card border-0 shadow-sm rounded-3 mb-4">
           <div className="card-body p-3">
             <div className="row g-2 align-items-center">
-              {/* Global Search Input */}
+              {/* Search */}
               <div className="col-12 col-md-5">
                 <div className="input-group input-group-sm">
-                  <span className="input-group-text bg-light border-end-0 text-muted">
-                    <i className="bi bi-search"></i>
+                  <span className="input-group-text bg-white border-end-0">
+                    <i className="bi bi-search text-muted"></i>
                   </span>
                   <input
                     type="text"
-                    className="form-control bg-light border-start-0"
-                    placeholder="Search name, phone, deal, model, color..."
+                    className="form-control border-start-0"
+                    placeholder="Search by customer, phone, vehicle no, policy no..."
                     value={searchTerm}
-                    onChange={(e) => {
-                      setSearchTerm(e.target.value);
-                      setCurrentPage(1);
-                    }}
+                    onChange={(e) => setSearchTerm(e.target.value)}
                   />
                   {searchTerm && (
                     <button
-                      className="btn btn-outline-secondary btn-sm"
+                      className="btn btn-outline-secondary"
                       type="button"
-                      onClick={() => {
-                        setSearchTerm("");
-                        setCurrentPage(1);
-                      }}
+                      onClick={() => setSearchTerm("")}
                     >
                       <i className="bi bi-x"></i>
                     </button>
@@ -497,257 +618,221 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
               </div>
 
               {/* From Date */}
-              <div className="col-6 col-md-3">
-                <div className="input-group input-group-sm">
-                  <span className="input-group-text bg-white text-muted small">From</span>
-                  <input
-                    type="date"
-                    className="form-control form-control-sm"
-                    value={fromDate}
-                    onChange={(e) => {
-                      setFromDate(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                  />
-                </div>
+              <div className="col-6 col-md-2">
+                <input
+                  type="date"
+                  className="form-control form-control-sm"
+                  title="Filter Start Date"
+                  value={fromDate}
+                  onChange={(e) => {
+                    setFromDate(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                />
               </div>
 
               {/* To Date */}
-              <div className="col-6 col-md-3">
-                <div className="input-group input-group-sm">
-                  <span className="input-group-text bg-white text-muted small">To</span>
-                  <input
-                    type="date"
-                    className="form-control form-control-sm"
-                    value={toDate}
-                    onChange={(e) => {
-                      setToDate(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                  />
-                </div>
+              <div className="col-6 col-md-2">
+                <input
+                  type="date"
+                  className="form-control form-control-sm"
+                  title="Filter Expiry Date"
+                  value={toDate}
+                  onChange={(e) => {
+                    setToDate(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                />
               </div>
 
-              {/* Reset Button (Compact) */}
-              <div className="col-12 col-md-1 d-flex justify-content-end">
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary btn-sm px-2 py-1 w-100"
-                  onClick={handleResetFilters}
-                  title="Clear search and dates"
+              {/* Reset & Per Page */}
+              <div className="col-12 col-md-3 d-flex gap-2">
+                <select
+                  className="form-select form-select-sm"
+                  style={{ width: "95px" }}
+                  value={perPage}
+                  onChange={(e) => {
+                    setPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
                 >
-                  <i className="bi bi-arrow-counterclockwise me-1"></i>
-                  Reset
-                </button>
+                  <option value="15">15 / p</option>
+                  <option value="25">25 / p</option>
+                  <option value="50">50 / p</option>
+                </select>
+
+                {(searchTerm || fromDate || toDate) && (
+                  <button
+                    className="btn btn-outline-danger btn-sm flex-grow-1"
+                    onClick={handleResetFilters}
+                    title="Reset Filters"
+                  >
+                    <i className="bi bi-x-circle"></i> Reset
+                  </button>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* ===================================================================
-            4. INSURANCE RECORDS TABLE VIEW
-            =================================================================== */}
-        <div className="card border-0 shadow-sm rounded-3 overflow-hidden">
-          <div className="card-header bg-white border-bottom border-light py-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
-            <div className="d-flex align-items-center gap-2">
-              <span className="fw-bold text-dark">Insurance Records & Expiry Tracker</span>
-              <span className="badge bg-secondary-subtle text-secondary rounded-pill">
-                {pagination.total} records
-              </span>
-            </div>
+        {/* Error Alert */}
+        {errorMessage && (
+          <div className="alert alert-danger d-flex align-items-center gap-2 mb-4" role="alert">
+            <i className="bi bi-exclamation-octagon-fill fs-5"></i>
+            <div>{errorMessage}</div>
           </div>
+        )}
 
+        {/* Table Card (Same fields as Insurance Records) */}
+        <div className="card border-0 shadow-sm rounded-3 overflow-hidden">
           <div className="table-responsive">
-            <table className="table table-hover align-middle mb-0" style={{ minWidth: "960px" }}>
-              <thead className="table-light text-uppercase extra-small text-muted fw-semibold">
-                <tr>
-                  <th style={{ width: "50px" }} className="text-center">#</th>
+            <table className="table table-hover align-middle mb-0" style={{ minWidth: "1050px" }}>
+              <thead className="table-light">
+                <tr className="small text-uppercase text-muted fw-semibold">
+                  <th style={{ width: "60px" }}># ID</th>
                   <th>Customer Info</th>
-                  <th>Vehicle & Color</th>
-                  <th>Delivery Date</th>
-                  <th>Insurance Expire</th>
+                  <th>Vehicle Details</th>
+                  <th>Insurance Details</th>
+                  <th>Policy Period</th>
+                  <th>Premium</th>
                   <th>Reminder Date</th>
                   <th>Status</th>
-                  <th className="text-end" style={{ width: "180px" }}>Actions</th>
+                  <th className="text-end pe-3" style={{ width: "160px" }}>
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan="8" className="text-center py-5 text-muted">
-                      <div className="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
-                      Loading insurance records...
-                    </td>
-                  </tr>
-                ) : errorMessage ? (
-                  <tr>
-                    <td colSpan="8" className="text-center py-5">
-                      <div className="py-4">
-                        <div
-                          className="mx-auto rounded-circle bg-danger-subtle d-flex align-items-center justify-content-center mb-3"
-                          style={{ width: 64, height: 64 }}
-                        >
-                          <i className="bi bi-exclamation-triangle-fill text-danger fs-2"></i>
-                        </div>
-                        <h6 className="fw-bold text-dark mb-1">Could Not Load Insurance Records</h6>
-                        <p className="text-muted small mb-3">
-                          {errorMessage}
-                        </p>
-                        <button
-                          type="button"
-                          className="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1"
-                          onClick={() => loadInsurances()}
-                        >
-                          <i className="bi bi-arrow-clockwise"></i>
-                          Retry
-                        </button>
-                      </div>
+                    <td colSpan="9" className="text-center py-5">
+                      <div className="spinner-border text-primary spinner-border-sm me-2" role="status"></div>
+                      <span className="text-muted small">Loading renewal reminders due within 15 days...</span>
                     </td>
                   </tr>
                 ) : insurances.length === 0 ? (
                   <tr>
-                    <td colSpan="8" className="text-center py-5">
-                      <div className="py-4">
-                        <div
-                          className="mx-auto rounded-circle bg-light d-flex align-items-center justify-content-center mb-3"
-                          style={{ width: 64, height: 64 }}
-                        >
-                          <i className="bi bi-shield-x text-muted fs-2"></i>
-                        </div>
-                        <h6 className="fw-bold text-dark mb-1">No Insurance Records Found</h6>
-                        <p className="text-muted small mb-3">
-                          {searchTerm || fromDate || toDate
-                            ? "No records matched your search filters. Try clearing the filters."
-                            : "No insurance records available."}
-                        </p>
-                        {(searchTerm || fromDate || toDate) && (
-                          <button
-                            type="button"
-                            className="btn btn-outline-secondary btn-sm"
-                            onClick={handleResetFilters}
-                          >
-                            Reset Filters
-                          </button>
-                        )}
-                      </div>
+                    <td colSpan="9" className="text-center py-5">
+                      <i className="bi bi-shield-check text-success fs-1 d-block mb-2"></i>
+                      <div className="fw-semibold text-dark">No Renewal Reminders Due in Next 15 Days</div>
+                      <p className="text-muted small mb-0 mt-1">
+                        All vehicle insurance policies are up to date!
+                      </p>
                     </td>
                   </tr>
                 ) : (
-                  insurances.map((item, idx) => {
-                    const rowNumber = (pagination.current_page - 1) * pagination.per_page + idx + 1;
+                  insurances.map((item) => {
+                    const vehicleNo = item.vehicle_number || item.registration_number;
+                    const startDate = item.policy_start_date || item.delivery_date;
+                    const expiryDate = item.policy_expiry_date || item.insurance_expire_date;
+
                     return (
-                      <tr key={`insurance-row-${item.id ?? "item"}-${idx}`}>
-                        {/* Row Index */}
-                        <td className="text-center text-muted small fw-medium">{rowNumber}</td>
+                      <tr key={item.id}>
+                        {/* ID */}
+                        <td>
+                          <span className="badge bg-light text-dark border fw-bold">#{item.id}</span>
+                        </td>
 
                         {/* Customer Info */}
                         <td>
-                          <div>
-                            <div className="fw-bold text-dark d-flex align-items-center gap-1">
-                              <span>{item.customer_name || "Unknown Customer"}</span>
-                            </div>
-                            <div className="d-flex align-items-center gap-2 mt-1">
-                              <a
-                                href={`tel:${item.customer_number || item.customer_phone}`}
-                                className="text-muted small text-decoration-none d-flex align-items-center gap-1"
-                                title="Call customer"
-                              >
-                                <i className="bi bi-telephone text-primary"></i>
-                                {item.customer_number || item.customer_phone || "No Phone"}
-                              </a>
-                              {item.customer_city && (
-                                <span className="text-muted extra-small">
-                                  <i className="bi bi-geo-alt me-1"></i>
-                                  {item.customer_city}
-                                </span>
-                              )}
-                            </div>
+                          <div className="fw-semibold text-dark">{item.customer_name || "N/A"}</div>
+                          <div className="text-muted small d-flex align-items-center gap-1">
+                            <i className="bi bi-telephone"></i>
+                            <a
+                              href={`tel:${item.customer_number || item.customer_phone}`}
+                              className="text-decoration-none text-muted"
+                            >
+                              {item.customer_number || item.customer_phone || "-"}
+                            </a>
                           </div>
+                          {item.customer_city && (
+                            <div className="text-muted extra-small" style={{ fontSize: "11px" }}>
+                              <i className="bi bi-geo-alt"></i> {item.customer_city}
+                            </div>
+                          )}
                         </td>
 
-                        {/* Vehicle & Dynamic Color */}
+                        {/* Vehicle Details */}
                         <td>
-                          <div>
-                            <div className="fw-semibold text-dark">
-                              {item.model_variant || "Standard Vehicle"}
-                            </div>
-                            <div className="d-flex align-items-center gap-2 mt-1">
-                              <span
-                                className="badge bg-light text-dark border px-2 py-1 extra-small fw-normal d-inline-flex align-items-center gap-1"
-                              >
-                                <span
-                                  style={{
-                                    width: 8,
-                                    height: 8,
-                                    borderRadius: "50%",
-                                    backgroundColor:
-                                      item.color?.toLowerCase() === "white"
-                                        ? "#dee2e6"
-                                        : item.color?.toLowerCase() === "black"
-                                          ? "#212529"
-                                          : item.color?.toLowerCase() === "blue"
-                                            ? "#0d6efd"
-                                            : item.color?.toLowerCase() === "red"
-                                              ? "#dc3545"
-                                              : item.color?.toLowerCase() === "grey" || item.color?.toLowerCase() === "silver"
-                                                ? "#6c757d"
-                                                : "#58632A",
-                                    border: "1px solid rgba(0,0,0,0.15)",
-                                  }}
-                                ></span>
-                                {item.color || "Standard"}
-                              </span>
-                            </div>
+                          <div className="fw-semibold text-dark">{item.model_variant || item.vehicle_name || "Standard"}</div>
+                          {vehicleNo ? (
+                            <span className="badge bg-dark-subtle text-dark border px-2 py-0 mt-1">
+                              {vehicleNo}
+                            </span>
+                          ) : (
+                            <span className="badge bg-light text-muted border px-2 py-0 mt-1">
+                              Pending Reg.
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Insurance Details */}
+                        <td>
+                          <div className="fw-semibold text-primary">{item.insurance_company || "HDFC ERGO"}</div>
+                          <div className="text-muted small">
+                            <code>{item.policy_number || "No Policy #"}</code>
+                          </div>
+                          <span className="badge bg-secondary-subtle text-secondary extra-small mt-1" style={{ fontSize: "10px" }}>
+                            {item.insurance_type || "Comprehensive"}
+                          </span>
+                        </td>
+
+                        {/* Policy Period */}
+                        <td>
+                          <div className="small fw-semibold text-dark">
+                            <i className="bi bi-calendar-event text-muted me-1"></i>
+                            {expiryDate ? new Date(expiryDate).toLocaleDateString("en-IN") : "-"}
+                          </div>
+                          <div className="text-muted extra-small" style={{ fontSize: "11px" }}>
+                            Start: {startDate ? new Date(startDate).toLocaleDateString("en-IN") : "-"}
                           </div>
                         </td>
 
-                        {/* Delivery Date */}
+                        {/* Premium */}
+                        <td>
+                          <div className="fw-bold text-dark">
+                            ₹{formatIndianCurrency(Number(item.premium_amount || 0))}
+                          </div>
+                        </td>
+
+                        {/* Reminder Date */}
                         <td>
                           <div className="small text-dark fw-medium">
-                            {item.delivery_date || "-"}
+                            {item.reminder_date ? new Date(item.reminder_date).toLocaleDateString("en-IN") : "-"}
                           </div>
-                          <span className="text-muted extra-small">Vehicle Delivered</span>
+                          <div className="text-muted extra-small" style={{ fontSize: "10px" }}>
+                            {item.reminder_days_before || 15} days before
+                          </div>
                         </td>
 
-                        {/* Insurance Expire Date (+365 days) */}
-                        <td>
-                          <div className="small fw-bold text-dark">
-                            {item.insurance_expire_date || "-"}
-                          </div>
-                          <span className="text-muted extra-small">+365 days coverage</span>
-                        </td>
-
-                        {/* Reminder Date (-15 days before expiry) */}
-                        <td>
-                          <div className="small fw-semibold text-warning-emphasis">
-                            {item.reminder_date || "-"}
-                          </div>
-                          <span className="text-muted extra-small">15d advance alert</span>
-                        </td>
-
-                        {/* Status Badge */}
+                        {/* Status */}
                         <td>{renderStatusBadge(item)}</td>
 
-                        {/* Action Buttons */}
-                        <td className="text-end">
-                          <div className="d-flex align-items-center justify-content-end gap-1">
-                            {/* 1-Click Renew Button */}
+                        {/* Actions */}
+                        <td className="text-end pe-3">
+                          <div className="btn-group btn-group-sm">
                             <button
                               type="button"
-                              className="btn btn-sm btn-outline-success px-2 py-1 d-inline-flex align-items-center gap-1"
+                              className="btn btn-outline-success"
+                              title="Renew Policy with Details Popup"
                               onClick={() => openRenewModal(item)}
-                              title="Renew Policy for 1 Year"
                             >
-                              <i className="bi bi-arrow-repeat"></i>
+                              <i className="bi bi-arrow-repeat me-1"></i>
                               <span>Renew</span>
                             </button>
-
-                            {/* View Detail Modal */}
                             <button
                               type="button"
-                              className="btn btn-sm btn-light border px-2 py-1 text-muted"
-                              onClick={() => openDetailModal(item)}
+                              className="btn btn-outline-primary"
+                              title="Edit Record"
+                              onClick={() => openEditModal(item)}
+                            >
+                              <i className="bi bi-pencil-square"></i>
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-outline-secondary"
                               title="View Details"
+                              onClick={() => openDetailModal(item)}
                             >
                               <i className="bi bi-eye"></i>
                             </button>
@@ -761,418 +846,283 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
             </table>
           </div>
 
-          {/* Pagination Controls */}
-          <Pagination
-            currentPage={pagination.current_page}
-            lastPage={pagination.last_page}
-            total={pagination.total}
-            perPage={pagination.per_page}
-            onPageChange={(p) => setCurrentPage(p)}
-            onPerPageChange={(n) => {
-              setPerPage(n);
-              setCurrentPage(1);
-            }}
-            perPageOptions={[10, 15, 25, 50]}
-            itemName="insurance policies"
-          />
+          {/* Pagination */}
+          {!isLoading && insurances.length > 0 && pagination.last_page > 1 && (
+            <div className="card-footer bg-white border-top p-3 d-flex flex-column flex-md-row justify-content-between align-items-center gap-2">
+              <div className="text-muted small">
+                Showing {pagination.from} to {pagination.to} of {pagination.total} records
+              </div>
+              <Pagination
+                currentPage={currentPage}
+                totalPages={pagination.last_page}
+                onPageChange={(p) => setCurrentPage(p)}
+              />
+            </div>
+          )}
         </div>
 
         {/* ===================================================================
-            MODAL 1: STORE / CREATE NEW INSURANCE RECORD
+            MODAL 1: COMPREHENSIVE RENEWAL POPUP (User Enters All Policy Fields)
             =================================================================== */}
-        {showAddModal && (
+        {showRenewModal && (
           <div
             className="modal fade show d-block"
             tabIndex="-1"
-            style={{ backgroundColor: "rgba(0, 0, 0, 0.55)", backdropFilter: "blur(2px)", zIndex: 1055 }}
+            style={{ backgroundColor: "rgba(0, 0, 0, 0.55)", zIndex: 1055 }}
           >
-            <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div className="modal-dialog modal-lg modal-dialog-centered">
               <div className="modal-content border-0 shadow-lg rounded-3">
-                <div className="modal-header bg-light py-3 border-bottom">
-                  <div className="d-flex align-items-center gap-2">
-                    <span
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: "8px",
-                        backgroundColor: "#58632A",
-                        color: "#fff",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <i className="bi bi-shield-plus"></i>
-                    </span>
-                    <h5 className="modal-title fw-bold text-dark mb-0">Create New Insurance Record</h5>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn-close"
-                    disabled={isSubmitting}
-                    onClick={() => setShowAddModal(false)}
-                  ></button>
-                </div>
-
-                <form onSubmit={handleAddSubmit}>
-                  <div className="modal-body p-4">
-                    {/* 1-Click Deal Selector */}
-                    <div className="card border border-success-subtle bg-success-subtle bg-opacity-25 p-3 rounded-3 mb-4">
-                      <div className="d-flex align-items-center justify-content-between mb-2">
-                        <label className="form-label fw-bold text-dark small mb-0 d-flex align-items-center gap-1">
-                          <i className="bi bi-magic text-success"></i>
-                          1-Click Auto-Fill from Deal (Optional)
-                        </label>
-                        {isLoadingDeals && (
-                          <span className="spinner-border spinner-border-sm text-success" role="status"></span>
-                        )}
-                      </div>
-                      <select
-                        className="form-select form-select-sm bg-white"
-                        value={addForm.deal_id}
-                        onChange={(e) => handleDealSelection(e.target.value)}
-                      >
-                        <option value="">-- Select an Existing Deal to Auto-Fill Data --</option>
-                        {dealsList.map((d) => (
-                          <option key={d.id} value={d.id}>
-                            Deal #{d.id} - {d.customer_name} ({d.model_variant} • Color: {d.color || "Standard"})
-                          </option>
-                        ))}
-                      </select>
-                      <div className="text-muted extra-small mt-1">
-                        Selecting a deal automatically populates customer details, delivery date, vehicle, and dynamic color from the deals table.
-                      </div>
-                    </div>
-
-                    {/* Customer Information */}
-                    <h6 className="fw-bold text-dark mb-3 border-bottom pb-2">1. Customer Information</h6>
-                    <div className="row g-3 mb-4">
-                      <div className="col-12 col-md-6">
-                        <label className="form-label small fw-semibold text-dark">
-                          Customer Full Name <span className="text-danger">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          className="form-control form-control-sm"
-                          placeholder="e.g. Rahul Sharma"
-                          required
-                          value={addForm.customer_name}
-                          onChange={(e) => setAddForm({ ...addForm, customer_name: e.target.value })}
-                        />
-                      </div>
-
-                      <div className="col-12 col-md-6">
-                        <label className="form-label small fw-semibold text-dark">
-                          Mobile Phone Number <span className="text-danger">*</span>
-                        </label>
-                        <input
-                          type="tel"
-                          className="form-control form-control-sm"
-                          placeholder="e.g. 9876543210"
-                          required
-                          value={addForm.customer_phone}
-                          onChange={(e) => setAddForm({ ...addForm, customer_phone: e.target.value })}
-                        />
-                      </div>
-
-                      <div className="col-12 col-md-6">
-                        <label className="form-label small fw-semibold text-dark">Email Address</label>
-                        <input
-                          type="email"
-                          className="form-control form-control-sm"
-                          placeholder="e.g. rahul@example.com"
-                          value={addForm.customer_email}
-                          onChange={(e) => setAddForm({ ...addForm, customer_email: e.target.value })}
-                        />
-                      </div>
-
-                      <div className="col-12 col-md-6">
-                        <label className="form-label small fw-semibold text-dark">Customer City / Location</label>
-                        <input
-                          type="text"
-                          className="form-control form-control-sm"
-                          placeholder="e.g. Mumbai"
-                          value={addForm.customer_city}
-                          onChange={(e) => setAddForm({ ...addForm, customer_city: e.target.value })}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Vehicle & Calculation Rules */}
-                    <h6 className="fw-bold text-dark mb-3 border-bottom pb-2">2. Vehicle & Delivery Calculation Rules</h6>
-                    <div className="row g-3 mb-4">
-                      <div className="col-12 col-md-6">
-                        <label className="form-label small fw-semibold text-dark">Model & Variant Name</label>
-                        <input
-                          type="text"
-                          className="form-control form-control-sm"
-                          placeholder="e.g. Hyundai Creta SX (O)"
-                          value={addForm.model_variant}
-                          onChange={(e) => setAddForm({ ...addForm, model_variant: e.target.value })}
-                        />
-                      </div>
-
-                      <div className="col-12 col-md-6">
-                        <label className="form-label small fw-semibold text-dark">
-                          Vehicle Color (Dynamic from Deals Table)
-                        </label>
-                        <input
-                          type="text"
-                          className="form-control form-control-sm"
-                          placeholder="e.g. Phantom Black"
-                          value={addForm.color}
-                          onChange={(e) => setAddForm({ ...addForm, color: e.target.value })}
-                        />
-                      </div>
-
-                      <div className="col-12 col-md-4">
-                        <label className="form-label small fw-semibold text-dark">
-                          Delivery Date <span className="text-danger">*</span>
-                        </label>
-                        <input
-                          type="date"
-                          className="form-control form-control-sm"
-                          required
-                          value={addForm.delivery_date}
-                          onChange={(e) => setAddForm({ ...addForm, delivery_date: e.target.value })}
-                        />
-                        <div className="text-muted extra-small mt-1">Calculation starting date</div>
-                      </div>
-
-                      <div className="col-12 col-md-4">
-                        <label className="form-label small fw-semibold text-dark">
-                          Insurance Expire Date
-                        </label>
-                        <input
-                          type="date"
-                          className="form-control form-control-sm bg-light"
-                          readOnly
-                          value={computedExpiryDate}
-                        />
-                        <div className="text-success extra-small mt-1 fw-medium">
-                          <i className="bi bi-check-circle me-1"></i>Exactly 365 days after delivery
-                        </div>
-                      </div>
-
-                      <div className="col-12 col-md-4">
-                        <label className="form-label small fw-semibold text-dark">
-                          Reminder Date
-                        </label>
-                        <input
-                          type="date"
-                          className="form-control form-control-sm bg-light"
-                          readOnly
-                          value={computedReminderDate}
-                        />
-                        <div className="text-warning-emphasis extra-small mt-1 fw-medium">
-                          <i className="bi bi-bell me-1"></i>15 days before expiration
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Optional Policy & Financial Data */}
-                    <h6 className="fw-bold text-dark mb-3 border-bottom pb-2">3. Policy Financials & Identifiers (Optional)</h6>
-                    <div className="row g-3">
-                      <div className="col-12 col-md-6">
-                        <label className="form-label small fw-semibold text-dark">Premium Amount (₹)</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          className="form-control form-control-sm"
-                          placeholder="e.g. 32500"
-                          value={addForm.premium_amount}
-                          onChange={(e) => setAddForm({ ...addForm, premium_amount: e.target.value })}
-                        />
-                      </div>
-
-                      <div className="col-12 col-md-6">
-                        <label className="form-label small fw-semibold text-dark">IDV Amount (₹)</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          className="form-control form-control-sm"
-                          placeholder="e.g. 1250000"
-                          value={addForm.idv_amount}
-                          onChange={(e) => setAddForm({ ...addForm, idv_amount: e.target.value })}
-                        />
-                      </div>
-
-                      <div className="col-12 col-md-4">
-                        <label className="form-label small fw-semibold text-dark">Registration No. (RTO)</label>
-                        <input
-                          type="text"
-                          className="form-control form-control-sm"
-                          placeholder="e.g. MH02CB1234"
-                          value={addForm.registration_number}
-                          onChange={(e) => setAddForm({ ...addForm, registration_number: e.target.value })}
-                        />
-                      </div>
-
-                      <div className="col-12 col-md-4">
-                        <label className="form-label small fw-semibold text-dark">VIN / Chassis Number</label>
-                        <input
-                          type="text"
-                          className="form-control form-control-sm"
-                          placeholder="e.g. MALC1234567890"
-                          value={addForm.vin_chassis_number}
-                          onChange={(e) => setAddForm({ ...addForm, vin_chassis_number: e.target.value })}
-                        />
-                      </div>
-
-                      <div className="col-12 col-md-4">
-                        <label className="form-label small fw-semibold text-dark">Engine Number</label>
-                        <input
-                          type="text"
-                          className="form-control form-control-sm"
-                          placeholder="e.g. ENG9876543"
-                          value={addForm.engine_number}
-                          onChange={(e) => setAddForm({ ...addForm, engine_number: e.target.value })}
-                        />
-                      </div>
-
-                      <div className="col-12">
-                        <label className="form-label small fw-semibold text-dark">Remarks / Notes</label>
-                        <textarea
-                          className="form-control form-control-sm"
-                          rows="2"
-                          placeholder="Any specific insurance endorsements, accessories, or customer notes..."
-                          value={addForm.notes}
-                          onChange={(e) => setAddForm({ ...addForm, notes: e.target.value })}
-                        ></textarea>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="modal-footer bg-light py-2 px-4 border-top">
+                <form onSubmit={handleRenewSubmit}>
+                  <div className="modal-header bg-success text-white py-3 px-4">
+                    <h5 className="modal-title fw-bold fs-6 d-flex align-items-center gap-2">
+                      <i className="bi bi-arrow-repeat"></i>
+                      <span>Renew Insurance Policy for {renewForm.customer_name}</span>
+                    </h5>
                     <button
                       type="button"
-                      className="btn btn-outline-secondary btn-sm"
+                      className="btn-close btn-close-white"
                       disabled={isSubmitting}
-                      onClick={() => setShowAddModal(false)}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="btn btn-sm d-inline-flex align-items-center gap-1"
-                      style={{ backgroundColor: "#58632A", color: "#fff" }}
-                      disabled={isSubmitting}
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <span className="spinner-border spinner-border-sm" role="status"></span>
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <i className="bi bi-check-circle"></i>
-                          Save Insurance Record
-                        </>
-                      )}
-                    </button>
+                      onClick={() => setShowRenewModal(false)}
+                    ></button>
                   </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        )}
 
-        {/* ===================================================================
-            MODAL 2: 1-CLICK RENEW INSURANCE POLICY
-            =================================================================== */}
-        {showRenewModal && selectedInsurance && (
-          <div
-            className="modal fade show d-block"
-            tabIndex="-1"
-            style={{ backgroundColor: "rgba(0, 0, 0, 0.55)", backdropFilter: "blur(2px)", zIndex: 1055 }}
-          >
-            <div className="modal-dialog modal-dialog-centered">
-              <div className="modal-content border-0 shadow-lg rounded-3">
-                <div className="modal-header bg-success-subtle py-3 border-bottom border-success-subtle">
-                  <div className="d-flex align-items-center gap-2">
-                    <span
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: "8px",
-                        backgroundColor: "#198754",
-                        color: "#fff",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <i className="bi bi-arrow-repeat"></i>
-                    </span>
-                    <h5 className="modal-title fw-bold text-success-emphasis mb-0">Renew Policy for Next Year</h5>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn-close"
-                    disabled={isSubmitting}
-                    onClick={() => setShowRenewModal(false)}
-                  ></button>
-                </div>
-
-                <form onSubmit={handleRenewSubmit}>
                   <div className="modal-body p-4">
-                    <div className="bg-light p-3 rounded-3 mb-3 border">
-                      <div className="d-flex justify-content-between align-items-center mb-1">
-                        <span className="text-muted small">Customer Name:</span>
-                        <strong className="text-dark">{selectedInsurance.customer_name}</strong>
-                      </div>
-                      <div className="d-flex justify-content-between align-items-center mb-1">
-                        <span className="text-muted small">Vehicle Model:</span>
-                        <span className="fw-semibold text-dark">{selectedInsurance.model_variant || "Standard"}</span>
-                      </div>
-                      <div className="d-flex justify-content-between align-items-center mb-1">
-                        <span className="text-muted small">Vehicle Color:</span>
-                        <span className="badge bg-white text-dark border extra-small">
-                          {selectedInsurance.color || "Standard"}
-                        </span>
-                      </div>
-                      <div className="d-flex justify-content-between align-items-center mb-1">
-                        <span className="text-muted small">Current Expiration Date:</span>
-                        <span className="badge bg-warning-subtle text-warning-emphasis">
-                          {selectedInsurance.insurance_expire_date || "-"}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="card border-success border-opacity-50 bg-success-subtle bg-opacity-25 p-3 rounded-3 mb-3">
-                      <div className="fw-bold text-success mb-2 d-flex align-items-center gap-1 small">
-                        <i className="bi bi-calculator"></i>
-                        Automated Renewal Calculation
-                      </div>
-                      <div className="row g-2 text-center">
-                        <div className="col-6">
-                          <div className="bg-white p-2 rounded border">
-                            <div className="text-muted extra-small">New Expiry (+365 Days)</div>
-                            <div className="fw-bold text-success fs-6 mt-1">
-                              {renewalDatesPreview.newExpireDate || "-"}
-                            </div>
-                          </div>
+                    {/* Readonly Context */}
+                    <div className="p-3 bg-light rounded-3 mb-3 border">
+                      <div className="row g-2">
+                        <div className="col-md-6">
+                          <span className="text-muted small">Customer Name:</span>
+                          <span className="fw-bold text-dark ms-2">{renewForm.customer_name}</span>
                         </div>
-                        <div className="col-6">
-                          <div className="bg-white p-2 rounded border">
-                            <div className="text-muted extra-small">New Reminder (-15 Days)</div>
-                            <div className="fw-bold text-dark fs-6 mt-1">
-                              {renewalDatesPreview.newReminderDate || "-"}
-                            </div>
-                          </div>
+                        <div className="col-md-6">
+                          <span className="text-muted small">Vehicle / Reg No:</span>
+                          <span className="badge bg-dark-subtle text-dark border ms-2">
+                            {renewForm.vehicle_number || "Pending"}
+                          </span>
                         </div>
                       </div>
                     </div>
 
-                    <div>
-                      <label className="form-label small fw-semibold text-dark">Renewal Remarks / Notes</label>
-                      <textarea
-                        className="form-control form-control-sm"
-                        rows="2"
-                        placeholder="Add notes for this renewal..."
-                        value={renewForm.notes}
-                        onChange={(e) => setRenewForm({ ...renewForm, notes: e.target.value })}
-                      ></textarea>
+                    <div className="row g-3">
+                      {/* Insurance Company */}
+                      <div className="col-md-6">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Insurance Provider / Company <span className="text-danger">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="form-control form-control-sm"
+                          list="renewCompanyList"
+                          value={renewForm.insurance_company}
+                          onChange={(e) =>
+                            setRenewForm({ ...renewForm, insurance_company: e.target.value })
+                          }
+                          required
+                        />
+                        <datalist id="renewCompanyList">
+                          <option value="HDFC ERGO General Insurance" />
+                          <option value="ICICI Lombard General Insurance" />
+                          <option value="Tata AIG General Insurance" />
+                          <option value="Bajaj Allianz General Insurance" />
+                          <option value="New India Assurance" />
+                          <option value="Reliance General Insurance" />
+                          <option value="National Insurance Company" />
+                          <option value="SBI General Insurance" />
+                          <option value="Go Digit General Insurance" />
+                        </datalist>
+                      </div>
+
+                      {/* New Policy Number */}
+                      <div className="col-md-6">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          New Policy Number <span className="text-danger">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="form-control form-control-sm"
+                          placeholder="e.g. POL-2027-123456"
+                          value={renewForm.policy_number}
+                          onChange={(e) =>
+                            setRenewForm({ ...renewForm, policy_number: e.target.value })
+                          }
+                          required
+                        />
+                      </div>
+
+                      {/* Insurance Type */}
+                      <div className="col-md-4">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Coverage Type
+                        </label>
+                        <select
+                          className="form-select form-select-sm"
+                          value={renewForm.insurance_type}
+                          onChange={(e) =>
+                            setRenewForm({ ...renewForm, insurance_type: e.target.value })
+                          }
+                        >
+                          <option value="Comprehensive">Comprehensive (1+3 Years)</option>
+                          <option value="Third Party">Third Party</option>
+                          <option value="Own Damage">Own Damage (OD)</option>
+                          <option value="Zero Depreciation">Zero Depreciation</option>
+                        </select>
+                      </div>
+
+                      {/* Premium Amount */}
+                      <div className="col-md-4">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Renewal Premium (₹) <span className="text-danger">*</span>
+                        </label>
+                        <div className="input-group input-group-sm">
+                          <span className="input-group-text bg-light">₹</span>
+                          <input
+                            type="number"
+                            min="0"
+                            className="form-control form-control-sm"
+                            placeholder="e.g. 24500"
+                            value={renewForm.premium_amount}
+                            onChange={(e) =>
+                              setRenewForm({ ...renewForm, premium_amount: e.target.value })
+                            }
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      {/* Vehicle Number (Editable) */}
+                      <div className="col-md-4">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Vehicle Number
+                        </label>
+                        <input
+                          type="text"
+                          className="form-control form-control-sm"
+                          placeholder="e.g. GJ-01-AB-1234"
+                          value={renewForm.vehicle_number}
+                          onChange={(e) =>
+                            setRenewForm({ ...renewForm, vehicle_number: e.target.value.toUpperCase() })
+                          }
+                        />
+                      </div>
+
+                      {/* New Start Date */}
+                      <div className="col-md-4">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          New Policy Start Date <span className="text-danger">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          className="form-control form-control-sm"
+                          value={renewForm.policy_start_date}
+                          onChange={(e) => {
+                            const newStart = e.target.value;
+                            const newExp = calculateExpireDate(newStart);
+                            const rDays = Number(renewForm.reminder_days_before || 15);
+                            let newRem = renewForm.reminder_date;
+                            if (newExp) {
+                              const remD = new Date(newExp);
+                              remD.setDate(remD.getDate() - rDays);
+                              newRem = remD.toISOString().split("T")[0];
+                            }
+                            setRenewForm({
+                              ...renewForm,
+                              policy_start_date: newStart,
+                              policy_expiry_date: newExp,
+                              reminder_date: newRem,
+                            });
+                          }}
+                          required
+                        />
+                      </div>
+
+                      {/* New Expiry Date (+1 Year) */}
+                      <div className="col-md-4">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          New Expiry Date (+1 Year) <span className="text-danger">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          className="form-control form-control-sm"
+                          value={renewForm.policy_expiry_date}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const rDays = Number(renewForm.reminder_days_before || 15);
+                            let newRem = renewForm.reminder_date;
+                            if (val) {
+                              const remD = new Date(val);
+                              remD.setDate(remD.getDate() - rDays);
+                              newRem = remD.toISOString().split("T")[0];
+                            }
+                            setRenewForm({
+                              ...renewForm,
+                              policy_expiry_date: val,
+                              reminder_date: newRem,
+                            });
+                          }}
+                          required
+                        />
+                      </div>
+
+                      {/* Reminder Interval */}
+                      <div className="col-md-4">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Reminder Interval
+                        </label>
+                        <select
+                          className="form-select form-select-sm"
+                          value={renewForm.reminder_days_before}
+                          onChange={(e) => {
+                            const rDays = Number(e.target.value || 15);
+                            let newRem = renewForm.reminder_date;
+                            if (renewForm.policy_expiry_date) {
+                              const remD = new Date(renewForm.policy_expiry_date);
+                              remD.setDate(remD.getDate() - rDays);
+                              newRem = remD.toISOString().split("T")[0];
+                            }
+                            setRenewForm({
+                              ...renewForm,
+                              reminder_days_before: rDays,
+                              reminder_date: newRem,
+                            });
+                          }}
+                        >
+                          <option value="15">15 Days Before</option>
+                          <option value="30">30 Days Before</option>
+                          <option value="45">45 Days Before</option>
+                          <option value="60">60 Days Before</option>
+                        </select>
+                      </div>
+
+                      {/* Calculated Reminder Date Preview */}
+                      <div className="col-md-6">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Calculated Reminder Date
+                        </label>
+                        <input
+                          type="date"
+                          className="form-control form-control-sm"
+                          value={renewForm.reminder_date}
+                          onChange={(e) =>
+                            setRenewForm({ ...renewForm, reminder_date: e.target.value })
+                          }
+                        />
+                      </div>
+
+                      {/* Remarks */}
+                      <div className="col-md-6">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Renewal Remarks
+                        </label>
+                        <input
+                          type="text"
+                          className="form-control form-control-sm"
+                          placeholder="e.g. Paid online, NCB 20%, Policy document attached"
+                          value={renewForm.notes}
+                          onChange={(e) =>
+                            setRenewForm({ ...renewForm, notes: e.target.value })
+                          }
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -1193,12 +1143,12 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
                       {isSubmitting ? (
                         <>
                           <span className="spinner-border spinner-border-sm" role="status"></span>
-                          Renewing...
+                          Saving Renewal...
                         </>
                       ) : (
                         <>
-                          <i className="bi bi-arrow-repeat"></i>
-                          Confirm 1-Year Renewal
+                          <i className="bi bi-check2-circle"></i>
+                          Confirm Renewal
                         </>
                       )}
                     </button>
@@ -1210,125 +1160,583 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
         )}
 
         {/* ===================================================================
-            MODAL 3: VIEW RECORD DETAILS
+            MODAL 2: EDIT INSURANCE RECORD
             =================================================================== */}
-        {showDetailModal && selectedInsurance && (
+        {showEditModal && (
+          <div
+            className="modal fade show d-block"
+            tabIndex="-1"
+            style={{ backgroundColor: "rgba(0,0,0,0.55)", zIndex: 1055 }}
+          >
+            <div className="modal-dialog modal-lg modal-dialog-centered">
+              <div className="modal-content shadow border-0 rounded-3">
+                <form onSubmit={handleEditSubmit}>
+                  <div className="modal-header bg-primary text-white py-3 px-4">
+                    <h5 className="modal-title fw-bold fs-6 d-flex align-items-center gap-2">
+                      <i className="bi bi-pencil-square"></i>
+                      <span>Edit Insurance Record #{editForm.id}</span>
+                    </h5>
+                    <button
+                      type="button"
+                      className="btn-close btn-close-white"
+                      disabled={isSubmitting}
+                      onClick={() => setShowEditModal(false)}
+                    ></button>
+                  </div>
+
+                  <div className="modal-body p-4">
+                    <div className="row g-3">
+                      <div className="col-md-6">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Vehicle Registration Number
+                        </label>
+                        <input
+                          type="text"
+                          className="form-control form-control-sm"
+                          value={editForm.vehicle_number}
+                          onChange={(e) =>
+                            setEditForm({ ...editForm, vehicle_number: e.target.value.toUpperCase() })
+                          }
+                        />
+                      </div>
+                      <div className="col-md-6">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Policy Number
+                        </label>
+                        <input
+                          type="text"
+                          className="form-control form-control-sm"
+                          value={editForm.policy_number}
+                          onChange={(e) =>
+                            setEditForm({ ...editForm, policy_number: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="col-md-6">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Insurance Company
+                        </label>
+                        <input
+                          type="text"
+                          className="form-control form-control-sm"
+                          value={editForm.insurance_company}
+                          onChange={(e) =>
+                            setEditForm({ ...editForm, insurance_company: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="col-md-6">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Premium Amount (₹)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          className="form-control form-control-sm"
+                          value={editForm.premium_amount}
+                          onChange={(e) =>
+                            setEditForm({ ...editForm, premium_amount: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="col-md-4">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Policy Start Date
+                        </label>
+                        <input
+                          type="date"
+                          className="form-control form-control-sm"
+                          value={editForm.policy_start_date}
+                          onChange={(e) =>
+                            setEditForm({ ...editForm, policy_start_date: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="col-md-4">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Policy Expiry Date
+                        </label>
+                        <input
+                          type="date"
+                          className="form-control form-control-sm"
+                          value={editForm.policy_expiry_date}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const rDays = Number(editForm.reminder_days_before || 15);
+                            let newRem = editForm.reminder_date;
+                            if (val) {
+                              const remD = new Date(val);
+                              remD.setDate(remD.getDate() - rDays);
+                              newRem = remD.toISOString().split("T")[0];
+                            }
+                            setEditForm({
+                              ...editForm,
+                              policy_expiry_date: val,
+                              reminder_date: newRem,
+                            });
+                          }}
+                        />
+                      </div>
+                      <div className="col-md-4">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Reminder Date
+                        </label>
+                        <input
+                          type="date"
+                          className="form-control form-control-sm"
+                          value={editForm.reminder_date}
+                          onChange={(e) =>
+                            setEditForm({ ...editForm, reminder_date: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="col-12">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Notes / Remarks
+                        </label>
+                        <textarea
+                          className="form-control form-control-sm"
+                          rows="2"
+                          value={editForm.notes}
+                          onChange={(e) =>
+                            setEditForm({ ...editForm, notes: e.target.value })
+                          }
+                        ></textarea>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="modal-footer bg-light py-2 px-4 border-top">
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary btn-sm"
+                      disabled={isSubmitting}
+                      onClick={() => setShowEditModal(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn btn-primary btn-sm d-inline-flex align-items-center gap-1 fw-semibold"
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <span className="spinner-border spinner-border-sm" role="status"></span>
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <i className="bi bi-save"></i>
+                          Save Changes
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================================
+            MODAL 3: ADD INSURANCE RECORD
+            =================================================================== */}
+        {showAddModal && (
           <div
             className="modal fade show d-block"
             tabIndex="-1"
             style={{ backgroundColor: "rgba(0, 0, 0, 0.55)", backdropFilter: "blur(2px)", zIndex: 1055 }}
           >
-            <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-dialog modal-lg modal-dialog-centered">
               <div className="modal-content border-0 shadow-lg rounded-3">
-                <div className="modal-header bg-light py-3 border-bottom">
-                  <div className="d-flex align-items-center gap-2">
-                    <span
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: "8px",
-                        backgroundColor: "#58632A",
-                        color: "#fff",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <i className="bi bi-file-earmark-text"></i>
-                    </span>
-                    <h5 className="modal-title fw-bold text-dark mb-0">Insurance Policy Details</h5>
+                <form onSubmit={handleAddSubmit}>
+                  <div className="modal-header bg-light py-3 border-bottom">
+                    <h5 className="modal-title fw-bold text-dark mb-0">Add Vehicle Insurance Record</h5>
+                    <button
+                      type="button"
+                      className="btn-close"
+                      disabled={isSubmitting}
+                      onClick={() => setShowAddModal(false)}
+                    ></button>
                   </div>
+
+                  <div className="modal-body p-4">
+                    {/* Auto-fill from Existing Deal */}
+                    <div className="p-3 bg-light rounded-3 mb-3 border">
+                      <label className="form-label small fw-bold text-dark mb-1">
+                        Select Converted Deal (Optional Auto-Fill)
+                      </label>
+                      <select
+                        className="form-select form-select-sm"
+                        value={addForm.deal_id}
+                        onChange={(e) => handleDealSelection(e.target.value)}
+                        disabled={isLoadingDeals}
+                      >
+                        <option value="">-- Choose Deal to Autofill Customer & Vehicle --</option>
+                        {dealsList.map((deal) => (
+                          <option key={deal.id} value={deal.id}>
+                            Deal #{deal.deal_number || deal.id} - {deal.customer_name} ({deal.model_variant || "Car"})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="row g-3">
+                      <div className="col-md-6">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Customer Name <span className="text-danger">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="form-control form-control-sm"
+                          value={addForm.customer_name}
+                          onChange={(e) => setAddForm({ ...addForm, customer_name: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <div className="col-md-6">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Customer Phone <span className="text-danger">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="form-control form-control-sm"
+                          value={addForm.customer_phone}
+                          onChange={(e) => setAddForm({ ...addForm, customer_phone: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <div className="col-md-6">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Vehicle Model
+                        </label>
+                        <input
+                          type="text"
+                          className="form-control form-control-sm"
+                          value={addForm.model_variant}
+                          onChange={(e) => setAddForm({ ...addForm, model_variant: e.target.value })}
+                        />
+                      </div>
+                      <div className="col-md-6">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Vehicle Registration Number
+                        </label>
+                        <input
+                          type="text"
+                          className="form-control form-control-sm"
+                          placeholder="e.g. GJ-01-AB-1234"
+                          value={addForm.vehicle_number}
+                          onChange={(e) =>
+                            setAddForm({
+                              ...addForm,
+                              vehicle_number: e.target.value.toUpperCase(),
+                              registration_number: e.target.value.toUpperCase(),
+                            })
+                          }
+                        />
+                      </div>
+                      <div className="col-md-6">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Insurance Company
+                        </label>
+                        <input
+                          type="text"
+                          className="form-control form-control-sm"
+                          value={addForm.insurance_company}
+                          onChange={(e) => setAddForm({ ...addForm, insurance_company: e.target.value })}
+                        />
+                      </div>
+                      <div className="col-md-6">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Policy Number
+                        </label>
+                        <input
+                          type="text"
+                          className="form-control form-control-sm"
+                          value={addForm.policy_number}
+                          onChange={(e) => setAddForm({ ...addForm, policy_number: e.target.value })}
+                        />
+                      </div>
+                      <div className="col-md-4">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Delivery / Start Date
+                        </label>
+                        <input
+                          type="date"
+                          className="form-control form-control-sm"
+                          value={addForm.delivery_date}
+                          onChange={(e) => setAddForm({ ...addForm, delivery_date: e.target.value })}
+                        />
+                      </div>
+                      <div className="col-md-4">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Expiry Date (1 Year)
+                        </label>
+                        <input
+                          type="date"
+                          className="form-control form-control-sm bg-light"
+                          value={computedExpiryDate}
+                          readOnly
+                        />
+                      </div>
+                      <div className="col-md-4">
+                        <label className="form-label small fw-semibold text-dark mb-1">
+                          Premium Amount (₹)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          className="form-control form-control-sm"
+                          value={addForm.premium_amount}
+                          onChange={(e) => setAddForm({ ...addForm, premium_amount: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="modal-footer bg-light py-2 px-4 border-top">
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary btn-sm"
+                      disabled={isSubmitting}
+                      onClick={() => setShowAddModal(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn btn-primary btn-sm d-inline-flex align-items-center gap-1 fw-semibold"
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <span className="spinner-border spinner-border-sm" role="status"></span>
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <i className="bi bi-save"></i>
+                          Save Insurance
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================================
+            MODAL 4: VIEW POLICY DETAILS
+            =================================================================== */}
+        {showDetailModal && selectedInsurance && (
+          <div
+            className="modal fade show d-block"
+            tabIndex="-1"
+            style={{ backgroundColor: "rgba(0, 0, 0, 0.55)", zIndex: 1055 }}
+          >
+            <div className="modal-dialog modal-lg modal-dialog-centered">
+              <div className="modal-content border-0 shadow-lg rounded-3">
+                <div className="modal-header bg-dark text-white py-3 px-4">
+                  <h5 className="modal-title fw-bold fs-6 d-flex align-items-center gap-2">
+                    <i className="bi bi-shield-check"></i>
+                    <span>Insurance Reminder Details #{selectedInsurance.id}</span>
+                  </h5>
                   <button
                     type="button"
-                    className="btn-close"
+                    className="btn-close btn-close-white"
                     onClick={() => setShowDetailModal(false)}
                   ></button>
                 </div>
 
                 <div className="modal-body p-4">
-                  <div className="list-group list-group-flush rounded-3 border">
-                    <div className="list-group-item d-flex justify-content-between align-items-center py-2">
-                      <span className="text-muted small">Record ID</span>
-                      <strong className="text-dark">#{selectedInsurance.id}</strong>
-                    </div>
-
-                    {selectedInsurance.deal_id && (
-                      <div className="list-group-item d-flex justify-content-between align-items-center py-2">
-                        <span className="text-muted small">Associated Deal</span>
-                        <span className="badge bg-primary-subtle text-primary fw-bold">
-                          Deal #{selectedInsurance.deal_id}
-                        </span>
+                  <div className="row g-3">
+                    <div className="col-md-6">
+                      <div className="card h-100 border p-3 bg-light">
+                        <div className="fw-bold text-dark mb-2">Customer Information</div>
+                        <div className="small mb-1">
+                          <span className="text-muted">Name:</span>{" "}
+                          <span className="fw-semibold">{selectedInsurance.customer_name || "N/A"}</span>
+                        </div>
+                        <div className="small mb-1">
+                          <span className="text-muted">Phone:</span>{" "}
+                          <span>{selectedInsurance.customer_phone || selectedInsurance.customer_number || "-"}</span>
+                        </div>
+                        <div className="small mb-1">
+                          <span className="text-muted">Email:</span>{" "}
+                          <span>{selectedInsurance.customer_email || "-"}</span>
+                        </div>
+                        <div className="small mb-1">
+                          <span className="text-muted">City:</span>{" "}
+                          <span>{selectedInsurance.customer_city || "-"}</span>
+                        </div>
                       </div>
-                    )}
-
-                    <div className="list-group-item d-flex justify-content-between align-items-center py-2">
-                      <span className="text-muted small">Customer Name</span>
-                      <strong className="text-dark">{selectedInsurance.customer_name}</strong>
                     </div>
 
-                    <div className="list-group-item d-flex justify-content-between align-items-center py-2">
-                      <span className="text-muted small">Phone Number</span>
-                      <span className="text-dark">{selectedInsurance.customer_number || selectedInsurance.customer_phone || "-"}</span>
+                    <div className="col-md-6">
+                      <div className="card h-100 border p-3 bg-light">
+                        <div className="fw-bold text-dark mb-2">Vehicle Specification</div>
+                        <div className="small mb-1">
+                          <span className="text-muted">Model:</span>{" "}
+                          <span className="fw-semibold">{selectedInsurance.model_variant || selectedInsurance.vehicle_name || "Standard"}</span>
+                        </div>
+                        <div className="small mb-1">
+                          <span className="text-muted">Vehicle Reg No:</span>{" "}
+                          <span className="badge bg-dark-subtle text-dark border ms-1">
+                            {selectedInsurance.vehicle_number || selectedInsurance.registration_number || "Pending"}
+                          </span>
+                        </div>
+                        <div className="small mb-1">
+                          <span className="text-muted">Color:</span>{" "}
+                          <span>{selectedInsurance.color || "Standard"}</span>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="list-group-item d-flex justify-content-between align-items-center py-2">
-                      <span className="text-muted small">Email Address</span>
-                      <span className="text-dark">{selectedInsurance.customer_email || "-"}</span>
+                    <div className="col-12">
+                      <div className="card border p-3">
+                        <div className="fw-bold text-dark mb-2">Policy & Expiry Information</div>
+                        <div className="row g-2">
+                          <div className="col-md-4 small">
+                            <span className="text-muted">Provider:</span>{" "}
+                            <span className="fw-semibold">{selectedInsurance.insurance_company || "HDFC ERGO"}</span>
+                          </div>
+                          <div className="col-md-4 small">
+                            <span className="text-muted">Policy Number:</span>{" "}
+                            <code>{selectedInsurance.policy_number || "-"}</code>
+                          </div>
+                          <div className="col-md-4 small">
+                            <span className="text-muted">Type:</span>{" "}
+                            <span className="badge bg-primary-subtle text-primary border ms-1">
+                              {selectedInsurance.insurance_type || "Comprehensive"}
+                            </span>
+                          </div>
+                          <div className="col-md-4 small">
+                            <span className="text-muted">Start Date:</span>{" "}
+                            <span>{selectedInsurance.policy_start_date || selectedInsurance.delivery_date || "-"}</span>
+                          </div>
+                          <div className="col-md-4 small">
+                            <span className="text-muted">Expiry Date:</span>{" "}
+                            <span className="fw-bold text-danger">
+                              {selectedInsurance.policy_expiry_date || selectedInsurance.insurance_expire_date || "-"}
+                            </span>
+                          </div>
+                          <div className="col-md-4 small">
+                            <span className="text-muted">Premium:</span>{" "}
+                            <span className="fw-bold text-success">
+                              ₹{formatIndianCurrency(Number(selectedInsurance.premium_amount || 0))}
+                            </span>
+                          </div>
+                          <div className="col-md-4 small">
+                            <span className="text-muted">Reminder Date:</span>{" "}
+                            <span>{selectedInsurance.reminder_date || "-"}</span>
+                          </div>
+                          <div className="col-md-4 small">
+                            <span className="text-muted">Status:</span>{" "}
+                            {renderStatusBadge(selectedInsurance)}
+                          </div>
+                        </div>
+
+                        {selectedInsurance.notes && (
+                          <div className="mt-3 pt-2 border-top small">
+                            <span className="text-muted">Notes:</span>{" "}
+                            <span className="text-dark fst-italic">{selectedInsurance.notes}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="list-group-item d-flex justify-content-between align-items-center py-2">
-                      <span className="text-muted small">City</span>
-                      <span className="text-dark">{selectedInsurance.customer_city || "-"}</span>
-                    </div>
+                    {/* Previous Policies & Renewal History */}
+                    <div className="col-12">
+                      <div className="card border p-3 bg-light-subtle">
+                        <div className="d-flex align-items-center justify-content-between mb-2">
+                          <div className="fw-bold text-dark d-flex align-items-center gap-2">
+                            <i className="bi bi-clock-history text-primary"></i>
+                            <span>Previous Policies & Renewal History</span>
+                          </div>
+                          <span className="badge bg-primary-subtle text-primary border px-2 py-1" style={{ fontSize: "11px" }}>
+                            {selectedInsurance.renewal_history?.length || 0} Previous Policy Record(s)
+                          </span>
+                        </div>
 
-                    <div className="list-group-item d-flex justify-content-between align-items-center py-2">
-                      <span className="text-muted small">Vehicle Model</span>
-                      <strong className="text-dark">{selectedInsurance.model_variant || "-"}</strong>
-                    </div>
-
-                    <div className="list-group-item d-flex justify-content-between align-items-center py-2">
-                      <span className="text-muted small">Color (from Deals)</span>
-                      <span className="badge bg-light text-dark border">
-                        {selectedInsurance.color || "Standard"}
-                      </span>
-                    </div>
-
-                    <div className="list-group-item d-flex justify-content-between align-items-center py-2">
-                      <span className="text-muted small">Vehicle Delivery Date</span>
-                      <span className="text-dark">{selectedInsurance.delivery_date || "-"}</span>
-                    </div>
-
-                    <div className="list-group-item d-flex justify-content-between align-items-center py-2">
-                      <span className="text-muted small">Insurance Expire Date</span>
-                      <strong className="text-dark">{selectedInsurance.insurance_expire_date || "-"}</strong>
-                    </div>
-
-                    <div className="list-group-item d-flex justify-content-between align-items-center py-2">
-                      <span className="text-muted small">Reminder Date</span>
-                      <span className="text-warning-emphasis fw-semibold">
-                        {selectedInsurance.reminder_date || "-"}
-                      </span>
-                    </div>
-
-                    <div className="list-group-item d-flex justify-content-between align-items-center py-2">
-                      <span className="text-muted small">Status</span>
-                      <span>{renderStatusBadge(selectedInsurance)}</span>
+                        {selectedInsurance.renewal_history && selectedInsurance.renewal_history.length > 0 ? (
+                          <div className="table-responsive border rounded bg-white">
+                            <table className="table table-sm table-hover align-middle mb-0" style={{ fontSize: "12px" }}>
+                              <thead className="table-light">
+                                <tr className="text-muted text-uppercase" style={{ fontSize: "11px" }}>
+                                  <th>#</th>
+                                  <th>Company</th>
+                                  <th>Policy Number</th>
+                                  <th>Coverage</th>
+                                  <th>Period</th>
+                                  <th>Premium</th>
+                                  <th>Renewed On</th>
+                                  <th>Remarks</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {selectedInsurance.renewal_history.map((hist, idx) => (
+                                  <tr key={hist.id || idx}>
+                                    <td className="fw-bold text-muted">#{idx + 1}</td>
+                                    <td className="fw-semibold text-dark">{hist.insurance_company}</td>
+                                    <td>
+                                      <code className="text-primary">{hist.policy_number || "-"}</code>
+                                    </td>
+                                    <td>
+                                      <span className="badge bg-light text-dark border">
+                                        {hist.insurance_type}
+                                      </span>
+                                    </td>
+                                    <td>
+                                      <span>{hist.policy_start_date || "-"}</span>
+                                      <span className="text-muted mx-1">to</span>
+                                      <span className="fw-semibold text-danger">{hist.policy_expiry_date || "-"}</span>
+                                    </td>
+                                    <td className="fw-bold text-dark">
+                                      ₹{formatIndianCurrency(Number(hist.premium_amount || 0))}
+                                    </td>
+                                    <td className="text-muted small">
+                                      {hist.renewed_at || "-"}
+                                    </td>
+                                    <td className="text-muted small fst-italic">
+                                      {hist.notes || "-"}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div className="text-muted small fst-italic py-3 text-center bg-white rounded border">
+                            <i className="bi bi-info-circle me-1"></i>
+                            No previous renewal history records yet. (This is the original policy)
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="modal-footer bg-light py-2 px-4 border-top d-flex justify-content-between">
-
-                  <div className="d-flex gap-2">
-                    <button
-                      type="button"
-                      className="btn btn-outline-secondary btn-sm"
-                      onClick={() => setShowDetailModal(false)}
-                    >
-                      Close
-                    </button>
-
-                  </div>
+                <div className="modal-footer bg-light py-2 px-4 border-top">
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setShowDetailModal(false)}
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-success btn-sm"
+                    onClick={() => {
+                      setShowDetailModal(false);
+                      openRenewModal(selectedInsurance);
+                    }}
+                  >
+                    <i className="bi bi-arrow-repeat me-1"></i> Renew Policy
+                  </button>
                 </div>
               </div>
             </div>

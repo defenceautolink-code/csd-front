@@ -565,6 +565,16 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
               </li>
               <li className="nav-item">
                 <Link
+                  href="/admin/insurance-records"
+                  className={`nav-link ${isLinkActive("/admin/insurance-records") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-file-earmark-medical-fill"></i>
+                  <span>Insurance Records</span>
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link
                   href="/admin/users"
                   className={`nav-link ${isLinkActive("/admin/users") ? "active" : ""}`}
                   onClick={onCloseMobile}
