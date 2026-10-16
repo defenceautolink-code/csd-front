@@ -385,9 +385,7 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
                 {pagination.total} Total Records
               </span>
             </div>
-            <p className="text-muted small mb-0 mt-1">
-              Master table data fetched directly from the database <code>insurances</code> table via <code>/api/insurance-records</code>
-            </p>
+            
           </div>
 
           <div className="d-flex align-items-center gap-2">
@@ -414,19 +412,7 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
 
         {/* Stats Row */}
         <div className="row g-3 mb-4">
-          <div className="col-6 col-md-3">
-            <div className="card border-0 shadow-sm rounded-3 bg-white p-3 border-start border-primary border-4">
-              <div className="d-flex justify-content-between align-items-center">
-                <div>
-                  <div className="text-muted small fw-medium">Total In Database</div>
-                  <div className="h4 fw-bold text-dark mb-0 mt-1">{stats.total}</div>
-                </div>
-                <div className="bg-primary-subtle text-primary p-2 rounded-circle">
-                  <i className="bi bi-shield-shaded fs-5"></i>
-                </div>
-              </div>
-            </div>
-          </div>
+          
 
           <div className="col-6 col-md-3">
             <div className="card border-0 shadow-sm rounded-3 bg-white p-3 border-start border-success border-4">
