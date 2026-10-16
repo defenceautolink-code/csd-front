@@ -232,7 +232,7 @@ export default function LeadStatusPage() {
 
         {/* KPI Stat Cards */}
         <div className="row g-3 mb-4">
-          <div className="col-md-6 col-sm-6">
+          <div className="col-md-4 col-sm-6">
             <div className="card stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">Configured Stages</span>
@@ -247,7 +247,7 @@ export default function LeadStatusPage() {
             </div>
           </div>
 
-          <div className="col-md-6 col-sm-6">
+          <div className="col-md-4 col-sm-6">
             <div className="card stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">Active Stages</span>

@@ -254,6 +254,28 @@ export default function BrandPage() {
     ? (serverPagination.total ?? brands.length)
     : filteredBrands.length;
 
+  const fourWheelerCount =
+    brandStats.four_wheeler_brands > 0
+      ? brandStats.four_wheeler_brands
+      : brands.filter((b) => {
+          if (!b.vehicle_type) return true;
+          const vt = Array.isArray(b.vehicle_type)
+            ? b.vehicle_type.join(" ")
+            : String(b.vehicle_type);
+          return vt.includes("4") || !vt.includes("2");
+        }).length || totalBrands;
+
+  const twoWheelerCount =
+    brandStats.two_wheeler_brands > 0
+      ? brandStats.two_wheeler_brands
+      : brands.filter((b) => {
+          if (!b.vehicle_type) return false;
+          const vt = Array.isArray(b.vehicle_type)
+            ? b.vehicle_type.join(" ")
+            : String(b.vehicle_type);
+          return vt.includes("2");
+        }).length;
+
   const lastPage = isServerPaginated
     ? (serverPagination.last_page ?? Math.max(1, Math.ceil(totalBrands / perPage)))
     : Math.max(1, Math.ceil(totalBrands / perPage));
@@ -335,7 +357,7 @@ export default function BrandPage() {
                 </div>
               </div>
               <div className="stat-card-value">
-                {brandStats.four_wheeler_brands} Brands
+                {fourWheelerCount} Brands
               </div>
               <span className="text-success small fw-semibold">Car OEM Manufacturers</span>
             </div>
@@ -350,7 +372,7 @@ export default function BrandPage() {
                 </div>
               </div>
               <div className="stat-card-value">
-                {brandStats.two_wheeler_brands} Brands
+                {twoWheelerCount} Brands
               </div>
               <span className="text-warning small fw-semibold">Bikes & Scooters</span>
             </div>

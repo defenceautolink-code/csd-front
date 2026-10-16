@@ -337,7 +337,7 @@ export default function VariantPage() {
 
         {/* KPI Stat Cards */}
         <div className="row g-3 mb-4">
-          <div className="col-md-6 col-sm-6">
+          <div className="col-md-4 col-sm-6">
             <div className="card stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">Total Variants</span>
@@ -352,7 +352,7 @@ export default function VariantPage() {
             </div>
           </div>
 
-          <div className="col-md-6 col-sm-6">
+          <div className="col-md-4 col-sm-6">
             <div className="card stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">Active Trims</span>
