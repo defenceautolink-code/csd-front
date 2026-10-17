@@ -210,19 +210,19 @@ export const dealApi = {
         ? "Insurance Included: Yes"
         : "Insurance Included: No",
       // Insurance Policy Details
-      insurance_company: payload.insurance_company || "",
-      policy_number: payload.policy_number || "",
-      insurance_type: payload.insurance_type || "Comprehensive",
-      policy_start_date: payload.policy_start_date || payload.expected_delivery_date || null,
+      insurance_company: payload.insurance_company ? String(payload.insurance_company).trim() : null,
+      policy_number: payload.policy_number ? String(payload.policy_number).trim() : null,
+      insurance_type: payload.insurance_type || null,
+      policy_start_date: payload.policy_start_date || null,
       policy_expiry_date: payload.policy_expiry_date || null,
       premium_amount: Number(payload.premium_amount || 0),
       insurance_premium: Number(payload.insurance_premium || payload.premium_amount || 0),
       insurance_amount: Number(payload.insurance_amount || payload.premium_amount || 0),
-      reminder_days_before: Number(payload.reminder_days_before || 15),
+      reminder_days_before: payload.reminder_days_before ? Number(payload.reminder_days_before) : null,
       reminder_date: payload.reminder_date || null,
-      vehicle_number: payload.vehicle_number || payload.registration_number || "",
-      registration_number: payload.registration_number || payload.vehicle_number || "",
-      insurance_notes: payload.insurance_notes || "",
+      vehicle_number: payload.vehicle_number || payload.registration_number || null,
+      registration_number: payload.registration_number || payload.vehicle_number || null,
+      insurance_notes: payload.insurance_notes ? String(payload.insurance_notes).trim() : null,
     };
 
     const initialAmount = Number(payload.initial_payment?.amount || 0);

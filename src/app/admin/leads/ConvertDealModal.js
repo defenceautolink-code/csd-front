@@ -44,13 +44,13 @@ export default function ConvertDealModal({
 
   // Detailed Insurance Policy State (when has_insurance === 'Yes')
   const [insuranceDetails, setInsuranceDetails] = useState({
-    insurance_company: "HDFC ERGO General Insurance",
+    insurance_company: "",
     policy_number: "",
-    insurance_type: "Comprehensive",
+    insurance_type: "",
     policy_start_date: "",
     policy_expiry_date: "",
     premium_amount: "",
-    reminder_days_before: "15",
+    reminder_days_before: "",
     reminder_date: "",
     vehicle_number: "",
     notes: "",
@@ -65,17 +65,25 @@ export default function ConvertDealModal({
         const exp = d.toISOString().split("T")[0];
         updated.policy_expiry_date = exp;
 
-        const remD = new Date(exp);
-        remD.setDate(remD.getDate() - Number(updated.reminder_days_before || 15));
-        updated.reminder_date = remD.toISOString().split("T")[0];
+        if (updated.reminder_days_before) {
+          const remD = new Date(exp);
+          remD.setDate(remD.getDate() - Number(updated.reminder_days_before));
+          updated.reminder_date = remD.toISOString().split("T")[0];
+        }
       } else if (field === "policy_expiry_date" && value) {
-        const remD = new Date(value);
-        remD.setDate(remD.getDate() - Number(updated.reminder_days_before || 15));
-        updated.reminder_date = remD.toISOString().split("T")[0];
-      } else if (field === "reminder_days_before" && updated.policy_expiry_date) {
-        const remD = new Date(updated.policy_expiry_date);
-        remD.setDate(remD.getDate() - Number(value || 15));
-        updated.reminder_date = remD.toISOString().split("T")[0];
+        if (updated.reminder_days_before) {
+          const remD = new Date(value);
+          remD.setDate(remD.getDate() - Number(updated.reminder_days_before));
+          updated.reminder_date = remD.toISOString().split("T")[0];
+        }
+      } else if (field === "reminder_days_before") {
+        if (value && updated.policy_expiry_date) {
+          const remD = new Date(updated.policy_expiry_date);
+          remD.setDate(remD.getDate() - Number(value));
+          updated.reminder_date = remD.toISOString().split("T")[0];
+        } else if (!value) {
+          updated.reminder_date = "";
+        }
       }
       return updated;
     });
@@ -118,21 +126,18 @@ export default function ConvertDealModal({
         },
       });
 
-      // Initialize default insurance dates based on expected delivery date
-      const insExp = new Date(delivery);
-      insExp.setDate(insExp.getDate() + 365);
-      const insExpStr = insExp.toISOString().split("T")[0];
-      const insRem = new Date(insExp);
-      insRem.setDate(insRem.getDate() - 15);
-      const insRemStr = insRem.toISOString().split("T")[0];
-
-      setInsuranceDetails((prev) => ({
-        ...prev,
-        policy_start_date: deliveryStr,
-        policy_expiry_date: insExpStr,
-        reminder_date: insRemStr,
+      setInsuranceDetails({
+        insurance_company: "",
+        policy_number: "",
+        insurance_type: "",
+        policy_start_date: "",
+        policy_expiry_date: "",
+        premium_amount: "",
+        reminder_days_before: "",
+        reminder_date: "",
         vehicle_number: lead.registration_number || lead.vehicle_number || "",
-      }));
+        notes: "",
+      });
 
       // Load all quotations generated for this customer
       const fetchQuotations = async () => {
@@ -268,14 +273,14 @@ export default function ConvertDealModal({
     if (withInsurance) {
       payload.insurance_company = (insuranceDetails.insurance_company || "").trim();
       payload.policy_number = (insuranceDetails.policy_number || "").trim();
-      payload.insurance_type = insuranceDetails.insurance_type || "Comprehensive";
-      payload.policy_start_date = insuranceDetails.policy_start_date || formData.expected_delivery_date;
-      payload.policy_expiry_date = insuranceDetails.policy_expiry_date;
+      payload.insurance_type = insuranceDetails.insurance_type ? insuranceDetails.insurance_type.trim() : null;
+      payload.policy_start_date = insuranceDetails.policy_start_date || null;
+      payload.policy_expiry_date = insuranceDetails.policy_expiry_date || null;
       payload.premium_amount = Number(insuranceDetails.premium_amount || 0);
       payload.insurance_premium = Number(insuranceDetails.premium_amount || 0);
       payload.insurance_amount = Number(insuranceDetails.premium_amount || 0);
-      payload.reminder_days_before = Number(insuranceDetails.reminder_days_before || 15);
-      payload.reminder_date = insuranceDetails.reminder_date;
+      payload.reminder_days_before = insuranceDetails.reminder_days_before ? Number(insuranceDetails.reminder_days_before) : null;
+      payload.reminder_date = insuranceDetails.reminder_date || null;
       payload.vehicle_number = (insuranceDetails.vehicle_number || "").trim();
       payload.registration_number = (insuranceDetails.vehicle_number || "").trim();
       payload.insurance_notes = (insuranceDetails.notes || "").trim();
@@ -899,11 +904,9 @@ export default function ConvertDealModal({
                   </div>
                   <div>
                     <h5 className="modal-title fw-bold fs-6 mb-0">
-                      Insurance Policy & Renewal Reminder Information
+                      Insurance Policy Information
                     </h5>
-                    <span className="small text-white-50" style={{ fontSize: "11px" }}>
-                      Fill policy information to save Deal and Insurance simultaneously
-                    </span>
+                    
                   </div>
                 </div>
                 <button
@@ -940,16 +943,15 @@ export default function ConvertDealModal({
                     {/* Insurance Company */}
                     <div className="col-md-6">
                       <label className="form-label text-dark fw-bold small mb-1">
-                        Insurance Company <span className="text-danger">*</span>
+                        Insurance Company <span className="text-muted fw-normal" style={{ fontSize: "11px" }}>(Optional)</span>
                       </label>
                       <input
                         type="text"
                         className="form-control form-control-sm"
-                        placeholder="e.g. HDFC ERGO, ICICI Lombard, Tata AIG"
+                        placeholder="e.g. HDFC ERGO, ICICI Lombard, Tata AIG (optional)"
                         list="modalInsuranceCompanyList"
                         value={insuranceDetails.insurance_company}
                         onChange={(e) => handleInsuranceChange("insurance_company", e.target.value)}
-                        required
                       />
                       <datalist id="modalInsuranceCompanyList">
                         <option value="HDFC ERGO General Insurance" />
@@ -967,28 +969,28 @@ export default function ConvertDealModal({
                     {/* Policy Number */}
                     <div className="col-md-6">
                       <label className="form-label text-dark fw-bold small mb-1">
-                        Policy Number <span className="text-danger">*</span>
+                        Policy Number <span className="text-muted fw-normal" style={{ fontSize: "11px" }}>(Optional)</span>
                       </label>
                       <input
                         type="text"
                         className="form-control form-control-sm"
-                        placeholder="e.g. POL-2026-987654"
+                        placeholder="e.g. POL-2026-987654 (optional)"
                         value={insuranceDetails.policy_number}
                         onChange={(e) => handleInsuranceChange("policy_number", e.target.value)}
-                        required
                       />
                     </div>
 
                     {/* Insurance Type */}
                     <div className="col-md-4">
                       <label className="form-label text-dark fw-bold small mb-1">
-                        Insurance Type
+                        Insurance Type <span className="text-muted fw-normal" style={{ fontSize: "11px" }}>(Optional)</span>
                       </label>
                       <select
                         className="form-select form-select-sm"
                         value={insuranceDetails.insurance_type}
                         onChange={(e) => handleInsuranceChange("insurance_type", e.target.value)}
                       >
+                        <option value="">-- Select Insurance Type (Optional) --</option>
                         <option value="Comprehensive">Comprehensive (1+3 Years)</option>
                         <option value="Third Party">Third Party</option>
                         <option value="Own Damage">Own Damage (OD)</option>
@@ -999,7 +1001,7 @@ export default function ConvertDealModal({
                     {/* Premium Amount */}
                     <div className="col-md-4">
                       <label className="form-label text-dark fw-bold small mb-1">
-                        Premium Amount (₹) <span className="text-danger">*</span>
+                        Premium Amount (₹) <span className="text-muted fw-normal" style={{ fontSize: "11px" }}>(Optional)</span>
                       </label>
                       <div className="input-group input-group-sm">
                         <span className="input-group-text bg-light">₹</span>
@@ -1008,10 +1010,9 @@ export default function ConvertDealModal({
                           min="0"
                           step="1"
                           className="form-control form-control-sm"
-                          placeholder="e.g. 24500"
+                          placeholder="e.g. 24500 (optional)"
                           value={insuranceDetails.premium_amount}
                           onChange={(e) => handleInsuranceChange("premium_amount", e.target.value)}
-                          required
                         />
                       </div>
                     </div>
@@ -1020,12 +1021,12 @@ export default function ConvertDealModal({
                     <div className="col-md-4">
                       <label className="form-label text-dark fw-bold small mb-1 d-flex justify-content-between align-items-center">
                         <span>Vehicle Number</span>
-                        <span className="text-muted extra-small" style={{ fontSize: "10px" }}>(Optional / Nullable)</span>
+                        <span className="text-muted extra-small" style={{ fontSize: "10px" }}>(Optional)</span>
                       </label>
                       <input
                         type="text"
                         className="form-control form-control-sm"
-                        placeholder="e.g. GJ-01-AB-1234 (or leave blank)"
+                        placeholder="e.g. GJ-01-AB-1234 (optional)"
                         value={insuranceDetails.vehicle_number}
                         onChange={(e) => handleInsuranceChange("vehicle_number", e.target.value.toUpperCase())}
                       />
@@ -1034,41 +1035,40 @@ export default function ConvertDealModal({
                     {/* Policy Start Date */}
                     <div className="col-md-4">
                       <label className="form-label text-dark fw-bold small mb-1">
-                        Policy Start Date <span className="text-danger">*</span>
+                        Policy Start Date <span className="text-muted fw-normal" style={{ fontSize: "11px" }}>(Optional)</span>
                       </label>
                       <input
                         type="date"
                         className="form-control form-control-sm"
                         value={insuranceDetails.policy_start_date}
                         onChange={(e) => handleInsuranceChange("policy_start_date", e.target.value)}
-                        required
                       />
                     </div>
 
                     {/* Policy Expiry Date */}
                     <div className="col-md-4">
                       <label className="form-label text-dark fw-bold small mb-1">
-                        Policy Expiry Date (1 Year) <span className="text-danger">*</span>
+                        Policy Expiry Date (1 Year) <span className="text-muted fw-normal" style={{ fontSize: "11px" }}>(Optional)</span>
                       </label>
                       <input
                         type="date"
                         className="form-control form-control-sm"
                         value={insuranceDetails.policy_expiry_date}
                         onChange={(e) => handleInsuranceChange("policy_expiry_date", e.target.value)}
-                        required
                       />
                     </div>
 
                     {/* Reminder Days Before */}
                     <div className="col-md-4">
                       <label className="form-label text-dark fw-bold small mb-1">
-                        Reminder Days Before
+                        Reminder Days Before <span className="text-muted fw-normal" style={{ fontSize: "11px" }}>(Optional)</span>
                       </label>
                       <select
                         className="form-select form-select-sm"
                         value={insuranceDetails.reminder_days_before}
                         onChange={(e) => handleInsuranceChange("reminder_days_before", e.target.value)}
                       >
+                        <option value="">-- Select Reminder Interval (Optional) --</option>
                         <option value="15">15 Days Before Expiry</option>
                         <option value="30">30 Days Before Expiry</option>
                         <option value="45">45 Days Before Expiry</option>
@@ -1083,7 +1083,7 @@ export default function ConvertDealModal({
                         <div>
                           <div className="small text-muted" style={{ fontSize: "11px" }}>First Renewal Reminder Date:</div>
                           <div className="fw-bold text-dark small">
-                            {insuranceDetails.reminder_date || "Calculates after expiry date"}
+                            {insuranceDetails.reminder_date || "Auto calculated from expiry date (optional)"}
                           </div>
                         </div>
                       </div>
@@ -1092,7 +1092,7 @@ export default function ConvertDealModal({
                     {/* Additional Notes */}
                     <div className="col-md-6">
                       <label className="form-label text-dark fw-bold small mb-1">
-                        Insurance Notes
+                        Insurance Notes <span className="text-muted fw-normal" style={{ fontSize: "11px" }}>(Optional)</span>
                       </label>
                       <input
                         type="text"

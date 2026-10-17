@@ -720,8 +720,8 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
                 ) : (
                   insurances.map((item) => {
                     const vehicleNo = item.vehicle_number || item.registration_number;
-                    const startDate = item.policy_start_date || item.delivery_date;
-                    const expiryDate = item.policy_expiry_date || item.insurance_expire_date;
+                    const startDate = item.policy_start_date;
+                    const expiryDate = item.policy_expiry_date;
 
                     return (
                       <tr key={item.id}>
@@ -765,13 +765,19 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
 
                         {/* Insurance Details */}
                         <td>
-                          <div className="fw-semibold text-primary">{item.insurance_company || "HDFC ERGO"}</div>
+                          {item.insurance_company ? (
+                            <div className="fw-semibold text-primary">{item.insurance_company}</div>
+                          ) : (
+                            <div className="text-muted small fst-italic">No Company</div>
+                          )}
                           <div className="text-muted small">
                             <code>{item.policy_number || "No Policy #"}</code>
                           </div>
-                          <span className="badge bg-secondary-subtle text-secondary extra-small mt-1" style={{ fontSize: "10px" }}>
-                            {item.insurance_type || "Comprehensive"}
-                          </span>
+                          {item.insurance_type ? (
+                            <span className="badge bg-secondary-subtle text-secondary extra-small mt-1" style={{ fontSize: "10px" }}>
+                              {item.insurance_type}
+                            </span>
+                          ) : null}
                         </td>
 
                         {/* Policy Period */}
@@ -795,11 +801,13 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
                         {/* Reminder Date */}
                         <td>
                           <div className="small text-dark fw-medium">
-                            {item.reminder_date ? new Date(item.reminder_date).toLocaleDateString("en-IN") : "-"}
+                            {item.policy_expiry_date && item.reminder_date ? new Date(item.reminder_date).toLocaleDateString("en-IN") : "-"}
                           </div>
-                          <div className="text-muted extra-small" style={{ fontSize: "10px" }}>
-                            {item.reminder_days_before || 15} days before
-                          </div>
+                          {item.policy_expiry_date && item.reminder_days_before ? (
+                            <div className="text-muted extra-small" style={{ fontSize: "10px" }}>
+                              {item.reminder_days_before} days before
+                            </div>
+                          ) : null}
                         </td>
 
                         {/* Status */}
@@ -1601,7 +1609,7 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
                         <div className="row g-2">
                           <div className="col-md-4 small">
                             <span className="text-muted">Provider:</span>{" "}
-                            <span className="fw-semibold">{selectedInsurance.insurance_company || "HDFC ERGO"}</span>
+                            <span className="fw-semibold">{selectedInsurance.insurance_company || "-"}</span>
                           </div>
                           <div className="col-md-4 small">
                             <span className="text-muted">Policy Number:</span>{" "}
@@ -1609,9 +1617,13 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
                           </div>
                           <div className="col-md-4 small">
                             <span className="text-muted">Type:</span>{" "}
-                            <span className="badge bg-primary-subtle text-primary border ms-1">
-                              {selectedInsurance.insurance_type || "Comprehensive"}
-                            </span>
+                            {selectedInsurance.insurance_type ? (
+                              <span className="badge bg-primary-subtle text-primary border ms-1">
+                                {selectedInsurance.insurance_type}
+                              </span>
+                            ) : (
+                              <span className="text-muted ms-1">-</span>
+                            )}
                           </div>
                           <div className="col-md-4 small">
                             <span className="text-muted">Start Date:</span>{" "}

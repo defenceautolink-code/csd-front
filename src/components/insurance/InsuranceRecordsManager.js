@@ -68,7 +68,7 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
     id: "",
     customer_name: "",
     vehicle_number: "",
-    insurance_company: "HDFC ERGO General Insurance",
+    insurance_company: "",
     policy_number: "",
     insurance_type: "Comprehensive",
     policy_start_date: "",
@@ -156,9 +156,9 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
   // Open Edit Modal
   const handleOpenEdit = (record) => {
     setSelectedRecord(record);
-    const startDate = record.policy_start_date || record.delivery_date || "";
-    const expiryDate = record.policy_expiry_date || record.insurance_expire_date || "";
-    const reminderDays = record.reminder_days_before || 15;
+    const startDate = record.policy_start_date || "";
+    const expiryDate = record.policy_expiry_date || "";
+    const reminderDays = record.reminder_days_before || "";
     const reminderDate = record.reminder_date || "";
 
     setEditForm({
@@ -169,9 +169,9 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
       customer_city: record.customer_city || "",
       model_variant: record.model_variant || record.vehicle_name || "",
       vehicle_number: record.vehicle_number || record.registration_number || "",
-      insurance_company: record.insurance_company || "HDFC ERGO General Insurance",
+      insurance_company: record.insurance_company || "",
       policy_number: record.policy_number || "",
-      insurance_type: record.insurance_type || "Comprehensive",
+      insurance_type: record.insurance_type || "",
       policy_start_date: startDate,
       policy_expiry_date: expiryDate,
       premium_amount: record.premium_amount || "",
@@ -230,7 +230,7 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
       id: record.id,
       customer_name: record.customer_name || "",
       vehicle_number: record.vehicle_number || record.registration_number || "",
-      insurance_company: record.insurance_company || "HDFC ERGO General Insurance",
+      insurance_company: record.insurance_company || "",
       policy_number: record.policy_number ? `${record.policy_number}-RNW` : "",
       insurance_type: record.insurance_type || "Comprehensive",
       policy_start_date: currExp || new Date().toISOString().split("T")[0],
@@ -608,8 +608,8 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
                 ) : (
                   records.map((r) => {
                     const vehicleNo = r.vehicle_number || r.registration_number;
-                    const startDate = r.policy_start_date || r.delivery_date;
-                    const expiryDate = r.policy_expiry_date || r.insurance_expire_date;
+                    const startDate = r.policy_start_date;
+                    const expiryDate = r.policy_expiry_date;
 
                     return (
                       <tr key={r.id}>
@@ -648,13 +648,19 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
 
                         {/* Insurance Details */}
                         <td>
-                          <div className="fw-semibold text-primary">{r.insurance_company || "HDFC ERGO"}</div>
+                          {r.insurance_company ? (
+                            <div className="fw-semibold text-primary">{r.insurance_company}</div>
+                          ) : (
+                            <div className="text-muted small fst-italic">No Company</div>
+                          )}
                           <div className="text-muted small">
                             <code>{r.policy_number || "No Policy #"}</code>
                           </div>
-                          <span className="badge bg-secondary-subtle text-secondary extra-small mt-1" style={{ fontSize: "10px" }}>
-                            {r.insurance_type || "Comprehensive"}
-                          </span>
+                          {r.insurance_type ? (
+                            <span className="badge bg-secondary-subtle text-secondary extra-small mt-1" style={{ fontSize: "10px" }}>
+                              {r.insurance_type}
+                            </span>
+                          ) : null}
                         </td>
 
                         {/* Policy Period */}
@@ -678,11 +684,13 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
                         {/* Reminder Date */}
                         <td>
                           <div className="small text-dark fw-medium">
-                            {r.reminder_date ? new Date(r.reminder_date).toLocaleDateString("en-IN") : "-"}
+                            {r.policy_expiry_date && r.reminder_date ? new Date(r.reminder_date).toLocaleDateString("en-IN") : "-"}
                           </div>
-                          <div className="text-muted extra-small" style={{ fontSize: "10px" }}>
-                            {r.reminder_days_before || 15} days before
-                          </div>
+                          {r.policy_expiry_date && r.reminder_days_before ? (
+                            <div className="text-muted extra-small" style={{ fontSize: "10px" }}>
+                              {r.reminder_days_before} days before
+                            </div>
+                          ) : null}
                         </td>
 
                         {/* Status */}
@@ -855,6 +863,7 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
                             setEditForm({ ...editForm, insurance_type: e.target.value })
                           }
                         >
+                          <option value="">-- Select Insurance Type (Optional) --</option>
                           <option value="Comprehensive">Comprehensive (1+3 Years)</option>
                           <option value="Third Party">Third Party</option>
                           <option value="Own Damage">Own Damage (OD)</option>
@@ -932,12 +941,14 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
                           className="form-select form-select-sm"
                           value={editForm.reminder_days_before}
                           onChange={(e) => {
-                            const rDays = Number(e.target.value || 15);
+                            const rDays = e.target.value ? Number(e.target.value) : "";
                             let newRem = editForm.reminder_date;
-                            if (editForm.policy_expiry_date) {
+                            if (editForm.policy_expiry_date && rDays) {
                               const remD = new Date(editForm.policy_expiry_date);
                               remD.setDate(remD.getDate() - rDays);
                               newRem = remD.toISOString().split("T")[0];
+                            } else if (!rDays) {
+                              newRem = "";
                             }
                             setEditForm({
                               ...editForm,
@@ -946,6 +957,7 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
                             });
                           }}
                         >
+                          <option value="">-- Select Reminder Interval (Optional) --</option>
                           <option value="15">15 Days Before</option>
                           <option value="30">30 Days Before</option>
                           <option value="45">45 Days Before</option>
