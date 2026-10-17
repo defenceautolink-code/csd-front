@@ -10,6 +10,7 @@ import insuranceApi, {
   calculateReminderDate,
 } from "@/services/insuranceApi";
 import { dealApi } from "@/services/dealApi";
+import Pagination from "@/components/common/Pagination";
 
 export default function InsuranceRenewalsReportPage() {
   const { showToast } = useToast();
@@ -20,10 +21,12 @@ export default function InsuranceRenewalsReportPage() {
   const [urgencyFilter, setUrgencyFilter] = useState("next_30_days");
   const [companyFilter, setCompanyFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 15;
+  const [perPage, setPerPage] = useState(10);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -110,6 +113,16 @@ export default function InsuranceRenewalsReportPage() {
         if (!comp.includes(companyFilter.toLowerCase())) return false;
       }
 
+      // Date range filter
+      if (startDate) {
+        const exp = item.insurance_expire_date || item.expiry_date;
+        if (exp && exp < startDate) return false;
+      }
+      if (endDate) {
+        const exp = item.insurance_expire_date || item.expiry_date;
+        if (exp && exp > endDate) return false;
+      }
+
       // Search Query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -124,7 +137,7 @@ export default function InsuranceRenewalsReportPage() {
 
       return true;
     });
-  }, [policies, urgencyFilter, companyFilter, searchQuery]);
+  }, [policies, urgencyFilter, companyFilter, startDate, endDate, searchQuery]);
 
   // KPI Calculations across all policies
   const kpis = useMemo(() => {
@@ -152,11 +165,12 @@ export default function InsuranceRenewalsReportPage() {
   }, [policies]);
 
   // Pagination Logic
-  const totalPages = Math.ceil(filteredPolicies.length / itemsPerPage) || 1;
+  const totalPolicies = filteredPolicies.length;
+  const lastPage = Math.max(1, Math.ceil(totalPolicies / perPage));
   const paginatedPolicies = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return filteredPolicies.slice(start, start + itemsPerPage);
-  }, [filteredPolicies, currentPage, itemsPerPage]);
+    const start = (currentPage - 1) * perPage;
+    return filteredPolicies.slice(start, start + perPage);
+  }, [filteredPolicies, currentPage, perPage]);
 
   // WhatsApp Renewal Reminder
   const handleSendWhatsAppReminder = (policy) => {
@@ -341,7 +355,7 @@ export default function InsuranceRenewalsReportPage() {
           <div className="card-body p-3">
             <div className="row g-2 align-items-center">
               {/* Search */}
-              <div className="col-lg-4 col-md-6">
+              <div className="col-lg-3 col-md-6">
                 <div className="input-group input-group-sm">
                   <span className="input-group-text bg-white border-end-0">
                     <i className="bi bi-search text-muted"></i>
@@ -359,8 +373,36 @@ export default function InsuranceRenewalsReportPage() {
                 </div>
               </div>
 
+              {/* From Date */}
+              <div className="col-6 col-lg-2 col-md-3">
+                <input
+                  type="date"
+                  className="form-control form-control-sm"
+                  title="Filter Expiry From Date"
+                  value={startDate}
+                  onChange={(e) => {
+                    setStartDate(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                />
+              </div>
+
+              {/* To Date */}
+              <div className="col-6 col-lg-2 col-md-3">
+                <input
+                  type="date"
+                  className="form-control form-control-sm"
+                  title="Filter Expiry To Date"
+                  value={endDate}
+                  onChange={(e) => {
+                    setEndDate(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                />
+              </div>
+
               {/* Urgency Window Buttons */}
-              <div className="col-lg-5 col-md-6">
+              <div className="col-lg-3 col-md-6">
                 <div className="btn-group btn-group-sm w-100" role="group">
                   <button
                     type="button"
@@ -370,7 +412,7 @@ export default function InsuranceRenewalsReportPage() {
                       setCurrentPage(1);
                     }}
                   >
-                    Next 15 Days ({kpis.next15})
+                    15D ({kpis.next15})
                   </button>
                   <button
                     type="button"
@@ -380,7 +422,7 @@ export default function InsuranceRenewalsReportPage() {
                       setCurrentPage(1);
                     }}
                   >
-                    Next 30 Days ({kpis.next30})
+                    30D ({kpis.next30})
                   </button>
                   <button
                     type="button"
@@ -406,7 +448,7 @@ export default function InsuranceRenewalsReportPage() {
               </div>
 
               {/* Insurance Company Dropdown */}
-              <div className="col-lg-3 col-md-6">
+              <div className="col-lg-2 col-md-6">
                 <select
                   className="form-select form-select-sm"
                   value={companyFilter}
@@ -415,7 +457,7 @@ export default function InsuranceRenewalsReportPage() {
                     setCurrentPage(1);
                   }}
                 >
-                  <option value="all">All Insurance Companies</option>
+                  <option value="all">All Companies</option>
                   {companies.map((c) => (
                     <option key={c} value={c}>
                       {c}
@@ -423,6 +465,27 @@ export default function InsuranceRenewalsReportPage() {
                   ))}
                 </select>
               </div>
+
+              {/* Reset Filters */}
+              {(searchQuery || startDate || endDate || urgencyFilter !== "next_30_days" || companyFilter !== "all") && (
+                <div className="col-auto">
+                  <button
+                    type="button"
+                    className="btn btn-outline-danger btn-sm"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setStartDate("");
+                      setEndDate("");
+                      setUrgencyFilter("next_30_days");
+                      setCompanyFilter("all");
+                      setCurrentPage(1);
+                    }}
+                    title="Reset All Filters"
+                  >
+                    <i className="bi bi-x-circle me-1"></i> Reset
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -553,31 +616,21 @@ export default function InsuranceRenewalsReportPage() {
             </table>
           </div>
 
-          {/* Pagination Footer */}
-          {totalPages > 1 && (
-            <div className="card-footer bg-white d-flex justify-content-between align-items-center py-2">
-              <span className="text-muted small">
-                Page {currentPage} of {totalPages}
-              </span>
-              <div className="btn-group btn-group-sm">
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary"
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                >
-                  Previous
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary"
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
+          {/* Pagination Controls */}
+          {!loading && filteredPolicies.length > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              lastPage={lastPage}
+              total={totalPolicies}
+              perPage={perPage}
+              onPageChange={(page) => setCurrentPage(page)}
+              onPerPageChange={(newPerPage) => {
+                setPerPage(newPerPage);
+                setCurrentPage(1);
+              }}
+              perPageOptions={[10, 20, 50, 100]}
+              itemName="policies"
+            />
           )}
         </div>
       </div>

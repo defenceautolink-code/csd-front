@@ -7,6 +7,7 @@ import { useToast } from "@/app/components/Toast";
 import { hasPermission } from "@/utils/auth";
 import reportApi from "@/services/reportApi";
 import ReportsNav from "@/app/admin/reports/ReportsNav";
+import Pagination from "@/components/common/Pagination";
 
 export default function ReportsPage() {
   const { showToast } = useToast();
@@ -22,6 +23,8 @@ export default function ReportsPage() {
   const [exporting, setExporting] = useState(false);
   const [staffFilter, setStaffFilter] = useState("all");
   const [staffSearch, setStaffSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
 
   useEffect(() => {
     const user = localStorage.getItem("user");
@@ -134,6 +137,13 @@ export default function ReportsPage() {
     }
     return true;
   });
+
+  const totalLeaderboard = filteredLeaderboard.length;
+  const lastPageLeaderboard = Math.max(1, Math.ceil(totalLeaderboard / perPage));
+  const paginatedLeaderboard = filteredLeaderboard.slice(
+    (currentPage - 1) * perPage,
+    currentPage * perPage
+  );
 
   // Funnel color palette
   const getFunnelColor = (idx) => {
@@ -471,7 +481,10 @@ export default function ReportsPage() {
                       className="form-control border-start-0"
                       placeholder="Search employee..."
                       value={staffSearch}
-                      onChange={(e) => setStaffSearch(e.target.value)}
+                      onChange={(e) => {
+                        setStaffSearch(e.target.value);
+                        setCurrentPage(1);
+                      }}
                     />
                   </div>
 
@@ -480,21 +493,30 @@ export default function ReportsPage() {
                     <button
                       type="button"
                       className={`btn ${staffFilter === "all" ? "btn-primary" : "btn-outline-secondary"}`}
-                      onClick={() => setStaffFilter("all")}
+                      onClick={() => {
+                        setStaffFilter("all");
+                        setCurrentPage(1);
+                      }}
                     >
                       All Staff ({rawLeaderboard.length})
                     </button>
                     <button
                       type="button"
                       className={`btn ${staffFilter === "sales_only" ? "btn-primary" : "btn-outline-secondary"}`}
-                      onClick={() => setStaffFilter("sales_only")}
+                      onClick={() => {
+                        setStaffFilter("sales_only");
+                        setCurrentPage(1);
+                      }}
                     >
                       Sales Team Only
                     </button>
                     <button
                       type="button"
                       className={`btn ${staffFilter === "managers" ? "btn-primary" : "btn-outline-secondary"}`}
-                      onClick={() => setStaffFilter("managers")}
+                      onClick={() => {
+                        setStaffFilter("managers");
+                        setCurrentPage(1);
+                      }}
                     >
                       Managers
                     </button>
@@ -524,7 +546,7 @@ export default function ReportsPage() {
                         </td>
                       </tr>
                     ) : (
-                      filteredLeaderboard.map((rep, idx) => {
+                      paginatedLeaderboard.map((rep, idx) => {
                         const rankColor =
                           rep.rank === 1
                             ? "bg-warning text-dark"
@@ -640,6 +662,23 @@ export default function ReportsPage() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Pagination Controls */}
+              {!loading && filteredLeaderboard.length > 0 && (
+                <Pagination
+                  currentPage={currentPage}
+                  lastPage={lastPageLeaderboard}
+                  total={totalLeaderboard}
+                  perPage={perPage}
+                  onPageChange={(page) => setCurrentPage(page)}
+                  onPerPageChange={(newPerPage) => {
+                    setPerPage(newPerPage);
+                    setCurrentPage(1);
+                  }}
+                  perPageOptions={[10, 20, 50, 100]}
+                  itemName="sales executives"
+                />
+              )}
             </div>
           </>
         )}

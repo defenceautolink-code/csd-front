@@ -8,6 +8,7 @@ import { useToast } from "@/app/components/Toast";
 import { hasPermission } from "@/utils/auth";
 import { dealApi } from "@/services/dealApi";
 import api from "@/lib/axios";
+import Pagination from "@/components/common/Pagination";
 
 export default function SalesRegisterReportPage() {
   const { showToast } = useToast();
@@ -27,7 +28,7 @@ export default function SalesRegisterReportPage() {
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 15;
+  const [perPage, setPerPage] = useState(10);
 
   useEffect(() => {
     const user = localStorage.getItem("user");
@@ -77,6 +78,17 @@ export default function SalesRegisterReportPage() {
     if (isNaN(d.getTime())) return true;
     const now = new Date();
 
+    if (startDate) {
+      const s = new Date(startDate);
+      s.setHours(0, 0, 0, 0);
+      if (d < s) return false;
+    }
+    if (endDate) {
+      const e = new Date(endDate);
+      e.setHours(23, 59, 59, 999);
+      if (d > e) return false;
+    }
+
     if (period === "today") {
       return d.toDateString() === now.toDateString();
     } else if (period === "this_month") {
@@ -86,14 +98,6 @@ export default function SalesRegisterReportPage() {
       return d.getFullYear() === lm.getFullYear() && d.getMonth() === lm.getMonth();
     } else if (period === "this_year") {
       return d.getFullYear() === now.getFullYear();
-    } else if (period === "custom") {
-      if (startDate && new Date(startDate) > d) return false;
-      if (endDate) {
-        const endD = new Date(endDate);
-        endD.setHours(23, 59, 59, 999);
-        if (d > endD) return false;
-      }
-      return true;
     }
     return true;
   };
@@ -161,11 +165,12 @@ export default function SalesRegisterReportPage() {
   }, [filteredDeals]);
 
   // Pagination Logic
-  const totalPages = Math.ceil(filteredDeals.length / itemsPerPage) || 1;
+  const totalDeals = filteredDeals.length;
+  const lastPage = Math.max(1, Math.ceil(totalDeals / perPage));
   const paginatedDeals = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return filteredDeals.slice(start, start + itemsPerPage);
-  }, [filteredDeals, currentPage, itemsPerPage]);
+    const start = (currentPage - 1) * perPage;
+    return filteredDeals.slice(start, start + perPage);
+  }, [filteredDeals, currentPage, perPage]);
 
   // Export to CSV
   const handleExportCsv = () => {
@@ -352,8 +357,36 @@ export default function SalesRegisterReportPage() {
                 </div>
               </div>
 
+              {/* From Date */}
+              <div className="col-6 col-lg-2 col-md-3">
+                <input
+                  type="date"
+                  className="form-control form-control-sm"
+                  title="Filter From Date"
+                  value={startDate}
+                  onChange={(e) => {
+                    setStartDate(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                />
+              </div>
+
+              {/* To Date */}
+              <div className="col-6 col-lg-2 col-md-3">
+                <input
+                  type="date"
+                  className="form-control form-control-sm"
+                  title="Filter To Date"
+                  value={endDate}
+                  onChange={(e) => {
+                    setEndDate(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                />
+              </div>
+
               {/* Period Dropdown */}
-              <div className="col-lg-2 col-md-3 col-sm-6">
+              <div className="col-6 col-lg-2 col-md-3">
                 <select
                   className="form-select form-select-sm"
                   value={period}
@@ -367,31 +400,11 @@ export default function SalesRegisterReportPage() {
                   <option value="this_month">This Month</option>
                   <option value="last_month">Last Month</option>
                   <option value="this_year">This Financial Year</option>
-                  <option value="custom">Custom Date Range...</option>
                 </select>
               </div>
 
-              {/* Custom Date Inputs */}
-              {period === "custom" && (
-                <div className="col-lg-3 col-md-6 d-flex align-items-center gap-1">
-                  <input
-                    type="date"
-                    className="form-control form-control-sm"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                  />
-                  <span className="text-muted small">to</span>
-                  <input
-                    type="date"
-                    className="form-control form-control-sm"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                  />
-                </div>
-              )}
-
               {/* Status Filter */}
-              <div className="col-lg-2 col-md-3 col-sm-6">
+              <div className="col-6 col-lg-2 col-md-3">
                 <select
                   className="form-select form-select-sm"
                   value={statusFilter}
@@ -407,7 +420,7 @@ export default function SalesRegisterReportPage() {
               </div>
 
               {/* Force Filter */}
-              <div className="col-lg-2 col-md-3 col-sm-6">
+              <div className="col-6 col-lg-2 col-md-3">
                 <select
                   className="form-select form-select-sm"
                   value={forceFilter}
@@ -426,7 +439,7 @@ export default function SalesRegisterReportPage() {
               </div>
 
               {/* Brand Filter */}
-              <div className="col-lg-2 col-md-3 col-sm-6">
+              <div className="col-6 col-lg-2 col-md-3">
                 <select
                   className="form-select form-select-sm"
                   value={brandFilter}
@@ -445,23 +458,24 @@ export default function SalesRegisterReportPage() {
               </div>
 
               {/* Reset button */}
-              {(searchQuery || period !== "all_time" || statusFilter !== "all" || forceFilter !== "all" || brandFilter !== "all") && (
+              {(searchQuery || startDate || endDate || period !== "all_time" || statusFilter !== "all" || forceFilter !== "all" || brandFilter !== "all") && (
                 <div className="col-auto">
                   <button
                     type="button"
-                    className="btn btn-link btn-sm text-danger text-decoration-none p-0"
+                    className="btn btn-outline-danger btn-sm"
                     onClick={() => {
                       setSearchQuery("");
+                      setStartDate("");
+                      setEndDate("");
                       setPeriod("all_time");
                       setStatusFilter("all");
                       setForceFilter("all");
                       setBrandFilter("all");
-                      setStartDate("");
-                      setEndDate("");
                       setCurrentPage(1);
                     }}
+                    title="Reset All Filters"
                   >
-                    <i className="bi bi-x-circle me-1"></i>Reset
+                    <i className="bi bi-x-circle me-1"></i> Reset
                   </button>
                 </div>
               )}
@@ -585,31 +599,21 @@ export default function SalesRegisterReportPage() {
             </table>
           </div>
 
-          {/* Pagination Footer */}
-          {totalPages > 1 && (
-            <div className="card-footer bg-white d-flex justify-content-between align-items-center py-2">
-              <span className="text-muted small">
-                Page {currentPage} of {totalPages}
-              </span>
-              <div className="btn-group btn-group-sm">
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary"
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                >
-                  Previous
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary"
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
+          {/* Pagination Controls */}
+          {!loading && filteredDeals.length > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              lastPage={lastPage}
+              total={totalDeals}
+              perPage={perPage}
+              onPageChange={(page) => setCurrentPage(page)}
+              onPerPageChange={(newPerPage) => {
+                setPerPage(newPerPage);
+                setCurrentPage(1);
+              }}
+              perPageOptions={[10, 20, 50, 100]}
+              itemName="deals"
+            />
           )}
         </div>
       </div>

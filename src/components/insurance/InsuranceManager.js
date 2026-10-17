@@ -20,7 +20,7 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
   const [pagination, setPagination] = useState({
     current_page: 1,
     last_page: 1,
-    per_page: 15,
+    per_page: 10,
     total: 0,
     from: 0,
     to: 0,
@@ -32,7 +32,7 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [perPage, setPerPage] = useState(15);
+  const [perPage, setPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
 
   // Available Deals for 1-Click Auto-Fill (Add Modal)
@@ -156,8 +156,8 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
       console.error("Failed to fetch reminders:", err);
       setErrorMessage(
         err.response?.data?.message ||
-          err.message ||
-          "Failed to load insurance renewal reminders"
+        err.message ||
+        "Failed to load insurance renewal reminders"
       );
     } finally {
       setIsLoading(false);
@@ -530,7 +530,7 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
         </div>
 
         {/* Stats Row (15-Day Reminder View) */}
-        <div className="row g-3 mb-4">
+        {/* <div className="row g-3 mb-4">
           <div className="col-6 col-md-3">
             <div className="card border-0 shadow-sm rounded-3 bg-white p-3 border-start border-warning border-4">
               <div className="d-flex justify-content-between align-items-center">
@@ -586,7 +586,7 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
               </div>
             </div>
           </div>
-        </div>
+        </div> */}
 
         {/* Filters Card */}
         <div className="card border-0 shadow-sm rounded-3 mb-4">
@@ -603,13 +603,19 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
                     className="form-control border-start-0"
                     placeholder="Search by customer, phone, vehicle no, policy no..."
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      setCurrentPage(1);
+                    }}
                   />
                   {searchTerm && (
                     <button
                       className="btn btn-outline-secondary"
                       type="button"
-                      onClick={() => setSearchTerm("")}
+                      onClick={() => {
+                        setSearchTerm("");
+                        setCurrentPage(1);
+                      }}
                     >
                       <i className="bi bi-x"></i>
                     </button>
@@ -645,32 +651,23 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
                 />
               </div>
 
-              {/* Reset & Per Page */}
-              <div className="col-12 col-md-3 d-flex gap-2">
-                <select
-                  className="form-select form-select-sm"
-                  style={{ width: "95px" }}
-                  value={perPage}
-                  onChange={(e) => {
-                    setPerPage(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                >
-                  <option value="15">15 / p</option>
-                  <option value="25">25 / p</option>
-                  <option value="50">50 / p</option>
-                </select>
-
-                {(searchTerm || fromDate || toDate) && (
+              {/* Reset Filters */}
+              {(searchTerm || fromDate || toDate) && (
+                <div className="col-12 col-md-3">
                   <button
-                    className="btn btn-outline-danger btn-sm flex-grow-1"
-                    onClick={handleResetFilters}
+                    className="btn btn-outline-danger btn-sm w-100"
+                    onClick={() => {
+                      setSearchTerm("");
+                      setFromDate("");
+                      setToDate("");
+                      setCurrentPage(1);
+                    }}
                     title="Reset Filters"
                   >
-                    <i className="bi bi-x-circle"></i> Reset
+                    <i className="bi bi-x-circle me-1"></i> Reset Filters
                   </button>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -846,18 +843,21 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
             </table>
           </div>
 
-          {/* Pagination */}
-          {!isLoading && insurances.length > 0 && pagination.last_page > 1 && (
-            <div className="card-footer bg-white border-top p-3 d-flex flex-column flex-md-row justify-content-between align-items-center gap-2">
-              <div className="text-muted small">
-                Showing {pagination.from} to {pagination.to} of {pagination.total} records
-              </div>
-              <Pagination
-                currentPage={currentPage}
-                totalPages={pagination.last_page}
-                onPageChange={(p) => setCurrentPage(p)}
-              />
-            </div>
+          {/* Pagination Controls */}
+          {!isLoading && insurances.length > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              lastPage={pagination.last_page || 1}
+              total={pagination.total || insurances.length}
+              perPage={perPage}
+              onPageChange={(page) => setCurrentPage(page)}
+              onPerPageChange={(newPerPage) => {
+                setPerPage(newPerPage);
+                setCurrentPage(1);
+              }}
+              perPageOptions={[10, 20, 50, 100]}
+              itemName="reminders"
+            />
           )}
         </div>
 
