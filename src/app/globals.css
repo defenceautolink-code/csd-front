@@ -3529,3 +3529,231 @@ h1.page-title.text-white {
 .modal-body-custom .dark-selection-box span {
     color: #FFFFFF !important;
 }
+
+/* ==========================================================================
+   FORGOT PASSWORD & RESET PASSWORD MODAL & PAGE STYLES
+   ========================================================================== */
+.btn-forgot-password-link {
+    background: transparent;
+    border: none;
+    color: var(--login-accent-orange, #EE6800);
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    padding: 0;
+    transition: all 0.2s ease;
+    text-decoration: none;
+}
+.btn-forgot-password-link:hover {
+    color: #c75600;
+    text-decoration: underline;
+}
+
+/* Forgot Password Modal */
+.forgot-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(15, 23, 42, 0.75);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    animation: fadeInForgotModal 0.25s ease-out forwards;
+}
+
+@keyframes fadeInForgotModal {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.forgot-modal-card {
+    background: #ffffff;
+    border: 1px solid var(--login-border, #D9DDCC);
+    border-radius: 16px;
+    width: 100%;
+    max-width: 460px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
+    overflow: hidden;
+    animation: scaleInForgotModal 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes scaleInForgotModal {
+    from { opacity: 0; transform: scale(0.95) translateY(10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.forgot-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.25rem 1.5rem 0.5rem 1.5rem;
+}
+
+.forgot-modal-icon-badge {
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+    background: rgba(88, 99, 42, 0.12);
+    color: var(--login-primary, #58632A);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.35rem;
+}
+
+.forgot-modal-close {
+    background: transparent;
+    border: none;
+    font-size: 1.1rem;
+    color: #64748B;
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.forgot-modal-close:hover {
+    background: #F1F5F9;
+    color: #0F172A;
+}
+
+.forgot-modal-body {
+    padding: 0.5rem 1.5rem 1.5rem 1.5rem;
+}
+
+.forgot-modal-title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #131C27;
+    margin-bottom: 0.35rem;
+}
+
+.forgot-modal-desc {
+    font-size: 0.88rem;
+    color: #64748B;
+    line-height: 1.5;
+    margin-bottom: 1.25rem;
+}
+
+.forgot-success-box {
+    text-align: center;
+    padding: 1rem 0 0.5rem 0;
+}
+
+.forgot-success-icon {
+    font-size: 3.2rem;
+    color: #10B981;
+    margin-bottom: 0.75rem;
+}
+
+.forgot-success-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #131C27;
+    margin-bottom: 0.5rem;
+}
+
+.forgot-success-text {
+    font-size: 0.92rem;
+    color: #475569;
+    margin-bottom: 1rem;
+}
+
+.forgot-success-notice {
+    background: #FEF3C7;
+    border: 1px solid #FDE68A;
+    color: #92400E;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-size: 0.84rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    text-align: left;
+    margin-bottom: 1rem;
+}
+
+/* Reset Password Page Styling */
+.reset-pass-wrapper {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at 50% 20%, #1A2737 0%, #131C27 60%, #0C121A 100%);
+    padding: 2rem 1rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.reset-pass-card {
+    background: #ffffff;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.4);
+    width: 100%;
+    max-width: 480px;
+    padding: 2.25rem 2rem;
+    position: relative;
+    z-index: 2;
+}
+
+.reset-pass-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: rgba(88, 99, 42, 0.12);
+    color: var(--login-primary, #58632A);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 4px 12px;
+    border-radius: 20px;
+    margin-bottom: 0.75rem;
+}
+
+.reset-pass-title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #131C27;
+    margin-bottom: 0.4rem;
+}
+
+.reset-pass-subtitle {
+    font-size: 0.88rem;
+    color: #64748B;
+    margin-bottom: 1.5rem;
+    line-height: 1.5;
+}
+
+.reset-pass-meta-box {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1.25rem;
+    font-size: 0.84rem;
+    color: #475569;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.reset-pass-meta-box strong {
+    color: #0F172A;
+}
+
+.reset-pass-expiry-tag {
+    background: #FEF3C7;
+    color: #92400E;
+    font-weight: 700;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 12px;
+}

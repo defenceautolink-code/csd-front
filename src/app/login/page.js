@@ -27,6 +27,13 @@ export default function LoginPage() {
   const [isCapsLockOn, setIsCapsLockOn] = useState(false);
   const [greeting, setGreeting] = useState("Good Day");
 
+  // Forgot Password Modal State
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState("");
+  const [forgotSuccess, setForgotSuccess] = useState("");
+
   // Dynamic Greeting & Clock & Expired Check
   useEffect(() => {
     const hour = new Date().getHours();
@@ -150,6 +157,41 @@ export default function LoginPage() {
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Forgot Password Handler
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    if (!forgotEmail) {
+      setForgotError("Please enter your registered email address.");
+      return;
+    }
+
+    setForgotLoading(true);
+    setForgotError("");
+    setForgotSuccess("");
+
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
+      const response = await axios.post(`${apiUrl}/auth/forgot-password`, {
+        email: forgotEmail.trim(),
+      });
+
+      if (response.data && response.data.status) {
+        setForgotSuccess(
+          response.data.message || "Password reset link has been sent to your email!"
+        );
+      }
+    } catch (error) {
+      console.log("Forgot Password Error:", error);
+      const msg =
+        error.response?.data?.message ||
+        error.response?.data?.errors?.email?.[0] ||
+        "Failed to send password reset email. Please try again.";
+      setForgotError(msg);
+    } finally {
+      setForgotLoading(false);
     }
   };
 
@@ -499,6 +541,19 @@ export default function LoginPage() {
                   Remember this device
                 </label>
               </div>
+
+              <button
+                type="button"
+                className="btn-forgot-password-link"
+                onClick={() => {
+                  setForgotEmail(email || "");
+                  setForgotError("");
+                  setForgotSuccess("");
+                  setShowForgotModal(true);
+                }}
+              >
+                Forgot Password?
+              </button>
             </div>
 
             <button type="submit" className="btn-login-submit" disabled={isLoading}>
@@ -547,7 +602,128 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
+
+      {/* ----------------------------------------------------
+          FORGOT PASSWORD POPUP MODAL
+          ---------------------------------------------------- */}
+      {showForgotModal && (
+        <div
+          className="forgot-modal-backdrop"
+          onClick={() => !forgotLoading && setShowForgotModal(false)}
+        >
+          <div className="forgot-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="forgot-modal-header">
+              <div className="forgot-modal-icon-badge">
+                <i className="bi bi-shield-lock-fill"></i>
+              </div>
+              <button
+                type="button"
+                className="forgot-modal-close"
+                onClick={() => !forgotLoading && setShowForgotModal(false)}
+                disabled={forgotLoading}
+                aria-label="Close"
+              >
+                <i className="bi bi-x-lg"></i>
+              </button>
+            </div>
+
+            <div className="forgot-modal-body">
+              <h3 className="forgot-modal-title">Reset Your Password</h3>
+              <p className="forgot-modal-desc">
+                Enter your registered work email address. We will send a secure password reset link valid for <strong>4 minutes</strong>.
+              </p>
+
+              {/* Error Alert Box */}
+              {forgotError && (
+                <div className="alert alert-danger py-2 px-3 small rounded-3 mb-3 d-flex align-items-center gap-2">
+                  <i className="bi bi-exclamation-circle-fill flex-shrink-0"></i>
+                  <span>{forgotError}</span>
+                </div>
+              )}
+
+              {/* Success Result View */}
+              {forgotSuccess ? (
+                <div className="forgot-success-box">
+                  <div className="forgot-success-icon">
+                    <i className="bi bi-check-circle-fill"></i>
+                  </div>
+                  <h4 className="forgot-success-title">Email Sent Successfully!</h4>
+                  <p className="forgot-success-text">
+                    A password reset link has been dispatched to <strong>{forgotEmail}</strong>.
+                  </p>
+                  <div className="forgot-success-notice">
+                    <i className="bi bi-clock-history"></i>
+                    <span>Please check your inbox & spam folder. The link will expire in <strong>4 minutes</strong>.</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-login-submit mt-3"
+                    onClick={() => setShowForgotModal(false)}
+                  >
+                    <span>Done / Back to Login</span>
+                    <i className="bi bi-arrow-right"></i>
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleForgotPassword}>
+                  <div className="custom-input-group mb-3">
+                    <div className="custom-input-header">
+                      <label>Work Email Address</label>
+                    </div>
+                    <div className="input-icon-box">
+                      <input
+                        type="email"
+                        className="form-control"
+                        placeholder="name@dealership.com"
+                        required
+                        value={forgotEmail}
+                        onChange={(e) => setForgotEmail(e.target.value)}
+                        disabled={forgotLoading}
+                        autoFocus
+                      />
+                      <i className="bi bi-envelope input-icon"></i>
+                    </div>
+                  </div>
+
+                  <div className="d-flex gap-2 mt-4">
+                    <button
+                      type="button"
+                      className="btn btn-light flex-grow-1 py-2 fw-semibold border"
+                      onClick={() => setShowForgotModal(false)}
+                      disabled={forgotLoading}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn-login-submit flex-grow-1"
+                      disabled={forgotLoading}
+                    >
+                      {forgotLoading ? (
+                        <>
+                          <span
+                            className="spinner-border spinner-border-sm"
+                            role="status"
+                            aria-hidden="true"
+                          ></span>
+                          <span>Sending Link...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Send Reset Link</span>
+                          <i className="bi bi-send-fill"></i>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
 
