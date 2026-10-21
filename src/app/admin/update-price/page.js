@@ -670,7 +670,7 @@ export default function UpdatePricePage() {
                       title="Select all on this page"
                     />
                   </th>
-                  <th style={{ width: "60px" }}>#</th>
+                  <th style={{ width: "60px" }}>No</th>
                   <th>Brand &amp; Vehicle Model</th>
                   <th>Variant Name</th>
                   <th style={{ minWidth: "150px" }} className="text-end">

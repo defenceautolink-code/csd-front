@@ -406,7 +406,7 @@ export default function ModelPage() {
             <table className="table table-custom">
               <thead>
                 <tr>
-                  <th style={{ width: "60px" }}>#</th>
+                  <th style={{ width: "60px" }}>No</th>
                   <th style={{ width: "90px" }} className="text-center">Actions</th>
                   <th>Model Name</th>
                   <th>Brand</th>

@@ -717,7 +717,7 @@ export default function ExpenseDetailPage() {
             <table className="table table-custom mb-0" style={{ width: "100%" }}>
               <thead>
                 <tr>
-                  <th style={{ width: "45px" }}>#</th>
+                  <th style={{ width: "45px" }}>No</th>
                   <th style={{ width: "65px" }} className="text-center">Actions</th>
                   <th style={{ width: "135px" }}>Invoice & Date</th>
                   <th>Expense Title</th>

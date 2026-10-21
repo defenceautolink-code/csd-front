@@ -92,6 +92,14 @@ export default function FollowUpPage() {
   const [endDate, setEndDate] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
+
+  const getTodayDate = () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
   const [activeActionMenuId, setActiveActionMenuId] = useState(null);
   const [showLogModal, setShowLogModal] = useState(false);
   const [selectedLead, setSelectedLead] = useState(null);
@@ -767,6 +775,7 @@ export default function FollowUpPage() {
             <table className="table table-custom align-middle mb-0">
               <thead>
                 <tr>
+                  <th style={{ width: "50px" }} className="text-center">No</th>
                   <th style={{ width: "65px" }} className="text-center">Action</th>
                   <th>Customer & Contact</th>
                   <th>Vehicle Interested</th>
@@ -778,22 +787,27 @@ export default function FollowUpPage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="6" className="text-center py-5">
+                    <td colSpan="7" className="text-center py-5">
                       <div className="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
                       <span className="text-muted small">Loading follow-ups...</span>
                     </td>
                   </tr>
                 ) : displayedList.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="text-center py-5 text-muted">
+                    <td colSpan="7" className="text-center py-5 text-muted">
                       <i className="bi bi-inbox fs-3 d-block mb-2 text-secondary"></i>
                       No follow-up records found for this filter.
                     </td>
                   </tr>
                 ) : (
-                  displayedList.map((item) => (
+                  displayedList.map((item, index) => (
                     <tr key={item.id}>
-                      {/* 1. Action First Column with 3-Dots Dropdown Menu */}
+                      <td className="text-center">
+                        <span className="text-muted small fw-semibold">
+                          {(currentPage - 1) * perPage + index + 1}
+                        </span>
+                      </td>
+                      {/* 1. Action Column with 3-Dots Dropdown Menu */}
                       <td className="text-center" onClick={(e) => e.stopPropagation()}>
                         <div className="dropdown position-relative d-inline-block">
                           <button
@@ -1125,8 +1139,22 @@ export default function FollowUpPage() {
                       <input
                         type="date"
                         className="form-control"
+                        min={getTodayDate()}
+                        onClick={(e) => {
+                          try {
+                            e.target.showPicker?.();
+                          } catch (err) {}
+                        }}
                         value={callLog.nextDate}
-                        onChange={(e) => setCallLog({ ...callLog, nextDate: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const today = getTodayDate();
+                          if (val && val < today) {
+                            setCallLog({ ...callLog, nextDate: today });
+                            return;
+                          }
+                          setCallLog({ ...callLog, nextDate: val });
+                        }}
                       />
                     </div>
 

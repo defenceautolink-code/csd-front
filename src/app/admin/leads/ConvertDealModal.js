@@ -18,6 +18,14 @@ export default function ConvertDealModal({
   const [leadQuotations, setLeadQuotations] = useState([]);
   const [isLoadingQuotes, setIsLoadingQuotes] = useState(false);
 
+  const getTodayDate = () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
+
   // Form State matching API specifications
   const [formData, setFormData] = useState({
     quotation_id: "",
@@ -631,8 +639,22 @@ export default function ConvertDealModal({
                   type="date"
                   className="form-control"
                   required
+                  min={getTodayDate()}
+                  onClick={(e) => {
+                    try {
+                      e.target.showPicker?.();
+                    } catch (err) {}
+                  }}
                   value={formData.expected_delivery_date}
-                  onChange={(e) => setFormData({ ...formData, expected_delivery_date: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const today = getTodayDate();
+                    if (val && val < today) {
+                      setFormData({ ...formData, expected_delivery_date: today });
+                      return;
+                    }
+                    setFormData({ ...formData, expected_delivery_date: val });
+                  }}
                 />
               </div>
             </div>
@@ -1040,8 +1062,22 @@ export default function ConvertDealModal({
                       <input
                         type="date"
                         className="form-control form-control-sm"
+                        min={getTodayDate()}
+                        onClick={(e) => {
+                          try {
+                            e.target.showPicker?.();
+                          } catch (err) {}
+                        }}
                         value={insuranceDetails.policy_start_date}
-                        onChange={(e) => handleInsuranceChange("policy_start_date", e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const today = getTodayDate();
+                          if (val && val < today) {
+                            handleInsuranceChange("policy_start_date", today);
+                            return;
+                          }
+                          handleInsuranceChange("policy_start_date", val);
+                        }}
                       />
                     </div>
 
@@ -1053,8 +1089,22 @@ export default function ConvertDealModal({
                       <input
                         type="date"
                         className="form-control form-control-sm"
+                        min={insuranceDetails.policy_start_date || getTodayDate()}
+                        onClick={(e) => {
+                          try {
+                            e.target.showPicker?.();
+                          } catch (err) {}
+                        }}
                         value={insuranceDetails.policy_expiry_date}
-                        onChange={(e) => handleInsuranceChange("policy_expiry_date", e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const minD = insuranceDetails.policy_start_date || getTodayDate();
+                          if (val && val < minD) {
+                            handleInsuranceChange("policy_expiry_date", minD);
+                            return;
+                          }
+                          handleInsuranceChange("policy_expiry_date", val);
+                        }}
                       />
                     </div>
 

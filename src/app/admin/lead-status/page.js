@@ -204,7 +204,7 @@ export default function LeadStatusPage() {
               <li className="breadcrumb-item">
                 <a href="#">Master Data</a>
               </li>
-              <li className="breadcrumb-item active">Lead Statuses</li>
+              <li className="breadcrumb-item active">Lead Status</li>
             </ul>
             <h1 className="page-title mt-1">Lead Status Master</h1>
           </div>
@@ -290,7 +290,7 @@ export default function LeadStatusPage() {
             <table className="table table-custom">
               <thead>
                 <tr>
-                  <th style={{ width: "60px" }}>#</th>
+                  <th style={{ width: "60px" }}>No</th>
                   <th style={{ width: "90px" }} className="text-center">Actions</th>
                   <th>Status Name</th>
                   <th>Status State</th>

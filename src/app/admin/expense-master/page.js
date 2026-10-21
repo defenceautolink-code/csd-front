@@ -255,7 +255,7 @@ export default function ExpenseMasterPage() {
             <table className="table table-custom mb-0">
               <thead>
                 <tr>
-                  <th style={{ width: "60px" }}>#</th>
+                  <th style={{ width: "60px" }}>No</th>
                   <th style={{ width: "90px" }} className="text-center">Actions</th>
                   <th style={{ width: "260px" }}>Expense Title</th>
                   <th>Description</th>

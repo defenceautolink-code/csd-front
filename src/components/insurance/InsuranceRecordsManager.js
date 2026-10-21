@@ -41,6 +41,7 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeActionMenuId, setActiveActionMenuId] = useState(null);
 
   // Edit Form State
   const [editForm, setEditForm] = useState({
@@ -62,6 +63,14 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
     renewal_status: "Pending",
     notes: "",
   });
+
+  const getTodayDate = () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
 
   // Renew Form State
   const [renewForm, setRenewForm] = useState({
@@ -128,6 +137,12 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
   useEffect(() => {
     fetchRecords();
   }, [fetchRecords]);
+
+  useEffect(() => {
+    const handleOutsideClick = () => setActiveActionMenuId(null);
+    window.addEventListener("click", handleOutsideClick);
+    return () => window.removeEventListener("click", handleOutsideClick);
+  }, []);
 
   // Compute KPI Counts
   const stats = useMemo(() => {
@@ -574,7 +589,8 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
             <table className="table table-hover align-middle mb-0" style={{ minWidth: "1050px" }}>
               <thead className="table-light">
                 <tr className="small text-uppercase text-muted fw-semibold">
-                  <th style={{ width: "60px" }}># ID</th>
+                  <th style={{ width: "50px" }} className="text-center">No</th>
+                  <th style={{ width: "70px" }} className="text-center">Actions</th>
                   <th>Customer Info</th>
                   <th>Vehicle Details</th>
                   <th>Insurance Details</th>
@@ -582,9 +598,6 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
                   <th>Premium</th>
                   <th>Reminder Date</th>
                   <th>Status</th>
-                  <th className="text-end pe-3" style={{ width: "160px" }}>
-                    Actions
-                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -606,16 +619,80 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
                     </td>
                   </tr>
                 ) : (
-                  records.map((r) => {
+                  records.map((r, index) => {
                     const vehicleNo = r.vehicle_number || r.registration_number;
                     const startDate = r.policy_start_date;
                     const expiryDate = r.policy_expiry_date;
 
                     return (
                       <tr key={r.id}>
-                        {/* ID */}
-                        <td>
-                          <span className="badge bg-light text-dark border fw-bold">#{r.id}</span>
+                        {/* 0. No */}
+                        <td className="text-center">
+                          <span className="text-muted small fw-semibold">
+                            {(currentPage - 1) * perPage + index + 1}
+                          </span>
+                        </td>
+
+                        {/* 1. Actions 3-Dots Dropdown */}
+                        <td className="text-center" onClick={(e) => e.stopPropagation()}>
+                          <div className="dropdown position-relative d-inline-block">
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-light border rounded-circle shadow-none p-0 d-inline-flex align-items-center justify-content-center"
+                              style={{ width: "32px", height: "32px", cursor: "pointer" }}
+                              title="Actions"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveActionMenuId(activeActionMenuId === r.id ? null : r.id);
+                              }}
+                            >
+                              <i className="bi bi-three-dots-vertical fs-6 text-dark"></i>
+                            </button>
+
+                            {activeActionMenuId === r.id && (
+                              <div
+                                className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute start-0 text-start"
+                                style={{
+                                  minWidth: "160px",
+                                  zIndex: 1050,
+                                  top: "100%",
+                                  backgroundColor: "#FFFFFF",
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <button
+                                  type="button"
+                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-primary"
+                                  onClick={() => {
+                                    setActiveActionMenuId(null);
+                                    handleOpenEdit(r);
+                                  }}
+                                >
+                                  <i className="bi bi-pencil-square"></i> Edit Record
+                                </button>
+                                <button
+                                  type="button"
+                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-success"
+                                  onClick={() => {
+                                    setActiveActionMenuId(null);
+                                    handleOpenRenew(r);
+                                  }}
+                                >
+                                  <i className="bi bi-arrow-repeat"></i> Renew Policy
+                                </button>
+                                <button
+                                  type="button"
+                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-secondary"
+                                  onClick={() => {
+                                    setActiveActionMenuId(null);
+                                    handleOpenView(r);
+                                  }}
+                                >
+                                  <i className="bi bi-eye"></i> View Details
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </td>
 
                         {/* Customer Info */}
@@ -695,36 +772,6 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
 
                         {/* Status */}
                         <td>{renderStatusBadge(r)}</td>
-
-                        {/* Actions */}
-                        <td className="text-end pe-3">
-                          <div className="btn-group btn-group-sm">
-                            <button
-                              type="button"
-                              className="btn btn-outline-primary"
-                              title="Edit Record"
-                              onClick={() => handleOpenEdit(r)}
-                            >
-                              <i className="bi bi-pencil-square"></i>
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-outline-success"
-                              title="Renew Policy"
-                              onClick={() => handleOpenRenew(r)}
-                            >
-                              <i className="bi bi-arrow-repeat"></i>
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-outline-secondary"
-                              title="View Details"
-                              onClick={() => handleOpenView(r)}
-                            >
-                              <i className="bi bi-eye"></i>
-                            </button>
-                          </div>
-                        </td>
                       </tr>
                     );
                   })
@@ -1130,10 +1177,21 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
                         <input
                           type="date"
                           className="form-control form-control-sm"
+                          min={getTodayDate()}
+                          onClick={(e) => {
+                            try {
+                              e.target.showPicker?.();
+                            } catch (err) {}
+                          }}
                           value={renewForm.policy_start_date}
-                          onChange={(e) =>
-                            setRenewForm({ ...renewForm, policy_start_date: e.target.value })
-                          }
+                          onChange={(e) => {
+                            let val = e.target.value;
+                            const today = getTodayDate();
+                            if (val && val < today) {
+                              val = today;
+                            }
+                            setRenewForm({ ...renewForm, policy_start_date: val });
+                          }}
                           required
                         />
                       </div>
@@ -1145,10 +1203,21 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
                         <input
                           type="date"
                           className="form-control form-control-sm"
+                          min={renewForm.policy_start_date || getTodayDate()}
+                          onClick={(e) => {
+                            try {
+                              e.target.showPicker?.();
+                            } catch (err) {}
+                          }}
                           value={renewForm.policy_expiry_date}
-                          onChange={(e) =>
-                            setRenewForm({ ...renewForm, policy_expiry_date: e.target.value })
-                          }
+                          onChange={(e) => {
+                            let val = e.target.value;
+                            const minD = renewForm.policy_start_date || getTodayDate();
+                            if (val && val < minD) {
+                              val = minD;
+                            }
+                            setRenewForm({ ...renewForm, policy_expiry_date: val });
+                          }}
                           required
                         />
                       </div>

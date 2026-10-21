@@ -684,7 +684,7 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                   onClick={onCloseMobile}
                 >
                   <i className="bi bi-tags-fill"></i>
-                  <span>Lead Statuses</span>
+                  <span>Lead Status</span>
                 </Link>
               </li>
             </ul>
