@@ -1220,11 +1220,11 @@ function SendQuotationPageContent() {
                   }}
                 >
                   <thead>
-                    {/* Header Row: CAR: ... | MODEL: ... | N.A */}
+                    {/* Header Row: CAR: ... | MODEL: ... */}
                     <tr style={{ background: "#94a3b8", color: "#0f172a" }}>
                       <th
                         style={{
-                          width: "44%",
+                          width: "55%",
                           border: "1px solid #334155",
                           padding: "10px 12px",
                           fontWeight: "800",
@@ -1235,7 +1235,7 @@ function SendQuotationPageContent() {
                       </th>
                       <th
                         style={{
-                          width: "36%",
+                          width: "45%",
                           border: "1px solid #334155",
                           padding: "10px 12px",
                           textAlign: "center",
@@ -1244,17 +1244,6 @@ function SendQuotationPageContent() {
                         }}
                       >
                         MODEL: {modelSpec}
-                      </th>
-                      <th
-                        style={{
-                          width: "20%",
-                          border: "1px solid #334155",
-                          padding: "10px 12px",
-                          textAlign: "center",
-                          fontWeight: "800",
-                        }}
-                      >
-                        {modelCol3}
                       </th>
                     </tr>
                   </thead>
@@ -1282,15 +1271,6 @@ function SendQuotationPageContent() {
                       >
                         {variantCol2}
                       </td>
-                      <td
-                        style={{
-                          border: "1px solid #334155",
-                          padding: "8px 12px",
-                          textAlign: "center",
-                        }}
-                      >
-                        {variantCol3}
-                      </td>
                     </tr>
 
                     {/* CSD PRICE */}
@@ -1298,9 +1278,6 @@ function SendQuotationPageContent() {
                       <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>CSD PRICE</td>
                       <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center", fontWeight: "700" }}>
                         {csdPrice}
-                      </td>
-                      <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                        {col3CsdPrice}
                       </td>
                     </tr>
 
@@ -1310,9 +1287,6 @@ function SendQuotationPageContent() {
                       <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
                         {gjRto}
                       </td>
-                      <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                        {col3GjRto}
-                      </td>
                     </tr>
 
                     {/* BH RTO * APPOROX */}
@@ -1320,9 +1294,6 @@ function SendQuotationPageContent() {
                       <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>BH RTO * APPOROX</td>
                       <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
                         {bhRto}
-                      </td>
-                      <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                        {col3BhRto}
                       </td>
                     </tr>
 
@@ -1332,9 +1303,6 @@ function SendQuotationPageContent() {
                       <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
                         {crtm}
                       </td>
-                      <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                        {col3Crtm}
-                      </td>
                     </tr>
 
                     {/* INSURANCE */}
@@ -1342,9 +1310,6 @@ function SendQuotationPageContent() {
                       <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>INSURANCE</td>
                       <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
                         {insurance}
-                      </td>
-                      <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                        {col3Insurance}
                       </td>
                     </tr>
 
@@ -1354,9 +1319,6 @@ function SendQuotationPageContent() {
                       <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center", fontWeight: "700" }}>
                         {accessories}
                       </td>
-                      <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                        {col3Accessories}
-                      </td>
                     </tr>
 
                     {/* WARRANTY */}
@@ -1364,9 +1326,6 @@ function SendQuotationPageContent() {
                       <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>WARRANTY</td>
                       <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
                         {warranty}
-                      </td>
-                      <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                        {col3Warranty}
                       </td>
                     </tr>
 
@@ -1376,9 +1335,6 @@ function SendQuotationPageContent() {
                       <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
                         {msReward}
                       </td>
-                      <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                        {col3MsReward}
-                      </td>
                     </tr>
 
                     {/* DIFFERENCE AMT CASH */}
@@ -1386,9 +1342,6 @@ function SendQuotationPageContent() {
                       <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>DIFFERENCE AMT CASH</td>
                       <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
                         {diffAmtCash}
-                      </td>
-                      <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                        {col3DiffAmtCash}
                       </td>
                     </tr>
 
@@ -1399,9 +1352,6 @@ function SendQuotationPageContent() {
                       </td>
                       <td style={{ border: "1px solid #334155", padding: "10px 12px", textAlign: "center", fontWeight: "800", color: "#b91c1c", fontSize: "1.05rem" }}>
                         ₹ {totalCol1.toLocaleString("en-IN")}/-
-                      </td>
-                      <td style={{ border: "1px solid #334155", padding: "10px 12px", textAlign: "center" }}>
-                        {totalCol2 > 0 ? `₹ ${totalCol2.toLocaleString("en-IN")}/-` : "N.A"}
                       </td>
                     </tr>
                   </tbody>

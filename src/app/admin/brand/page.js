@@ -55,6 +55,7 @@ export default function BrandPage() {
   const [editBrand, setEditBrand] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [logoError, setLogoError] = useState("");
 
   // Form State for Adding Brand (matches user screenshot)
   const [formData, setFormData] = useState({
@@ -141,6 +142,12 @@ export default function BrandPage() {
       showToast("Please enter a brand name.", "error");
       return;
     }
+    if (!formData.logo) {
+      setLogoError("Brand logo image is required.");
+      showToast("Brand logo image is required. Please upload a logo.", "error");
+      return;
+    }
+    setLogoError("");
 
     setIsSubmitting(true);
     try {
@@ -322,6 +329,7 @@ export default function BrandPage() {
                   logo: null,
                   status: "Active",
                 });
+                setLogoError("");
                 setShowAddModal(true);
               }}
             >
@@ -413,7 +421,7 @@ export default function BrandPage() {
             <table className="table table-custom">
               <thead>
                 <tr>
-                  <th style={{ width: "60px" }}>#</th>
+                  <th style={{ width: "60px" }}>No</th>
                   <th style={{ width: "90px" }} className="text-center">Actions</th>
                   <th>Brand Name</th>
                   <th>Vehicle Types</th>
@@ -637,13 +645,22 @@ export default function BrandPage() {
                     </label>
                     <input
                       type="file"
-                      className="form-control"
+                      className={`form-control ${logoError ? "is-invalid" : ""}`}
                       accept="image/png, image/jpeg, image/svg+xml"
-                      onChange={(e) => setFormData({ ...formData, logo: e.target.files[0] })}
+                      onChange={(e) => {
+                        setLogoError("");
+                        setFormData({ ...formData, logo: e.target.files[0] });
+                      }}
                     />
-                    <small className="text-muted d-block mt-1" style={{ fontSize: "12px" }}>
-                      Upload PNG, JPG, or SVG logo file.
-                    </small>
+                    {logoError ? (
+                      <div className="invalid-feedback d-block fw-semibold" style={{ fontSize: "12px" }}>
+                        <i className="bi bi-exclamation-circle me-1"></i>{logoError}
+                      </div>
+                    ) : (
+                      <small className="text-muted d-block mt-1" style={{ fontSize: "12px" }}>
+                        Upload PNG, JPG, or SVG logo file.
+                      </small>
+                    )}
                   </div>
 
                   {/* Status */}

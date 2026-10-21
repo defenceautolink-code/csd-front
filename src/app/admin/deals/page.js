@@ -81,6 +81,14 @@ export default function DealsPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const getTodayDate = () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
+
   // View Deal / Ledger Modal State
   const [viewDeal, setViewDeal] = useState(null);
   const [isVerifyingPaymentId, setIsVerifyingPaymentId] = useState(null);
@@ -799,8 +807,9 @@ export default function DealsPage() {
             <table className="table table-custom align-middle mb-0">
               <thead className="border-bottom border-secondary border-opacity-25 text-secondary small text-uppercase">
                 <tr>
+                  <th style={{ width: "50px" }} className="text-center">No</th>
                   <th style={{ width: "70px" }} className="text-center">Action</th>
-                  <th style={{ width: "100px" }}># Deal</th>
+                  <th style={{ width: "100px" }}>Deal No</th>
                   <th>Customer</th>
                   <th>Vehicle & Spec</th>
                   <th>Deal Financials</th>
@@ -812,14 +821,14 @@ export default function DealsPage() {
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan="8" className="text-center py-4 text-muted">
+                    <td colSpan="9" className="text-center py-4 text-muted">
                       <div className="spinner-border spinner-border-sm me-2" role="status"></div>
                       Loading deals from database...
                     </td>
                   </tr>
                 ) : deals.length === 0 ? (
                   <tr>
-                    <td colSpan="8" className="text-center py-5 text-muted">
+                    <td colSpan="9" className="text-center py-5 text-muted">
                       <div className="mb-2">
                         <i className="bi bi-trophy fs-1 text-secondary opacity-50"></i>
                       </div>
@@ -830,13 +839,18 @@ export default function DealsPage() {
                     </td>
                   </tr>
                 ) : (
-                  deals.map((deal) => {
+                  deals.map((deal, index) => {
                     const pctPaid = Math.min(
                       100,
                       Math.round(((deal.paid_amount || 0) / (deal.net_amount || 1)) * 100)
                     );
                     return (
                       <tr key={deal.id}>
+                        <td className="text-center">
+                          <span className="text-muted small fw-semibold">
+                            {(currentPage - 1) * perPage + index + 1}
+                          </span>
+                        </td>
                         {/* 1. Action First Column with 3-Dots Menu */}
                         <td className="text-center" onClick={(e) => e.stopPropagation()}>
                           <div className="dropdown position-relative d-inline-block">
@@ -1597,8 +1611,22 @@ export default function DealsPage() {
                       <input
                         type="date"
                         className="form-control"
+                        min={getTodayDate()}
+                        onClick={(e) => {
+                          try {
+                            e.target.showPicker?.();
+                          } catch (err) {}
+                        }}
                         value={updateForm.expected_delivery_date}
-                        onChange={(e) => setUpdateForm({ ...updateForm, expected_delivery_date: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const today = getTodayDate();
+                          if (val && val < today) {
+                            setUpdateForm({ ...updateForm, expected_delivery_date: today });
+                            return;
+                          }
+                          setUpdateForm({ ...updateForm, expected_delivery_date: val });
+                        }}
                       />
                     </div>
 

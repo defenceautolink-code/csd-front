@@ -1391,7 +1391,7 @@ export default function QuotationMainPage() {
                       <tr style={{ background: "#94a3b8", color: "#0f172a" }}>
                         <th
                           style={{
-                            width: "44%",
+                            width: "55%",
                             border: "1px solid #334155",
                             padding: "10px 12px",
                             fontWeight: "800",
@@ -1402,7 +1402,7 @@ export default function QuotationMainPage() {
                         </th>
                         <th
                           style={{
-                            width: "36%",
+                            width: "45%",
                             border: "1px solid #334155",
                             padding: "10px 12px",
                             textAlign: "center",
@@ -1411,17 +1411,6 @@ export default function QuotationMainPage() {
                           }}
                         >
                           MODEL: {modelSpec}
-                        </th>
-                        <th
-                          style={{
-                            width: "20%",
-                            border: "1px solid #334155",
-                            padding: "10px 12px",
-                            textAlign: "center",
-                            fontWeight: "800",
-                          }}
-                        >
-                          {modelCol3}
                         </th>
                       </tr>
                     </thead>
@@ -1449,15 +1438,6 @@ export default function QuotationMainPage() {
                         >
                           {variantCol2}
                         </td>
-                        <td
-                          style={{
-                            border: "1px solid #334155",
-                            padding: "8px 12px",
-                            textAlign: "center",
-                          }}
-                        >
-                          {variantCol3}
-                        </td>
                       </tr>
 
                       {/* CSD PRICE */}
@@ -1465,9 +1445,6 @@ export default function QuotationMainPage() {
                         <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>CSD PRICE</td>
                         <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center", fontWeight: "700" }}>
                           {csdPrice}
-                        </td>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                          {col3CsdPrice}
                         </td>
                       </tr>
 
@@ -1477,9 +1454,6 @@ export default function QuotationMainPage() {
                         <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
                           {gjRto}
                         </td>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                          {col3GjRto}
-                        </td>
                       </tr>
 
                       {/* BH RTO * APPOROX */}
@@ -1487,9 +1461,6 @@ export default function QuotationMainPage() {
                         <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>BH RTO * APPOROX</td>
                         <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
                           {bhRto}
-                        </td>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                          {col3BhRto}
                         </td>
                       </tr>
 
@@ -1499,9 +1470,6 @@ export default function QuotationMainPage() {
                         <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
                           {crtm}
                         </td>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                          {col3Crtm}
-                        </td>
                       </tr>
 
                       {/* INSURANCE */}
@@ -1509,9 +1477,6 @@ export default function QuotationMainPage() {
                         <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>INSURANCE</td>
                         <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
                           {insurance}
-                        </td>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                          {col3Insurance}
                         </td>
                       </tr>
 
@@ -1521,9 +1486,6 @@ export default function QuotationMainPage() {
                         <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center", fontWeight: "700" }}>
                           {accessories}
                         </td>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                          {col3Accessories}
-                        </td>
                       </tr>
 
                       {/* WARRANTY */}
@@ -1531,9 +1493,6 @@ export default function QuotationMainPage() {
                         <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>WARRANTY</td>
                         <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
                           {warranty}
-                        </td>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                          {col3Warranty}
                         </td>
                       </tr>
 
@@ -1543,9 +1502,6 @@ export default function QuotationMainPage() {
                         <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
                           {msReward}
                         </td>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                          {col3MsReward}
-                        </td>
                       </tr>
 
                       {/* DIFFERENCE AMT CASH */}
@@ -1553,9 +1509,6 @@ export default function QuotationMainPage() {
                         <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>DIFFERENCE AMT CASH</td>
                         <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
                           {diffAmtCash}
-                        </td>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                          {col3DiffAmtCash}
                         </td>
                       </tr>
 
@@ -1566,9 +1519,6 @@ export default function QuotationMainPage() {
                         </td>
                         <td style={{ border: "1px solid #334155", padding: "10px 12px", textAlign: "center", fontWeight: "800", color: "#b91c1c", fontSize: "1.05rem" }}>
                           ₹ {totalCol1.toLocaleString("en-IN")}/-
-                        </td>
-                        <td style={{ border: "1px solid #334155", padding: "10px 12px", textAlign: "center" }}>
-                          N.A
                         </td>
                       </tr>
                     </tbody>
@@ -1716,8 +1666,9 @@ export default function QuotationMainPage() {
               <table className="table table-custom align-middle mb-0">
                 <thead className="border-bottom border-secondary border-opacity-25 text-secondary small text-uppercase">
                   <tr>
+                    <th className="py-3 px-3 text-center" style={{ width: "50px" }}>No</th>
                     <th className="py-3 px-3 text-center" style={{ width: "85px" }}>Actions</th>
-                    <th className="py-3 px-3">Quotation #</th>
+                    <th className="py-3 px-3">Quotation No</th>
                     <th className="py-3 px-3">Customer</th>
                     <th className="py-3 px-3">Subject / Vehicle</th>
                     <th className="py-3 px-3">Date</th>
@@ -1728,20 +1679,27 @@ export default function QuotationMainPage() {
                 <tbody>
                   {isLoadingQuotes ? (
                     <tr>
-                      <td colSpan="7" className="text-center py-4 text-muted">
+                      <td colSpan="8" className="text-center py-4 text-muted">
                         <div className="spinner-border spinner-border-sm me-2" role="status"></div>
                         Loading quotations...
                       </td>
                     </tr>
                   ) : quotations.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="text-center py-4 text-muted">
+                      <td colSpan="8" className="text-center py-4 text-muted">
                         No saved quotations found.
                       </td>
                     </tr>
                   ) : (
-                    quotations.map((quote) => (
+                    quotations.map((quote, index) => (
                       <tr key={quote.id} className="border-bottom border-secondary border-opacity-10">
+                        {/* 0. No Column */}
+                        <td className="py-3 px-3 text-center">
+                          <span className="text-muted small fw-semibold">
+                            {index + 1}
+                          </span>
+                        </td>
+
                         {/* 1. Actions First Column */}
                         <td className="py-3 px-3 text-center">
                           <div className="d-flex align-items-center justify-content-center gap-1">

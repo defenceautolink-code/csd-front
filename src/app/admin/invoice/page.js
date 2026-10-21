@@ -54,6 +54,7 @@ export default function GenerateInvoicePage() {
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
   const [selectedDealForMultiView, setSelectedDealForMultiView] = useState(null);
   const [selectedInvoiceForSingleView, setSelectedInvoiceForSingleView] = useState(null);
+  const [activeActionMenuId, setActiveActionMenuId] = useState(null);
 
   // Deal Selector Dropdown inside "Generate Invoice" Modal
   const [selectedDealId, setSelectedDealId] = useState("");
@@ -91,6 +92,7 @@ export default function GenerateInvoicePage() {
   // Close dropdown on click outside
   useEffect(() => {
     const handleDocClick = (e) => {
+      setActiveActionMenuId(null);
       if (dealDropdownRef.current && !dealDropdownRef.current.contains(e.target)) {
         setIsDealDropdownOpen(false);
       }
@@ -895,8 +897,9 @@ export default function GenerateInvoicePage() {
               <table className="table align-middle mb-0 table-hover">
                 <thead className="table-light small text-uppercase">
                   <tr>
-                    <th className="px-3" style={{ width: "175px" }}>Actions</th>
-                    <th style={{ width: "110px" }}># Deal</th>
+                    <th className="px-3 text-center" style={{ width: "50px" }}>No</th>
+                    <th className="text-center" style={{ width: "70px" }}>Actions</th>
+                    <th style={{ width: "120px" }}>Deal No</th>
                     <th>Customer</th>
                     <th>Vehicle & Spec</th>
                     <th>Deal Financials</th>
@@ -909,51 +912,83 @@ export default function GenerateInvoicePage() {
                 <tbody style={{ fontSize: "0.9rem" }}>
                   {isLoadingDeals ? (
                     <tr>
-                      <td colSpan="9" className="text-center py-5 text-muted">
+                      <td colSpan="10" className="text-center py-5 text-muted">
                         <div className="spinner-border spinner-border-sm me-2" role="status"></div>
                         Loading vehicle deals & invoices...
                       </td>
                     </tr>
                   ) : filteredDeals.length === 0 ? (
                     <tr>
-                      <td colSpan="9" className="text-center py-5 text-muted">
+                      <td colSpan="10" className="text-center py-5 text-muted">
                         <i className="bi bi-inbox fs-1 d-block mb-2 text-secondary opacity-50"></i>
                         No vehicle deals found matching criteria.
                       </td>
                     </tr>
                   ) : (
-                    paginatedDeals.map((deal) => {
+                    paginatedDeals.map((deal, index) => {
                       const pctPaid = deal.computedPercentPaid || 0;
                       return (
                         <tr key={deal.id || deal.deal_number}>
-                          {/* 1. Actions */}
-                          <td className="px-3">
-                            <div className="d-flex align-items-center gap-2">
-                              {deal.computedBalanceDue > 0 && (
-                                <button
-                                  type="button"
-                                  className="btn btn-sm text-white fw-bold d-inline-flex align-items-center gap-1.5 shadow-sm px-2.5 py-1"
-                                  style={{
-                                    backgroundColor: "var(--primary, #58632A)",
-                                    borderColor: "var(--primary, #58632A)",
-                                    fontSize: "0.8rem",
-                                  }}
-                                  onClick={() => handleOpenGenerateForDeal(deal)}
-                                  title="Add next invoice installment"
-                                >
-                                  <i className="bi bi-plus-circle"></i>
-                                  <span>Add Bill</span>
-                                </button>
-                              )}
+                          {/* 0. No */}
+                          <td className="px-3 text-center text-muted small fw-semibold">
+                            {(dealsPage - 1) * dealsPerPage + index + 1}
+                          </td>
 
+                          {/* 1. Actions 3-Dots Dropdown */}
+                          <td className="text-center" onClick={(e) => e.stopPropagation()}>
+                            <div className="dropdown position-relative d-inline-block">
                               <button
                                 type="button"
-                                className="btn btn-sm btn-light border d-inline-flex align-items-center shadow-none px-2.5 py-1"
-                                onClick={() => setSelectedDealForMultiView(deal)}
-                                title="View Deal Ledger"
+                                className="btn btn-sm btn-light border rounded-circle shadow-none p-0 d-inline-flex align-items-center justify-content-center"
+                                style={{ width: "32px", height: "32px", cursor: "pointer" }}
+                                title="Actions"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveActionMenuId(
+                                    activeActionMenuId === (deal.id || deal.deal_number)
+                                      ? null
+                                      : (deal.id || deal.deal_number)
+                                  );
+                                }}
                               >
-                                <i className="bi bi-eye"></i>
+                                <i className="bi bi-three-dots-vertical fs-6 text-dark"></i>
                               </button>
+
+                              {activeActionMenuId === (deal.id || deal.deal_number) && (
+                                <div
+                                  className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute start-0 text-start"
+                                  style={{
+                                    minWidth: "160px",
+                                    zIndex: 1050,
+                                    top: "100%",
+                                    backgroundColor: "#FFFFFF",
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {deal.computedBalanceDue > 0 && (
+                                    <button
+                                      type="button"
+                                      className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-primary"
+                                      onClick={() => {
+                                        setActiveActionMenuId(null);
+                                        handleOpenGenerateForDeal(deal);
+                                      }}
+                                    >
+                                      <i className="bi bi-plus-circle"></i> Add Bill
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-secondary"
+                                    onClick={() => {
+                                      setActiveActionMenuId(null);
+                                      setSelectedDealForMultiView(deal);
+                                    }}
+                                  >
+                                    <i className="bi bi-eye"></i> View Ledger
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           </td>
 
@@ -1129,8 +1164,8 @@ export default function GenerateInvoicePage() {
               <table className="table align-middle mb-0 table-hover">
                 <thead className="table-light small text-uppercase">
                   <tr>
-                    <th className="py-3 px-3" style={{ width: "50px" }}>#</th>
-                    <th className="py-3 px-3" style={{ width: "130px" }}>Action</th>
+                    <th className="py-3 px-3" style={{ width: "50px" }}>No</th>
+                    <th className="py-3 px-3 text-center" style={{ width: "70px" }}>Action</th>
                     <th className="py-3">Invoice No</th>
                     <th className="py-3">Date & Time</th>
                     <th className="py-3">Deal Number</th>
@@ -1157,17 +1192,50 @@ export default function GenerateInvoicePage() {
                           {(invoicesPage - 1) * invoicesPerPage + index + 1}
                         </td>
 
-                        {/* Action */}
-                        <td className="px-3">
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline-dark d-inline-flex align-items-center gap-1 shadow-sm px-2.5 py-1"
-                            onClick={() => setSelectedInvoiceForSingleView(inv)}
-                            title="View / Print Tax Invoice Voucher"
-                          >
-                            <i className="bi bi-file-earmark-text text-primary"></i>
-                            <span>View Bill</span>
-                          </button>
+                        {/* Action 3-Dots Dropdown */}
+                        <td className="px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          <div className="dropdown position-relative d-inline-block">
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-light border rounded-circle shadow-none p-0 d-inline-flex align-items-center justify-content-center"
+                              style={{ width: "32px", height: "32px", cursor: "pointer" }}
+                              title="Actions"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveActionMenuId(
+                                  activeActionMenuId === (inv.id || inv.invoiceNo)
+                                    ? null
+                                    : (inv.id || inv.invoiceNo)
+                                );
+                              }}
+                            >
+                              <i className="bi bi-three-dots-vertical fs-6 text-dark"></i>
+                            </button>
+
+                            {activeActionMenuId === (inv.id || inv.invoiceNo) && (
+                              <div
+                                className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute start-0 text-start"
+                                style={{
+                                  minWidth: "150px",
+                                  zIndex: 1050,
+                                  top: "100%",
+                                  backgroundColor: "#FFFFFF",
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <button
+                                  type="button"
+                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-primary"
+                                  onClick={() => {
+                                    setActiveActionMenuId(null);
+                                    setSelectedInvoiceForSingleView(inv);
+                                  }}
+                                >
+                                  <i className="bi bi-file-earmark-text"></i> View Bill
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </td>
 
                         {/* Invoice No */}

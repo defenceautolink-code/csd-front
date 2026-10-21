@@ -54,6 +54,14 @@ export default function LeadDetailPage() {
     discount_reason: "",
   });
 
+  const getTodayDate = () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
+
   // Quotations state
   const [quotations, setQuotations] = useState([]);
   const [isLoadingQuotations, setIsLoadingQuotations] = useState(false);
@@ -1045,8 +1053,22 @@ export default function LeadDetailPage() {
                       <input
                         type="date"
                         className="form-control"
+                        min={getTodayDate()}
+                        onClick={(e) => {
+                          try {
+                            e.target.showPicker?.();
+                          } catch (err) {}
+                        }}
                         value={followUpForm.next_follow_up_date}
-                        onChange={(e) => setFollowUpForm({ ...followUpForm, next_follow_up_date: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const today = getTodayDate();
+                          if (val && val < today) {
+                            setFollowUpForm({ ...followUpForm, next_follow_up_date: today });
+                            return;
+                          }
+                          setFollowUpForm({ ...followUpForm, next_follow_up_date: val });
+                        }}
                       />
                     </div>
 

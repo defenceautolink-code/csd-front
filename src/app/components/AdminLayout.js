@@ -13,6 +13,7 @@ import {
   getClientAuthCache,
   setClientAuthCache,
 } from "@/utils/auth";
+import api from "@/lib/axios";
 
 function AdminLayoutInner({ children }) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -106,10 +107,29 @@ function AdminLayoutInner({ children }) {
     // Periodic check (1s) to immediately catch localStorage.clear() in active tab DevTools
     const interval = setInterval(verifyAuth, 1000);
 
+    // Live Server Heartbeat: Verify user is not deleted or deactivated in database
+    const checkLiveSession = async () => {
+      if (typeof window === "undefined") return;
+      const token = localStorage.getItem("auth_token") || localStorage.getItem("token");
+      if (!token) return;
+
+      try {
+        await api.get("/auth/profile");
+      } catch (err) {
+        // If user is deleted or token revoked, 401 is caught by axios.js and automatically logs out
+      }
+    };
+
+    // Check live status on tab focus and every 15 seconds
+    const heartbeatTimer = setInterval(checkLiveSession, 15000);
+    window.addEventListener("focus", checkLiveSession);
+
     return () => {
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener("focus", verifyAuth);
+      window.removeEventListener("focus", checkLiveSession);
       clearInterval(interval);
+      clearInterval(heartbeatTimer);
     };
   }, [pathname, router]);
 

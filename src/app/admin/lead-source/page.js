@@ -6,6 +6,7 @@ import axios from "axios";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
 import Pagination from "@/components/common/Pagination";
+import * as XLSX from "xlsx";
 
 export default function LeadSourcePage() {
   const { showToast } = useToast();
@@ -88,6 +89,57 @@ export default function LeadSourcePage() {
     fetchLeadSources();
     fetchSourceStats();
   }, [currentPage, perPage, searchTerm]);
+
+  // Export to Excel handler
+  const [isExporting, setIsExporting] = useState(false);
+  const handleExportExcel = async () => {
+    setIsExporting(true);
+    try {
+      showToast("Preparing lead sources Excel sheet...", "info");
+      const response = await axios.get(`${API_URL}/lead-sources`, {
+        params: { all: true },
+      });
+
+      let dataToExport = [];
+      if (response.data && response.data.status && Array.isArray(response.data.data)) {
+        dataToExport = response.data.data;
+      } else {
+        dataToExport = leadSources;
+      }
+
+      if (dataToExport.length === 0) {
+        showToast("No lead sources available to export.", "warning");
+        setIsExporting(false);
+        return;
+      }
+
+      const rows = dataToExport.map((source, index) => ({
+        "Sr No": index + 1,
+        "Source Title": source.title || "",
+        "Status": source.status || "Active",
+        "Created Date": source.created_at ? new Date(source.created_at).toLocaleDateString("en-IN") : "",
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws["!cols"] = [
+        { wch: 8 },
+        { wch: 30 },
+        { wch: 15 },
+        { wch: 18 },
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Lead Sources");
+      const fileName = `Lead_Sources_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+
+      showToast("Lead Sources Excel file downloaded successfully!", "success");
+    } catch (error) {
+      console.error("Export Error:", error);
+      showToast("Failed to export lead sources to Excel.", "error");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   // 3. Create (Store) Lead Source
   const handleAddSubmit = async (e) => {
@@ -212,10 +264,11 @@ export default function LeadSourcePage() {
           <div className="page-header-actions d-flex align-items-center gap-2">
             <button
               className="btn btn-outline-custom"
-              onClick={() => showToast("Exporting lead sources catalog as CSV...", "info")}
+              onClick={handleExportExcel}
+              disabled={isExporting}
             >
-              <i className="bi bi-file-earmark-arrow-down"></i>
-              <span>Export CSV</span>
+              <i className={`bi ${isExporting ? "bi-hourglass-split" : "bi-file-earmark-excel"} text-success`}></i>
+              <span>{isExporting ? "Exporting..." : "Export Excel"}</span>
             </button>
             <button
               className="btn btn-primary"
@@ -290,7 +343,7 @@ export default function LeadSourcePage() {
             <table className="table table-custom">
               <thead>
                 <tr>
-                  <th style={{ width: "60px" }}>#</th>
+                  <th style={{ width: "60px" }}>No</th>
                   <th style={{ width: "90px" }} className="text-center">Actions</th>
                   <th>Source Title</th>
                   <th>Status</th>
