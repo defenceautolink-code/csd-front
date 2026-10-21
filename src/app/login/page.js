@@ -48,7 +48,7 @@ export default function LoginPage() {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       if (params.get("expired") === "1") {
-        setErrorMessage("Your session has expired after 24 hours. Please log in again to continue.");
+        setErrorMessage("Please log in to continue.");
       } else if (params.get("terminated") === "1") {
         setErrorMessage("Your session has ended or your account is no longer active. Please log in again.");
       }

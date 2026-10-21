@@ -58,14 +58,6 @@ function AdminLayoutInner({ children }) {
       const token = localStorage.getItem("auth_token");
       const userStr = localStorage.getItem("user");
 
-      // Check 24-hour session expiry
-      if (isSessionExpired()) {
-        clearAuthSession();
-        setIsAuthorized(false);
-        router.replace("/login?expired=1");
-        return;
-      }
-
       // If localStorage is cleared or auth_token/user is missing, redirect immediately to login
       if (!token || !userStr) {
         clearAuthSession();

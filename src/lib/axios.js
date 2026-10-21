@@ -13,9 +13,15 @@ const api = axios.create({
   },
 });
 
-// Helper to handle 401 unauthenticated error across any axios request
+// Helper to handle 401 unauthenticated error across any axios request (excluding auth endpoints)
 const handle401Unauthorized = (error) => {
-  if (error.response?.status === 401 && typeof window !== "undefined") {
+  const url = error.config?.url || "";
+  const isAuthEndpoint =
+    url.includes("/auth/login") ||
+    url.includes("/auth/forgot-password") ||
+    url.includes("/auth/reset-password");
+
+  if (!isAuthEndpoint && error.response?.status === 401 && typeof window !== "undefined") {
     clearAuthSession();
     if (!window.location.pathname.includes("/login") && window.location.pathname !== "/") {
       window.location.href = "/login?terminated=1";
@@ -27,16 +33,19 @@ const handle401Unauthorized = (error) => {
 // Request Interceptor: Attach Bearer Token automatically & handle FormData
 const requestInterceptor = (config) => {
   if (typeof window !== "undefined") {
-    if (isSessionExpired()) {
-      clearAuthSession();
-      if (!window.location.pathname.includes("/login")) {
-        window.location.href = "/login?expired=1";
+    const url = config.url || "";
+    const isAuthEndpoint =
+      url.includes("/auth/login") ||
+      url.includes("/auth/forgot-password") ||
+      url.includes("/auth/reset-password");
+
+    // Only attach authorization token if available and not already set
+    if (!isAuthEndpoint) {
+      const token = localStorage.getItem("auth_token") || localStorage.getItem("token");
+      if (token) {
+        config.headers = config.headers || {};
+        config.headers.Authorization = `Bearer ${token}`;
       }
-      return Promise.reject(new Error("Session expired after 24 hours."));
-    }
-    const token = localStorage.getItem("auth_token") || localStorage.getItem("token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
     }
   }
 
@@ -62,7 +71,7 @@ const requestInterceptor = (config) => {
 api.interceptors.request.use(requestInterceptor, (error) => Promise.reject(error));
 api.interceptors.response.use((response) => response, handle401Unauthorized);
 
-// Also attach to global axios instance so pages importing axios directly also get auto-logout
+// Also attach to global axios instance safely
 axios.interceptors.request.use(requestInterceptor, (error) => Promise.reject(error));
 axios.interceptors.response.use((response) => response, handle401Unauthorized);
 
