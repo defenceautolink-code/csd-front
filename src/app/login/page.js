@@ -363,7 +363,7 @@ export default function LoginPage() {
               <i className="bi bi-sun-fill text-warning"></i>
               <span>{greeting}, Team</span>
             </div>
-            <h2 className="login-title">Sign In to Terminal123</h2>
+            <h2 className="login-title">Sign In to Terminal123456</h2>
             <p className="login-subtitle">
               Enter your credentials to access the dealership CRM workspace
             </p>
