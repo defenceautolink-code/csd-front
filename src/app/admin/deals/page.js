@@ -29,6 +29,9 @@ export default function DealsPage() {
   });
   const [isLoading, setIsLoading] = useState(true);
 
+  const currentPage = pagination.current_page || 1;
+  const perPage = pagination.per_page || 10;
+
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState("");
   const [stageFilter, setStageFilter] = useState("All");
