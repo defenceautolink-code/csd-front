@@ -54,12 +54,14 @@ export default function UsersPage() {
     registered_customers: 0,
     active_users: 0,
   });
+  const [statsLoaded, setStatsLoaded] = useState(false);
 
   const fetchUserStats = async () => {
     try {
       const res = await api.get("/users/stats");
       if (res.data && res.data.status && res.data.data) {
         setUserStats(res.data.data);
+        setStatsLoaded(true);
       }
     } catch (e) {
       console.log("Error fetching user stats:", e);
@@ -346,6 +348,29 @@ export default function UsersPage() {
     ? (serverPagination.total ?? users.length)
     : filteredUsers.length;
 
+  const fallbackSuperAdmins = users.filter(
+    (u) => u.role === "Super Admin" || u.role === "admin"
+  ).length;
+
+  const fallbackSalesTeam = users.filter(
+    (u) =>
+      u.role === "Sales Executive" ||
+      u.role === "Sales Manager" ||
+      (typeof u.role === "string" && u.role.toLowerCase().includes("sales"))
+  ).length;
+
+  const displayedSuperAdmins = statsLoaded
+    ? userStats.super_admins
+    : (userStats.super_admins || fallbackSuperAdmins);
+
+  const displayedSalesTeam = statsLoaded
+    ? userStats.sales_team
+    : (userStats.sales_team || fallbackSalesTeam);
+
+  const displayedTotalUsers = statsLoaded
+    ? userStats.total_users
+    : (userStats.total_users || totalUsers);
+
   const lastPage = isServerPaginated
     ? (serverPagination.last_page ?? Math.max(1, Math.ceil(totalUsers / perPage)))
     : Math.max(1, Math.ceil(totalUsers / perPage));
@@ -412,7 +437,7 @@ export default function UsersPage() {
                 </div>
               </div>
               <div className="stat-card-value">
-                {userStats.total_users || totalUsers} Users
+                {displayedTotalUsers} Users
               </div>
               <span className="text-primary small fw-semibold">Live Database Records</span>
             </div>
@@ -427,7 +452,7 @@ export default function UsersPage() {
                 </div>
               </div>
               <div className="stat-card-value">
-                {userStats.super_admins} Admins
+                {displayedSuperAdmins} Admins
               </div>
               <span className="text-success small fw-semibold">Full System Access</span>
             </div>
@@ -442,7 +467,7 @@ export default function UsersPage() {
                 </div>
               </div>
               <div className="stat-card-value">
-                {userStats.sales_team} Staff
+                {displayedSalesTeam} Staff
               </div>
               <span className="text-warning small fw-semibold">Sales Executives & Managers</span>
             </div>
