@@ -60,8 +60,21 @@ export default function Header({ onToggleSidebar, onQuickAddLead }) {
     return () => window.removeEventListener("csd_user_updated", syncUser);
   }, []);
 
-  const handleSignOut = (e) => {
+  const handleSignOut = async (e) => {
     e.preventDefault();
+    try {
+      const token = localStorage.getItem("token") || localStorage.getItem("auth_token");
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
+      if (token) {
+        fetch(`${API_URL}/auth/logout`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        }).catch(() => {});
+      }
+    } catch (_) {}
     clearAuthSession();
     showToast("Signed out successfully", "info");
     setShowProfileMenu(false);

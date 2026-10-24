@@ -65,7 +65,20 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
     : (currentUser?.role || "Super Admin");
   const canNavigate = (path) => canAccessAdminPath(path, currentUser);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      const token = localStorage.getItem("token") || localStorage.getItem("auth_token");
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
+      if (token) {
+        fetch(`${API_URL}/auth/logout`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        }).catch(() => {});
+      }
+    } catch (_) {}
     clearAuthSession();
     showToast("Signed out successfully", "info");
     router.push("/login");
@@ -707,6 +720,16 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
 
             <div className="nav-section-title">Management</div>
             <ul className="sidebar-nav">
+              <li className="nav-item">
+                <Link
+                  href="/admin/logs"
+                  className={`nav-link ${isLinkActive("/admin/logs") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-clock-history"></i>
+                  <span>Activity Logs</span>
+                </Link>
+              </li>
               <li className="nav-item">
                 <Link
                   href="/admin/settings"
