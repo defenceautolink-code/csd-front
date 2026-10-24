@@ -104,6 +104,7 @@ export default function LeadsPage() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   // Filter States
+  const [recordView, setRecordView] = useState("active"); // "active" | "trash"
   const [searchTerm, setSearchTerm] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
   const [segmentFilter, setSegmentFilter] = useState("");
@@ -127,6 +128,8 @@ export default function LeadsPage() {
   const [viewLead, setViewLead] = useState(null);
   const [editLead, setEditLead] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [permanentDeleteTarget, setPermanentDeleteTarget] = useState(null);
+  const [isDeletingPermanent, setIsDeletingPermanent] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Follow-Up Interaction Modal States
@@ -237,11 +240,14 @@ export default function LeadsPage() {
   };
 
   // 2. Fetch Leads & Master Dropdowns from Laravel backend
-  const fetchLeads = async (from = startDate, to = endDate) => {
+  const fetchLeads = async (from = startDate, to = endDate, viewMode = recordView) => {
     setIsLoading(true);
     fetchLeadStats(from, to);
     try {
       const params = {};
+      if (viewMode === "trash") {
+        params.status = "deleted";
+      }
       if (from) {
         params.start_date = from;
         params.from_date = from;
@@ -271,6 +277,64 @@ export default function LeadsPage() {
     }
   };
 
+  const handleRestoreLead = async (id) => {
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("auth_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await axios.post(`${API_URL}/leads/${id}/restore`, {}, { headers });
+      if (res.data?.status) {
+        showToast("Lead, follow-ups and quotations restored successfully!", "success");
+        fetchLeads(startDate, endDate, recordView);
+      } else {
+        showToast(res.data?.message || "Failed to restore lead.", "error");
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("An error occurred while restoring lead.", "error");
+    }
+  };
+
+  const handlePermanentDelete = async () => {
+    if (!permanentDeleteTarget) return;
+    setIsDeletingPermanent(true);
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("auth_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await axios.delete(`${API_URL}/leads/${permanentDeleteTarget.id}/force`, { headers });
+      if (res.data?.status) {
+        showToast("Lead and all associated records permanently deleted forever.", "success");
+        setPermanentDeleteTarget(null);
+        fetchLeads(startDate, endDate, recordView);
+      } else {
+        showToast(res.data?.message || "Failed to permanently delete lead.", "error");
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("An error occurred while permanently deleting lead.", "error");
+    } finally {
+      setIsDeletingPermanent(false);
+    }
+  };
+
+  const handleBulkRestore = async () => {
+    if (selectedLeadIds.length === 0) return;
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("auth_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await axios.post(`${API_URL}/leads/bulk-restore`, { lead_ids: selectedLeadIds }, { headers });
+      if (res.data?.status) {
+        showToast(res.data?.message || `Restored ${selectedLeadIds.length} leads successfully!`, "success");
+        setSelectedLeadIds([]);
+        fetchLeads(startDate, endDate, recordView);
+      } else {
+        showToast(res.data?.message || "Failed to restore leads.", "error");
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("An error occurred while restoring leads.", "error");
+    }
+  };
+
   const fetchMasterData = async () => {
     try {
       const [brandRes, sourceRes, statusRes, userRes] = await Promise.all([
@@ -291,9 +355,9 @@ export default function LeadsPage() {
 
   // Run on page mount and when date filters change
   useEffect(() => {
-    fetchLeads(startDate, endDate);
+    fetchLeads(startDate, endDate, recordView);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startDate, endDate]);
+  }, [startDate, endDate, recordView]);
 
   useEffect(() => {
     fetchMasterData();
@@ -631,10 +695,11 @@ export default function LeadsPage() {
 
   // Active leads in pipeline (excluding leads already converted to deals)
   const activeLeads = useMemo(() => {
+    if (recordView === "trash") return leads;
     return leads.filter((item) => {
       return !convertedLeadIds.some((cid) => String(cid) === String(item.id));
     });
-  }, [leads, convertedLeadIds]);
+  }, [leads, convertedLeadIds, recordView]);
 
   // Filter leads based on user selection (excluding converted deals)
   const filteredLeads = useMemo(() => {
@@ -647,6 +712,10 @@ export default function LeadsPage() {
         item.city?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.home_town?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.posting?.toLowerCase().includes(searchTerm.toLowerCase());
+
+      if (recordView === "trash") {
+        return matchesSearch;
+      }
 
       const matchesPriority = !priorityFilter || item.priority === priorityFilter;
       const matchesSegment = !segmentFilter || item.vehicle_segment === segmentFilter;
@@ -671,7 +740,7 @@ export default function LeadsPage() {
 
       return matchesSearch && matchesPriority && matchesSegment && matchesStatus && matchesDate;
     });
-  }, [activeLeads, searchTerm, priorityFilter, segmentFilter, statusFilter, startDate, endDate]);
+  }, [activeLeads, searchTerm, priorityFilter, segmentFilter, statusFilter, startDate, endDate, recordView]);
 
   // Reset to first page when any filter changes
   useEffect(() => {
@@ -1212,6 +1281,18 @@ export default function LeadsPage() {
           </div>
 
           <div className="page-header-actions d-flex align-items-center gap-2 flex-wrap">
+            <button
+              className={`btn ${recordView === "trash" ? "btn-danger text-white shadow-sm" : "btn-outline-custom"}`}
+              onClick={() => {
+                const next = recordView === "trash" ? "active" : "trash";
+                setRecordView(next);
+                setSelectedLeadIds([]);
+              }}
+              title={recordView === "trash" ? "Back to Active Leads" : "View Deleted Records Archive"}
+            >
+              <i className={`bi ${recordView === "trash" ? "bi-arrow-left" : "bi-trash text-danger"}`}></i>
+              <span>{recordView === "trash" ? "Active Leads" : "Trash"}</span>
+            </button>
             {/* {can("lead.send_wishes") && <button
               className="btn btn-outline-custom d-flex align-items-center gap-1"
               style={{ color: "#f43f5e", borderColor: "rgba(244, 63, 94, 0.4)" }}
@@ -1261,14 +1342,18 @@ export default function LeadsPage() {
                   email: "",
                   phone: "",
                   city: "",
+                  posting: "",
                   state: "",
                   birth_date: "",
                   anniversary_date: "",
                   vehicle_segment: "4 Wheeler",
-                  brand_id: brands[0]?.id || "",
+                  brand_id: "",
+                  model_id: "",
+                  variant_id: "",
                   model_variant: "",
                   priority: "Hot",
                   purchase_timeline: "Immediate (Within 7 Days)",
+                  budget: "",
                   source_id: sources[0]?.id || "",
                   status_id: statuses[0]?.id || "",
                   assigned_user_name: "",
@@ -1374,134 +1459,146 @@ export default function LeadsPage() {
             </div>
 
             <div className="d-flex align-items-center gap-2 flex-wrap">
-              {/* Assign to Executive */}
-              {can("lead.bulk_assign") && <button
-                className="btn btn-sm btn-outline-custom text-white"
-                onClick={() => {
-                  setBulkAssignUser(executiveOptions[0] || "");
-                  setShowBulkAssignModal(true);
-                }}
-              >
-                <i className="bi bi-person-check-fill text-info me-1"></i>
-                <span>Assign Executive</span>
-              </button>}
-
-              {/* Bulk Status Update Dropdown */}
-              {can("lead.bulk_status") && <div className="dropdown position-relative">
+              {recordView === "trash" ? (
                 <button
-                  className="btn btn-sm btn-outline-custom dropdown-toggle text-white"
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setOpenStatusDropdown(!openStatusDropdown);
-                    setOpenPriorityDropdown(false);
-                  }}
+                  className="btn btn-sm btn-success text-white fw-semibold"
+                  onClick={handleBulkRestore}
                 >
-                  <i className="bi bi-tags-fill text-warning me-1"></i>
-                  <span>Update Status</span>
+                  <i className="bi bi-arrow-counterclockwise me-1"></i>
+                  <span>Restore ({selectedLeadIds.length}) Selected Leads</span>
                 </button>
-                {openStatusDropdown && (
-                  <div
-                    className="bulk-dropdown-menu dropdown-menu show"
-                    style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 1060 }}
-                    onClick={(e) => e.stopPropagation()}
+              ) : (
+                <>
+                  {/* Assign to Executive */}
+                  {can("lead.bulk_assign") && <button
+                    className="btn btn-sm btn-outline-custom text-white"
+                    onClick={() => {
+                      setBulkAssignUser(executiveOptions[0] || "");
+                      setShowBulkAssignModal(true);
+                    }}
                   >
-                    <h6 className="dropdown-header text-muted px-2 py-1 small fw-bold">Change Status To:</h6>
-                    {statuses.length > 0 ? (
-                      statuses.map((st) => (
-                        <button
-                          key={st.id}
-                          type="button"
-                          className="dropdown-item"
-                          onClick={() => handleBulkStatusUpdate(st.id, st.name)}
-                        >
-                          <i className="bi bi-arrow-right-circle text-primary"></i>
-                          <span>{st.name}</span>
-                        </button>
-                      ))
-                    ) : (
-                      ["New", "Contacted", "Qualified", "In Negotiation", "Deal Won", "Deal Lost"].map(
-                        (stName) => (
-                          <button
-                            key={stName}
-                            type="button"
-                            className="dropdown-item"
-                            onClick={() => handleBulkStatusUpdate(null, stName)}
-                          >
-                            <i className="bi bi-arrow-right-circle text-primary"></i>
-                            <span>{stName}</span>
-                          </button>
-                        )
-                      )
+                    <i className="bi bi-person-check-fill text-info me-1"></i>
+                    <span>Assign Executive</span>
+                  </button>}
+
+                  {/* Bulk Status Update Dropdown */}
+                  {can("lead.bulk_status") && <div className="dropdown position-relative">
+                    <button
+                      className="btn btn-sm btn-outline-custom dropdown-toggle text-white"
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenStatusDropdown(!openStatusDropdown);
+                        setOpenPriorityDropdown(false);
+                      }}
+                    >
+                      <i className="bi bi-tags-fill text-warning me-1"></i>
+                      <span>Update Status</span>
+                    </button>
+                    {openStatusDropdown && (
+                      <div
+                        className="bulk-dropdown-menu dropdown-menu show"
+                        style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 1060 }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <h6 className="dropdown-header text-muted px-2 py-1 small fw-bold">Change Status To:</h6>
+                        {statuses.length > 0 ? (
+                          statuses.map((st) => (
+                            <button
+                              key={st.id}
+                              type="button"
+                              className="dropdown-item"
+                              onClick={() => handleBulkStatusUpdate(st.id, st.name)}
+                            >
+                              <i className="bi bi-arrow-right-circle text-primary"></i>
+                              <span>{st.name}</span>
+                            </button>
+                          ))
+                        ) : (
+                          ["New", "Contacted", "Qualified", "In Negotiation", "Deal Won", "Deal Lost"].map(
+                            (stName) => (
+                              <button
+                                key={stName}
+                                type="button"
+                                className="dropdown-item"
+                                onClick={() => handleBulkStatusUpdate(null, stName)}
+                              >
+                                <i className="bi bi-arrow-right-circle text-primary"></i>
+                                <span>{stName}</span>
+                              </button>
+                            )
+                          )
+                        )}
+                      </div>
                     )}
-                  </div>
-                )}
-              </div>}
+                  </div>}
 
-              {/* Bulk Priority Update Dropdown */}
-              {can("lead.bulk_priority") && <div className="dropdown position-relative">
-                <button
-                  className="btn btn-sm btn-outline-custom dropdown-toggle text-white"
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setOpenPriorityDropdown(!openPriorityDropdown);
-                    setOpenStatusDropdown(false);
-                  }}
-                >
-                  <i className="bi bi-fire text-danger me-1"></i>
-                  <span>Set Priority</span>
-                </button>
-                {openPriorityDropdown && (
-                  <div
-                    className="bulk-dropdown-menu dropdown-menu show"
-                    style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 1060 }}
-                    onClick={(e) => e.stopPropagation()}
+                  {/* Bulk Priority Update Dropdown */}
+                  {can("lead.bulk_priority") && <div className="dropdown position-relative">
+                    <button
+                      className="btn btn-sm btn-outline-custom dropdown-toggle text-white"
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenPriorityDropdown(!openPriorityDropdown);
+                        setOpenStatusDropdown(false);
+                      }}
+                    >
+                      <i className="bi bi-fire text-danger me-1"></i>
+                      <span>Set Priority</span>
+                    </button>
+                    {openPriorityDropdown && (
+                      <div
+                        className="bulk-dropdown-menu dropdown-menu show"
+                        style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 1060 }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <h6 className="dropdown-header text-muted px-2 py-1 small fw-bold">Set Temperature:</h6>
+                        <button
+                          type="button"
+                          className="dropdown-item text-danger fw-semibold"
+                          onClick={() => handleBulkPriorityUpdate("Hot")}
+                        >
+                          🔥 Hot Priority
+                        </button>
+                        <button
+                          type="button"
+                          className="dropdown-item text-warning fw-semibold"
+                          onClick={() => handleBulkPriorityUpdate("Warm")}
+                        >
+                          ☀️ Warm Priority
+                        </button>
+                        <button
+                          type="button"
+                          className="dropdown-item text-info fw-semibold"
+                          onClick={() => handleBulkPriorityUpdate("Cold")}
+                        >
+                          ❄️ Cold Priority
+                        </button>
+                      </div>
+                    )}
+                  </div>}
+
+                  {/* Export Selected to CSV */}
+                  {!isSalesManager && can("lead.export_selected") && <button
+                    className="btn btn-sm btn-outline-custom text-white"
+                    onClick={() => handleExportCSV(true)}
+                    title="Download CSV for selected leads only"
                   >
-                    <h6 className="dropdown-header text-muted px-2 py-1 small fw-bold">Set Temperature:</h6>
-                    <button
-                      type="button"
-                      className="dropdown-item text-danger fw-semibold"
-                      onClick={() => handleBulkPriorityUpdate("Hot")}
-                    >
-                      🔥 Hot Priority
-                    </button>
-                    <button
-                      type="button"
-                      className="dropdown-item text-warning fw-semibold"
-                      onClick={() => handleBulkPriorityUpdate("Warm")}
-                    >
-                      ☀️ Warm Priority
-                    </button>
-                    <button
-                      type="button"
-                      className="dropdown-item text-info fw-semibold"
-                      onClick={() => handleBulkPriorityUpdate("Cold")}
-                    >
-                      ❄️ Cold Priority
-                    </button>
-                  </div>
-                )}
-              </div>}
+                    <i className="bi bi-file-earmark-arrow-down text-success me-1"></i>
+                    <span>Export ({selectedLeadIds.length})</span>
+                  </button>}
 
-              {/* Export Selected to CSV */}
-              {!isSalesManager && can("lead.export_selected") && <button
-                className="btn btn-sm btn-outline-custom text-white"
-                onClick={() => handleExportCSV(true)}
-                title="Download CSV for selected leads only"
-              >
-                <i className="bi bi-file-earmark-arrow-down text-success me-1"></i>
-                <span>Export ({selectedLeadIds.length})</span>
-              </button>}
-
-              {/* Bulk Delete */}
-              {can("lead.bulk_delete") && <button
-                className="btn btn-sm btn-outline-danger"
-                onClick={() => setShowBulkDeleteModal(true)}
-              >
-                <i className="bi bi-trash me-1"></i>
-                <span>Delete</span>
-              </button>}
+                  {/* Bulk Delete */}
+                  {can("lead.bulk_delete") && <button
+                    className="btn btn-sm btn-outline-danger"
+                    onClick={() => setShowBulkDeleteModal(true)}
+                  >
+                    <i className="bi bi-trash me-1"></i>
+                    <span>Delete</span>
+                  </button>}
+                </>
+              )}
 
               {/* Clear selection */}
               <button
@@ -1706,6 +1803,36 @@ export default function LeadsPage() {
 
                         {/* 1. Actions First Column */}
                         <td className="text-center" onClick={(e) => e.stopPropagation()}>
+                          {recordView === "trash" ? (
+                            <div className="d-flex align-items-center justify-content-center gap-1.5">
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-success fw-semibold d-inline-flex align-items-center gap-1 shadow-xs"
+                                style={{ fontSize: "0.8rem", padding: "4px 9px" }}
+                                title="Restore Lead, Follow-Ups & Quotations"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRestoreLead(lead.id);
+                                }}
+                              >
+                                <i className="bi bi-arrow-counterclockwise"></i>
+                                <span>Restore</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-danger fw-semibold d-inline-flex align-items-center gap-1 shadow-xs"
+                                style={{ fontSize: "0.8rem", padding: "4px 9px" }}
+                                title="Permanently Delete Forever"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPermanentDeleteTarget(lead);
+                                }}
+                              >
+                                <i className="bi bi-trash3"></i>
+                                <span>Delete</span>
+                              </button>
+                            </div>
+                          ) : (
                           <div className="dropdown position-relative d-inline-block">
                             <button
                               type="button"
@@ -1852,6 +1979,7 @@ export default function LeadsPage() {
                               </div>
                             )}
                           </div>
+                          )}
                         </td>
 
                         {/* 2. Customer Column with Clickable Name and Lead Created Date */}
@@ -2004,13 +2132,13 @@ export default function LeadsPage() {
             ADD LEAD MODAL (Matches user's exact UI screenshot)
             ------------------------------------------------------------------ */}
         {showAddModal && (
-          <div className="modal-backdrop-custom" onClick={() => setShowAddModal(false)}>
+          <div className="modal-backdrop-custom">
             <div
-              className="modal-dialog-custom"
+              className="modal-dialog-custom d-flex flex-column"
               onClick={(e) => e.stopPropagation()}
-              style={{ maxWidth: "680px", maxHeight: "90vh", overflowY: "auto" }}
+              style={{ maxWidth: "680px", maxHeight: "90vh", overflow: "hidden" }}
             >
-              <div className="modal-header-custom d-flex justify-content-between align-items-center">
+              <div className="modal-header-custom d-flex justify-content-between align-items-center flex-shrink-0">
                 <h5 className="modal-title-custom d-flex align-items-center gap-2 text-white mb-0 fs-5 fw-bold">
                   <i className="bi bi-person-plus-fill text-info"></i> Add New Customer Lead
                 </h5>
@@ -2021,8 +2149,8 @@ export default function LeadsPage() {
                 ></button>
               </div>
 
-              <form onSubmit={handleAddSubmit}>
-                <div className="modal-body-custom py-3">
+              <form onSubmit={handleAddSubmit} className="d-flex flex-column flex-grow-1 overflow-hidden" style={{ minHeight: 0 }}>
+                <div className="modal-body-custom py-3 flex-grow-1" style={{ overflowY: "auto" }}>
                   {/* SECTION 1: Customer Details */}
                   <h6 className="text-dark fw-bold mb-3 pb-1 border-bottom border-secondary">
                     1. Customer Details
@@ -2038,7 +2166,7 @@ export default function LeadsPage() {
                         className="form-control"
                         placeholder="e.g. Captain Vikram Rathore"
                         required
-                        value={formData.name}
+                        value={formData.name || ""}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                         autoFocus
                       />
@@ -2050,7 +2178,7 @@ export default function LeadsPage() {
                         type="email"
                         className="form-control"
                         placeholder="vikram.rathore@defmail.com"
-                        value={formData.email}
+                        value={formData.email || ""}
                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                       />
                     </div>
@@ -2067,7 +2195,7 @@ export default function LeadsPage() {
                         className="form-control"
                         placeholder="e.g. 9876543210"
                         required
-                        value={formData.phone}
+                        value={formData.phone || ""}
                         onChange={(e) => {
                           const onlyNums = e.target.value.replace(/\D/g, "").slice(0, 10);
                           setFormData({ ...formData, phone: onlyNums });
@@ -2083,7 +2211,7 @@ export default function LeadsPage() {
                         type="text"
                         className="form-control"
                         placeholder="e.g. Pune, Delhi, Jaipur"
-                        value={formData.city}
+                        value={formData.city || ""}
                         onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                       />
                     </div>
@@ -2096,7 +2224,7 @@ export default function LeadsPage() {
                         type="text"
                         className="form-control"
                         placeholder="e.g. Leh, Srinagar, Pune Cantonment"
-                        value={formData.posting}
+                        value={formData.posting || ""}
                         onChange={(e) => setFormData({ ...formData, posting: e.target.value })}
                       />
                     </div>
@@ -2107,7 +2235,7 @@ export default function LeadsPage() {
                         type="text"
                         className="form-control"
                         placeholder="e.g. Maharashtra, Rajasthan"
-                        value={formData.state}
+                        value={formData.state || ""}
                         onChange={(e) => setFormData({ ...formData, state: e.target.value })}
                       />
                     </div>
@@ -2119,7 +2247,7 @@ export default function LeadsPage() {
                       <input
                         type="date"
                         className="form-control"
-                        value={formData.birth_date}
+                        value={formData.birth_date || ""}
                         onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
                       />
                     </div>
@@ -2131,7 +2259,7 @@ export default function LeadsPage() {
                       <input
                         type="date"
                         className="form-control"
-                        value={formData.anniversary_date}
+                        value={formData.anniversary_date || ""}
                         onChange={(e) => setFormData({ ...formData, anniversary_date: e.target.value })}
                       />
                     </div>
@@ -2274,10 +2402,12 @@ export default function LeadsPage() {
                           const selectedM = addModels.find((m) => String(m.id) === String(formData.model_id));
                           const modelName = selectedM ? selectedM.name : "";
                           const variantName = selectedV ? selectedV.name : "";
+                          const vPrice = selectedV && selectedV.price ? selectedV.price : (selectedV?.on_road_price || "");
                           setFormData({
                             ...formData,
                             variant_id: vId,
                             model_variant: variantName ? `${modelName} ${variantName}`.trim() : modelName,
+                            budget: vPrice ? String(vPrice) : formData.budget,
                           });
                         }}
                       >
@@ -2300,7 +2430,7 @@ export default function LeadsPage() {
                         className="form-control form-control-sm"
                         placeholder="e.g. Brezza ZDI, Safari Dark Edition"
                         required
-                        value={formData.model_variant}
+                        value={formData.model_variant || ""}
                         onChange={(e) => setFormData({ ...formData, model_variant: e.target.value })}
                       />
                     </div>
@@ -2449,7 +2579,7 @@ export default function LeadsPage() {
                   </div>
                 </div>
 
-                <div className="modal-footer-custom d-flex justify-content-end gap-2 pt-3">
+                <div className="modal-footer-custom d-flex justify-content-end gap-2 flex-shrink-0 border-top border-secondary border-opacity-10" style={{ background: "#FFFFFF", padding: "0.85rem 1.5rem" }}>
                   <button
                     type="button"
                     className="btn btn-outline-custom"
@@ -2475,13 +2605,13 @@ export default function LeadsPage() {
             EDIT LEAD MODAL
             ------------------------------------------------------------------ */}
         {editLead && (
-          <div className="modal-backdrop-custom" onClick={() => setEditLead(null)}>
+          <div className="modal-backdrop-custom">
             <div
-              className="modal-dialog-custom"
+              className="modal-dialog-custom d-flex flex-column"
               onClick={(e) => e.stopPropagation()}
-              style={{ maxWidth: "680px", maxHeight: "90vh", overflowY: "auto" }}
+              style={{ maxWidth: "680px", maxHeight: "90vh", overflow: "hidden" }}
             >
-              <div className="modal-header-custom d-flex justify-content-between align-items-center">
+              <div className="modal-header-custom d-flex justify-content-between align-items-center flex-shrink-0">
                 <h5 className="modal-title-custom d-flex align-items-center gap-2 text-white mb-0 fs-5 fw-bold">
                   <i className="bi bi-pencil-square text-info"></i> Edit Customer Lead
                 </h5>
@@ -2492,8 +2622,8 @@ export default function LeadsPage() {
                 ></button>
               </div>
 
-              <form onSubmit={handleEditSubmit}>
-                <div className="modal-body-custom py-3">
+              <form onSubmit={handleEditSubmit} className="d-flex flex-column flex-grow-1 overflow-hidden" style={{ minHeight: 0 }}>
+                <div className="modal-body-custom py-3 flex-grow-1" style={{ overflowY: "auto" }}>
                   {/* Customer Details */}
                   <h6 className="text-dark fw-bold mb-3 pb-1 border-bottom border-secondary">
                     1. Customer Details
@@ -2869,7 +2999,7 @@ export default function LeadsPage() {
                   </div>
                 </div>
 
-                <div className="modal-footer-custom d-flex justify-content-end gap-2 pt-3">
+                <div className="modal-footer-custom d-flex justify-content-end gap-2 flex-shrink-0 border-top border-secondary border-opacity-10" style={{ background: "#FFFFFF", padding: "0.85rem 1.5rem" }}>
                   <button
                     type="button"
                     className="btn btn-outline-custom"
@@ -2895,7 +3025,7 @@ export default function LeadsPage() {
             VIEW LEAD DETAILS MODAL
             ------------------------------------------------------------------ */}
         {viewLead && (
-          <div className="modal-backdrop-custom" onClick={() => setViewLead(null)}>
+          <div className="modal-backdrop-custom">
             <div className="modal-dialog-custom" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "560px" }}>
               <div className="modal-header-custom d-flex justify-content-between align-items-center">
                 <h5 className="modal-title-custom d-flex align-items-center gap-2 text-white mb-0 fs-5 fw-bold">
@@ -3209,7 +3339,7 @@ export default function LeadsPage() {
             DELETE CONFIRMATION MODAL
             ------------------------------------------------------------------ */}
         {deleteTarget && (
-          <div className="modal-backdrop-custom" onClick={() => setDeleteTarget(null)}>
+          <div className="modal-backdrop-custom">
             <div className="modal-dialog-custom" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "450px" }}>
               <div className="modal-header-custom">
                 <h5 className="modal-title-custom text-danger">
@@ -3248,7 +3378,7 @@ export default function LeadsPage() {
             BULK ASSIGN EXECUTIVE MODAL
             ------------------------------------------------------------------ */}
         {showBulkAssignModal && (
-          <div className="modal-backdrop-custom" onClick={() => setShowBulkAssignModal(false)}>
+          <div className="modal-backdrop-custom">
             <div
               className="modal-dialog-custom"
               onClick={(e) => e.stopPropagation()}
@@ -3342,7 +3472,7 @@ export default function LeadsPage() {
             BULK DELETE CONFIRMATION MODAL
             ------------------------------------------------------------------ */}
         {showBulkDeleteModal && (
-          <div className="modal-backdrop-custom" onClick={() => setShowBulkDeleteModal(false)}>
+          <div className="modal-backdrop-custom">
             <div
               className="modal-dialog-custom"
               onClick={(e) => e.stopPropagation()}
@@ -3421,7 +3551,7 @@ export default function LeadsPage() {
             LOG CALL INTERACTION MODAL (Matches user's screenshot exactly)
             ------------------------------------------------------------------ */}
         {showFollowUpModal && (
-          <div className="modal-backdrop-custom" onClick={() => setShowFollowUpModal(false)}>
+          <div className="modal-backdrop-custom">
             <div className="modal-dialog-custom modal-lg" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header-custom d-flex justify-content-between align-items-center">
                 <h5 className="modal-title-custom text-white mb-0 fs-5 fw-bold d-flex align-items-center gap-2">
@@ -3477,7 +3607,49 @@ export default function LeadsPage() {
                     </div>
 
                     <div className="col-md-6">
-                      <label className="form-label text-dark fw-semibold small">Next Action Date</label>
+                      <label className="form-label text-dark fw-semibold small">Interaction Type</label>
+                      <select
+                        className="form-select"
+                        value={followUpForm.type}
+                        onChange={(e) => setFollowUpForm({ ...followUpForm, type: e.target.value })}
+                      >
+                        <option value="Phone Call">📞 Phone Call</option>
+                        <option value="WhatsApp">💬 WhatsApp</option>
+                        <option value="Showroom Visit">🏢 Showroom Walk-in</option>
+                        <option value="Email">✉️ Email</option>
+                      </select>
+                    </div>
+
+                    <div className="col-md-6">
+                      <label className="form-label text-dark fw-semibold small">
+                        <i className="bi bi-calendar-event me-1 text-primary"></i> Interaction Date
+                      </label>
+                      <input
+                        type="date"
+                        className="form-control"
+                        value={followUpForm.follow_up_date || ""}
+                        onChange={(e) => setFollowUpForm({ ...followUpForm, follow_up_date: e.target.value })}
+                        required
+                      />
+                    </div>
+
+                    <div className="col-md-6">
+                      <label className="form-label text-dark fw-semibold small">
+                        <i className="bi bi-clock me-1 text-primary"></i> Interaction Time
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. 04:30 PM"
+                        value={followUpForm.follow_up_time || ""}
+                        onChange={(e) => setFollowUpForm({ ...followUpForm, follow_up_time: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="col-md-6">
+                      <label className="form-label text-dark fw-semibold small">
+                        <i className="bi bi-calendar-plus me-1 text-success"></i> Next Action Date
+                      </label>
                       <input
                         type="date"
                         className="form-control"
@@ -3487,7 +3659,7 @@ export default function LeadsPage() {
                             e.target.showPicker?.();
                           } catch (err) {}
                         }}
-                        value={followUpForm.next_follow_up_date}
+                        value={followUpForm.next_follow_up_date || ""}
                         onChange={(e) => {
                           const val = e.target.value;
                           const today = getTodayDate();
@@ -3501,26 +3673,14 @@ export default function LeadsPage() {
                     </div>
 
                     <div className="col-md-6">
-                      <label className="form-label text-dark fw-semibold small">Interaction Type</label>
-                      <select
-                        className="form-select"
-                        value={followUpForm.type}
-                        onChange={(e) => setFollowUpForm({ ...followUpForm, type: e.target.value })}
-                      >
-                        <option value="Phone Call">Phone Call</option>
-                        <option value="Showroom Visit">Showroom Visit</option>
-                        <option value="WhatsApp">WhatsApp</option>
-                        <option value="Email">Email</option>
-                      </select>
-                    </div>
-
-                    <div className="col-md-6">
-                      <label className="form-label text-dark fw-semibold small">Next Action Time</label>
+                      <label className="form-label text-dark fw-semibold small">
+                        <i className="bi bi-alarm me-1 text-success"></i> Next Action Time
+                      </label>
                       <input
                         type="text"
                         className="form-control"
                         placeholder="e.g. 10:00 AM"
-                        value={followUpForm.next_follow_up_time}
+                        value={followUpForm.next_follow_up_time || ""}
                         onChange={(e) => setFollowUpForm({ ...followUpForm, next_follow_up_time: e.target.value })}
                       />
                     </div>
@@ -3619,6 +3779,64 @@ export default function LeadsPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Sweet Alert Confirmation Modal for Permanent Delete */}
+        {permanentDeleteTarget && (
+          <div
+            className="modal fade show d-block"
+            style={{ backgroundColor: "rgba(15, 23, 42, 0.65)", backdropFilter: "blur(4px)", zIndex: 1080 }}
+            onClick={() => !isDeletingPermanent && setPermanentDeleteTarget(null)}
+          >
+            <div
+              className="modal-dialog modal-dialog-centered"
+              style={{ maxWidth: "420px" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                <div className="modal-body p-4 text-center">
+                  <div
+                    className="d-inline-flex align-items-center justify-content-center rounded-circle mb-3 shadow-xs"
+                    style={{ width: "64px", height: "64px", background: "#FEE2E2", color: "#DC2626" }}
+                  >
+                    <i className="bi bi-exclamation-triangle-fill fs-2"></i>
+                  </div>
+                  <h5 className="modal-title fw-bold text-dark mb-2">Delete Permanently?</h5>
+                  <p className="text-muted small mb-0 px-2" style={{ lineHeight: "1.5" }}>
+                    Are you sure you want to permanently delete lead <strong>&quot;{permanentDeleteTarget.name}&quot;</strong>? This record will be deleted forever and <strong>cannot be restored</strong>. All associated follow-ups and quotations will also be permanently removed.
+                  </p>
+                </div>
+                <div className="modal-footer border-0 p-3 bg-light d-flex gap-2 justify-content-center">
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary px-3 py-1.5 rounded-pill fw-medium"
+                    onClick={() => setPermanentDeleteTarget(null)}
+                    disabled={isDeletingPermanent}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-danger px-4 py-1.5 rounded-pill fw-semibold shadow-sm"
+                    onClick={handlePermanentDelete}
+                    disabled={isDeletingPermanent}
+                  >
+                    {isDeletingPermanent ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                        <span>Deleting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <i className="bi bi-trash3-fill me-1"></i>
+                        <span>Yes, Delete Forever</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}

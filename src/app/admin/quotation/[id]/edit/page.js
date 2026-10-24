@@ -370,7 +370,8 @@ export default function QuotationEditPage() {
                         value={status}
                         onChange={(e) => setStatus(e.target.value)}
                       >
-                        <option value="draft">Draft</option>
+                        <option value="pending">Pending</option>
+                        <option value="print">Print</option>
                         <option value="sent">Sent</option>
                         <option value="accepted">Accepted</option>
                         <option value="rejected">Rejected</option>

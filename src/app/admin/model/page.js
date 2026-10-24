@@ -334,7 +334,7 @@ export default function ModelPage() {
                 </div>
               </div>
               <div className="stat-card-value">
-                {modelStats.four_wheeler_models} Models
+                {modelStats.four_wheeler_models ?? 0} Models
               </div>
               <span className="text-success small fw-semibold">Cars, SUVs & Sedans</span>
             </div>
@@ -349,7 +349,7 @@ export default function ModelPage() {
                 </div>
               </div>
               <div className="stat-card-value">
-                {modelStats.two_wheeler_models} Models
+                {modelStats.two_wheeler_models ?? 0} Models
               </div>
               <span className="text-warning small fw-semibold">Bikes & Scooters</span>
             </div>
@@ -526,7 +526,7 @@ export default function ModelPage() {
             ADD MODEL MODAL (Matches user's exact UI screenshot)
             ------------------------------------------------------------------ */}
         {showAddModal && (
-          <div className="modal-backdrop-custom" onClick={() => setShowAddModal(false)}>
+          <div className="modal-backdrop-custom">
             <div className="modal-dialog-custom" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "520px" }}>
               <div className="modal-header-custom d-flex justify-content-between align-items-center">
                 <h5 className="modal-title-custom d-flex align-items-center gap-2 text-white mb-0 fs-5 fw-bold">
@@ -682,7 +682,7 @@ export default function ModelPage() {
             EDIT MODEL MODAL
             ------------------------------------------------------------------ */}
         {editModel && (
-          <div className="modal-backdrop-custom" onClick={() => setEditModel(null)}>
+          <div className="modal-backdrop-custom">
             <div className="modal-dialog-custom" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "520px" }}>
               <div className="modal-header-custom d-flex justify-content-between align-items-center">
                 <h5 className="modal-title-custom d-flex align-items-center gap-2 text-white mb-0 fs-5 fw-bold">
@@ -838,7 +838,7 @@ export default function ModelPage() {
             DELETE CONFIRMATION MODAL
             ------------------------------------------------------------------ */}
         {deleteTarget && (
-          <div className="modal-backdrop-custom" onClick={() => setDeleteTarget(null)}>
+          <div className="modal-backdrop-custom">
             <div className="modal-dialog-custom" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "450px" }}>
               <div className="modal-header-custom">
                 <h5 className="modal-title-custom text-danger">

@@ -2216,6 +2216,14 @@ label.text-white,
 /* ==========================================================================
    REACT MODAL & BACKDROP OVERLAYS
    ========================================================================== */
+html:has(.modal-backdrop-custom),
+body:has(.modal-backdrop-custom),
+html:has(.modal.show),
+body:has(.modal.show),
+body.modal-open {
+    overflow: hidden !important;
+}
+
 .modal-backdrop-custom {
     position: fixed;
     top: 0;
@@ -2230,6 +2238,7 @@ label.text-white,
     justify-content: center;
     padding: 1rem;
     overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .modal-dialog-custom {

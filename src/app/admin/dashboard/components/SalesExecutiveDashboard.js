@@ -647,7 +647,7 @@ export default function SalesExecutiveDashboard({ onAddLead }) {
           ---------------------------------------------------- */}
       {/* Call Log Modal */}
       {showCallModal && selectedCallLead && (
-        <div className="modal-backdrop-custom" onClick={() => setShowCallModal(false)}>
+        <div className="modal-backdrop-custom">
           <div className="modal-dialog-custom modal-md" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header-custom" style={{ backgroundColor: "#4D5D25", color: "#fff" }}>
               <h5 className="modal-title-custom text-white mb-0 fs-6">
@@ -719,7 +719,7 @@ export default function SalesExecutiveDashboard({ onAddLead }) {
 
       {/* Quick Add Customer Modal */}
       {showAddCustomerModal && (
-        <div className="modal-backdrop-custom" onClick={() => setShowAddCustomerModal(false)}>
+        <div className="modal-backdrop-custom">
           <div className="modal-dialog-custom modal-md" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header-custom" style={{ backgroundColor: "#4D5D25", color: "#fff" }}>
               <h5 className="modal-title-custom text-white mb-0 fs-6">
@@ -820,7 +820,7 @@ export default function SalesExecutiveDashboard({ onAddLead }) {
 
       {/* Internal Add Lead Fallback Modal */}
       {showInternalAddLead && (
-        <div className="modal-backdrop-custom" onClick={() => setShowInternalAddLead(false)}>
+        <div className="modal-backdrop-custom">
           <div className="modal-dialog-custom modal-md" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header-custom" style={{ backgroundColor: "#4D5D25", color: "#fff" }}>
               <h5 className="modal-title-custom text-white mb-0 fs-6">

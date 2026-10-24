@@ -262,26 +262,14 @@ export default function BrandPage() {
     : filteredBrands.length;
 
   const fourWheelerCount =
-    brandStats.four_wheeler_brands > 0
+    brandStats?.four_wheeler_brands !== undefined
       ? brandStats.four_wheeler_brands
-      : brands.filter((b) => {
-          if (!b.vehicle_type) return true;
-          const vt = Array.isArray(b.vehicle_type)
-            ? b.vehicle_type.join(" ")
-            : String(b.vehicle_type);
-          return vt.includes("4") || !vt.includes("2");
-        }).length || totalBrands;
+      : (serverPagination?.total ?? brands.length);
 
   const twoWheelerCount =
-    brandStats.two_wheeler_brands > 0
+    brandStats?.two_wheeler_brands !== undefined
       ? brandStats.two_wheeler_brands
-      : brands.filter((b) => {
-          if (!b.vehicle_type) return false;
-          const vt = Array.isArray(b.vehicle_type)
-            ? b.vehicle_type.join(" ")
-            : String(b.vehicle_type);
-          return vt.includes("2");
-        }).length;
+      : 0;
 
   const lastPage = isServerPaginated
     ? (serverPagination.last_page ?? Math.max(1, Math.ceil(totalBrands / perPage)))
@@ -567,7 +555,7 @@ export default function BrandPage() {
             ADD BRAND MODAL (Matches user's exact UI screenshot)
             ------------------------------------------------------------------ */}
         {showAddModal && (
-          <div className="modal-backdrop-custom" onClick={() => setShowAddModal(false)}>
+          <div className="modal-backdrop-custom">
             <div className="modal-dialog-custom" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "540px" }}>
               <div className="modal-header-custom d-flex justify-content-between align-items-center">
                 <h5 className="modal-title-custom d-flex align-items-center gap-2 text-white mb-0 fs-5 fw-bold">
@@ -705,7 +693,7 @@ export default function BrandPage() {
             EDIT BRAND MODAL
             ------------------------------------------------------------------ */}
         {editBrand && (
-          <div className="modal-backdrop-custom" onClick={() => setEditBrand(null)}>
+          <div className="modal-backdrop-custom">
             <div className="modal-dialog-custom" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "540px" }}>
               <div className="modal-header-custom d-flex justify-content-between align-items-center">
                 <h5 className="modal-title-custom d-flex align-items-center gap-2 text-white mb-0 fs-5 fw-bold">
@@ -840,7 +828,7 @@ export default function BrandPage() {
             DELETE CONFIRMATION MODAL
             ------------------------------------------------------------------ */}
         {deleteTarget && (
-          <div className="modal-backdrop-custom" onClick={() => setDeleteTarget(null)}>
+          <div className="modal-backdrop-custom">
             <div className="modal-dialog-custom" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "450px" }}>
               <div className="modal-header-custom">
                 <h5 className="modal-title-custom text-danger">

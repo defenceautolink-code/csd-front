@@ -33,7 +33,6 @@ export default function QuotationDetailsPage() {
 
   const [quotation, setQuotation] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   // Send Email Modal State
   const [showSendModal, setShowSendModal] = useState(false);
@@ -66,29 +65,24 @@ export default function QuotationDetailsPage() {
     }
   }, [quotationId]);
 
-  // Print Handler
-  const handlePrint = () => {
+  // Print Handler: Updates status to 'print' on backend and prints
+  const handlePrint = async () => {
+    if (!quotation) return;
+
+    try {
+      await quotationApi.updateStatus(quotation.id, "print");
+      setQuotation((prev) => ({ ...prev, status: "print" }));
+      showToast("Quotation marked as Printed.", "info");
+    } catch (err) {
+      console.error("Status update error on print:", err);
+    }
+
     if (typeof window !== "undefined") {
       window.print();
     }
   };
 
-  // Download PDF
-  const handleDownloadPdf = async () => {
-    if (!quotation) return;
-    setIsDownloadingPdf(true);
-    try {
-      await quotationApi.downloadPdf(quotation.id, quotation.quotation_number);
-      showToast(`Downloaded Quotation ${quotation.quotation_number} PDF!`, "success");
-    } catch (error) {
-      console.error("Download PDF error:", error);
-      showToast("Failed to generate and download PDF.", "error");
-    } finally {
-      setIsDownloadingPdf(false);
-    }
-  };
-
-  // Send Email Handler
+  // Send Email Handler: Updates status to 'sent'
   const handleSendEmailSubmit = async (e) => {
     e.preventDefault();
     if (!recipientEmail.trim()) {
@@ -107,6 +101,7 @@ export default function QuotationDetailsPage() {
       if (res && res.status) {
         showToast(res.message || "Quotation emailed successfully with attached PDF!", "success");
         setShowSendModal(false);
+        setQuotation((prev) => ({ ...prev, status: "sent" }));
 
         // Auto log follow-up in lead history table
         if (quotation.lead_id) {
@@ -115,7 +110,7 @@ export default function QuotationDetailsPage() {
               type: "Quotation Sent",
               outcome: "Sent",
               status: "Sent",
-              notes: `Official Quotation #${quotation.quotation_number} emailed to customer (${recipientEmail.trim()}). Total Amount: ₹${Number(quotation.total_amount || quotation.final_price || 0).toLocaleString("en-IN")}`,
+              notes: `Official Quotation #${quotation.quotation_number} emailed to customer (${recipientEmail.trim()}). Total Amount: ₹${Number(quotation.grand_total || 0).toLocaleString("en-IN")}`,
               follow_up_date: new Date().toISOString().split("T")[0],
               follow_up_time: new Date().toLocaleTimeString("en-IN", {
                 hour: "2-digit",
@@ -128,7 +123,6 @@ export default function QuotationDetailsPage() {
           }
         }
 
-        // Refresh quotation to show 'sent' status & sent_at
         fetchQuotation();
       }
     } catch (error) {
@@ -139,21 +133,79 @@ export default function QuotationDetailsPage() {
     }
   };
 
-  // Status Badge Class
+  const handleDelete = async () => {
+    if (!window.confirm("Are you sure you want to delete this quotation?")) return;
+    try {
+      const res = await api.delete(`/quotations/${params.id}`);
+      if (res.data?.status) {
+        showToast("Quotation deleted successfully!", "success");
+        router.push(baseQuotationPath);
+      } else {
+        showToast(res.data?.message || "Failed to delete quotation.", "error");
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
+      showToast("An error occurred while deleting quotation.", "error");
+    }
+  };
+
+  // Status Badge Helper
   const getStatusBadge = (status) => {
-    switch (status?.toLowerCase()) {
+    const s = (status || "pending").toLowerCase();
+    switch (s) {
       case "sent":
-        return <span className="badge bg-info text-dark fs-6 px-3 py-1"><i className="bi bi-send-check-fill me-1"></i>Sent</span>;
+      case "send":
+        return (
+          <span className="badge bg-info text-dark fs-6 px-3 py-1">
+            <i className="bi bi-send-check-fill me-1"></i>Sent
+          </span>
+        );
+      case "print":
+      case "printed":
+        return (
+          <span className="badge text-white fs-6 px-3 py-1" style={{ backgroundColor: "#6366f1" }}>
+            <i className="bi bi-printer-fill me-1"></i>Print
+          </span>
+        );
       case "accepted":
-        return <span className="badge bg-success fs-6 px-3 py-1"><i className="bi bi-check-circle-fill me-1"></i>Accepted</span>;
+        return (
+          <span className="badge bg-success fs-6 px-3 py-1">
+            <i className="bi bi-check-circle-fill me-1"></i>Accepted
+          </span>
+        );
       case "rejected":
-        return <span className="badge bg-danger fs-6 px-3 py-1"><i className="bi bi-x-circle-fill me-1"></i>Rejected</span>;
+        return (
+          <span className="badge bg-danger fs-6 px-3 py-1">
+            <i className="bi bi-x-circle-fill me-1"></i>Rejected
+          </span>
+        );
       case "expired":
         return <span className="badge bg-secondary fs-6 px-3 py-1">Expired</span>;
+      case "pending":
       case "draft":
       default:
-        return <span className="badge bg-warning text-dark fs-6 px-3 py-1"><i className="bi bi-pencil-square me-1"></i>Draft</span>;
+        return (
+          <span className="badge bg-warning text-dark fs-6 px-3 py-1">
+            <i className="bi bi-clock-history me-1"></i>Pending
+          </span>
+        );
     }
+  };
+
+  // Format date helper: returns "DD.MM.YY"
+  const formatDisplayDate = (d) => {
+    if (!d) return "";
+    try {
+      const dateStr = String(d).split("T")[0];
+      const parts = dateStr.split("-");
+      if (parts.length === 3) {
+        const year = parts[0].slice(-2);
+        const month = parts[1];
+        const day = parts[2];
+        return `${day}.${month}.${year}`;
+      }
+    } catch (e) {}
+    return String(d);
   };
 
   if (isLoading) {
@@ -187,34 +239,127 @@ export default function QuotationDetailsPage() {
     );
   }
 
+  // ----------------------------------------------------
+  // EXTRACT DEALERSHIP PARAMETERS FROM QUOTATION & ITEMS
+  // ----------------------------------------------------
+  const firstItem = quotation.items?.[0] || {};
+
+  // 1. CAR and MODEL
+  let carName = "";
+  let modelSpec = "";
+  if (firstItem.item_name && firstItem.item_name.includes("–")) {
+    const parts = firstItem.item_name.split("–");
+    carName = parts[0]?.trim() || "";
+    modelSpec = parts[1]?.trim() || "";
+  } else if (firstItem.item_name && firstItem.item_name.includes("-")) {
+    const parts = firstItem.item_name.split("-");
+    carName = parts[0]?.trim() || "";
+    modelSpec = parts[1]?.trim() || "";
+  } else if (quotation.subject) {
+    const cleanSubj = quotation.subject.replace(/^Official Vehicle Quotation\s*[–-]?\s*/i, "").trim();
+    const parenMatch = cleanSubj.match(/^(.*?)\s*\((.*?)\)$/);
+    if (parenMatch) {
+      carName = parenMatch[1]?.trim() || "";
+      modelSpec = parenMatch[2]?.trim() || "";
+    } else {
+      carName = cleanSubj;
+      modelSpec = "STANDARD";
+    }
+  }
+
+  // 2. FUEL / VARIANT
+  let variantFuel = "PETROL";
+  if (firstItem.description && firstItem.description.includes("Fuel / Variant Type:")) {
+    variantFuel = firstItem.description.replace(/.*Fuel \/ Variant Type:\s*/i, "").trim() || "PETROL";
+  }
+
+  // 3. PARAMETER VALUES
+  const csdPrice = firstItem.unit_price && Number(firstItem.unit_price) > 0 ? Number(firstItem.unit_price).toLocaleString("en-IN") : "";
+  const msReward = firstItem.discount && Number(firstItem.discount) > 0 ? Number(firstItem.discount).toLocaleString("en-IN") : "N.A";
+
+  const getItemVal = (pattern) => {
+    const it = quotation.items?.find((item) =>
+      item.item_name && item.item_name.toLowerCase().includes(pattern.toLowerCase())
+    );
+    if (!it || !it.unit_price || Number(it.unit_price) === 0) return "N.A";
+    return Number(it.unit_price).toLocaleString("en-IN");
+  };
+
+  const gjRto = getItemVal("Gujarat State RTO") !== "N.A" ? getItemVal("Gujarat State RTO") : getItemVal("GJ RTO");
+  const bhRto = getItemVal("BH Series") !== "N.A" ? getItemVal("BH Series") : getItemVal("BH RTO");
+  const crtm = getItemVal("CRTM");
+  const insurance = getItemVal("Insurance");
+  const accessories = getItemVal("Accessories");
+  const warranty = getItemVal("Warranty");
+  const diffAmtCash = getItemVal("Difference") !== "N.A" ? getItemVal("Difference") : getItemVal("Cash Adjustment");
+
+  const displayDate = formatDisplayDate(quotation.quotation_date);
+  const clientName = quotation.customer_name || "";
+  const grandTotal = Number(quotation.grand_total || 0);
+
+  // Executive info
+  const executiveName = quotation.creator?.name || "Admin User";
+  const executivePhone = quotation.creator?.phone || "98000 11111";
+
   return (
     <AdminLayout>
       {/* =========================================================================
-          PRINT-ONLY STYLESHEET: Ensures ONLY inner quotation sheet prints cleanly
+          PRINT-ONLY STYLESHEET: Clean Single-Page A4 Dealership Grid Sheet
           ========================================================================= */}
       <style jsx global>{`
         @media print {
+          @page {
+            size: A4 portrait;
+            margin: 6mm 8mm;
+          }
+          html, body {
+            width: 100% !important;
+            height: auto !important;
+            overflow: visible !important;
+            background: #ffffff !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
           body * {
             visibility: hidden !important;
+          }
+          .app-sidebar,
+          .app-header,
+          .page-header-wrapper,
+          aside,
+          header,
+          nav,
+          .no-print,
+          .modal,
+          .modal-backdrop-custom {
+            display: none !important;
+          }
+          .app-main-content,
+          .page-body,
+          .container-fluid,
+          .row {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            display: block !important;
           }
           #printableQuoteCard,
           #printableQuoteCard * {
             visibility: visible !important;
           }
           #printableQuoteCard {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
+            position: static !important;
             width: 100% !important;
             max-width: 100% !important;
             margin: 0 !important;
-            padding: 15px !important;
+            padding: 10px 15px !important;
             background: #ffffff !important;
             box-shadow: none !important;
             border: none !important;
-          }
-          .no-print {
-            display: none !important;
+            page-break-after: avoid !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
         }
       `}</style>
@@ -251,6 +396,16 @@ export default function QuotationDetailsPage() {
 
             <button
               type="button"
+              className="btn btn-outline-danger d-flex align-items-center gap-1"
+              onClick={handleDelete}
+              title="Delete Quotation"
+            >
+              <i className="bi bi-trash3-fill"></i>
+              <span>Delete</span>
+            </button>
+
+            <button
+              type="button"
               className="btn btn-primary d-flex align-items-center gap-2 shadow-sm"
               onClick={() => setShowSendModal(true)}
             >
@@ -261,210 +416,245 @@ export default function QuotationDetailsPage() {
         </div>
 
         {/* ===================================================================
-            OFFICIAL DEALERSHIP QUOTATION PREVIEW SHEET
+            OFFICIAL DEALERSHIP QUOTATION GRID SHEET (EXACT SS 2 MATCH)
             =================================================================== */}
-        <div className="quotation-sheet-card mx-auto shadow-lg" id="printableQuoteCard" style={{ maxWidth: "900px" }}>
-          {/* Header with Dealership Name & Address */}
-          <div className="text-center mb-4 pb-3 border-bottom border-secondary border-opacity-25">
-            <div className="quote-header-brand" style={{ fontSize: "1.75rem", color: "#1e3a8a", fontWeight: "bold" }}>
-              DEFENCE AUTOLINK
-            </div>
-            <div className="quote-header-address mt-1 text-muted" style={{ fontSize: "0.85rem", lineHeight: "1.4" }}>
-              OFFICIAL MULTI-BRAND DEALERSHIP • SALES & SERVICES
-              <br />
-              Main Ring Road Showroom, South Extension Part-II, New Delhi - 110049
-              <br />
-              Phone: +91 98000 11111 / +91 98231 00001 • GSTIN: 07AAAAA0000A1Z5
-              <br />
-              Email: sales@defenceautolink.com • Web: www.defenceautolink.com
-            </div>
-          </div>
-
-          {/* Title Badge */}
-          <div className="text-center mb-4">
-            <div
-              className="d-inline-block px-4 py-1 text-white fw-bold rounded-pill text-uppercase"
-              style={{ background: "#2563eb", letterSpacing: "1px", fontSize: "0.9rem" }}
-            >
-              OFFICIAL PRICE QUOTATION
-            </div>
-          </div>
-
-          {/* Customer & Quote Meta Box */}
-          <div className="row g-3 mb-4 p-3 rounded-2 bg-light border text-dark" style={{ fontSize: "0.85rem" }}>
-            <div className="col-md-6 border-end">
-              <div className="text-uppercase fw-bold text-primary mb-2" style={{ fontSize: "0.75rem", letterSpacing: "0.5px" }}>
-                Bill To (Customer Information)
-              </div>
-              <div className="fw-bold fs-6 text-dark">{quotation.customer_name}</div>
-              {quotation.company_name && (
-                <div className="text-muted fw-semibold">{quotation.company_name}</div>
-              )}
-              {quotation.customer_phone && (
-                <div className="mt-1">
-                  <strong>Phone:</strong> {quotation.customer_phone}
-                </div>
-              )}
-              {quotation.customer_email && (
-                <div>
-                  <strong>Email:</strong> {quotation.customer_email}
-                </div>
-              )}
-              {quotation.customer_address && (
-                <div className="mt-1">
-                  <strong>Address:</strong> {quotation.customer_address}
-                </div>
-              )}
-            </div>
-
-            <div className="col-md-6 ps-md-4">
-              <div className="text-uppercase fw-bold text-primary mb-2" style={{ fontSize: "0.75rem", letterSpacing: "0.5px" }}>
-                Quotation Reference & Status
-              </div>
-              <div className="d-flex justify-content-between mb-1">
-                <span>Quotation Number:</span>
-                <strong className="text-primary">{quotation.quotation_number}</strong>
-              </div>
-              <div className="d-flex justify-content-between mb-1">
-                <span>Quotation Date:</span>
-                <strong>{quotation.quotation_date}</strong>
-              </div>
-              {quotation.valid_until && (
-                <div className="d-flex justify-content-between mb-1">
-                  <span>Valid Until:</span>
-                  <strong>{quotation.valid_until}</strong>
-                </div>
-              )}
-              {quotation.lead && (
-                <div className="d-flex justify-content-between mb-1">
-                  <span>Connected Lead:</span>
-                  <Link href={`/sales-executive/leads/${quotation.lead.id}`} className="text-primary text-decoration-none fw-bold">
-                    #{quotation.lead.id} ({quotation.lead.model_variant || quotation.lead.name})
-                  </Link>
-                </div>
-              )}
-              {quotation.creator && (
-                <div className="d-flex justify-content-between">
-                  <span>Prepared By:</span>
-                  <span>{quotation.creator.name} ({quotation.creator.role || "Sales Executive"})</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Subject & Description */}
-          <div className="mb-4 text-dark">
-            <h6 className="fw-bold text-primary mb-1">Subject: {quotation.subject}</h6>
-            {quotation.description && (
-              <p className="text-secondary small mb-0" style={{ lineHeight: "1.5" }}>
-                {quotation.description}
-              </p>
-            )}
-          </div>
-
-          {/* Items Table */}
-          <table className="table table-bordered table-sm text-dark align-middle mb-4" style={{ fontSize: "0.85rem" }}>
-            <thead style={{ background: "#1e3a8a", color: "#ffffff" }}>
-              <tr>
-                <th style={{ width: "5%" }} className="text-center py-2">#</th>
-                <th style={{ width: "45%" }} className="py-2">Item / Service Particulars</th>
-                <th style={{ width: "8%" }} className="text-center py-2">Qty</th>
-                <th style={{ width: "15%" }} className="text-end py-2">Unit Price (₹)</th>
-                <th style={{ width: "12%" }} className="text-end py-2">Discount (₹)</th>
-                <th style={{ width: "15%" }} className="text-end py-2">Total (₹)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {quotation.items && quotation.items.map((item, index) => (
-                <tr key={item.id || index}>
-                  <td className="text-center">{index + 1}</td>
-                  <td>
-                    <div className="fw-bold">{item.item_name}</div>
-                    {item.description && (
-                      <div className="text-muted" style={{ fontSize: "0.75rem" }}>
-                        {item.description}
-                      </div>
-                    )}
-                  </td>
-                  <td className="text-center">{Number(item.quantity)}</td>
-                  <td className="text-end">₹{Number(item.unit_price).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                  <td className="text-end text-danger">
-                    {Number(item.discount) > 0 ? `- ₹${Number(item.discount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "₹0.00"}
-                  </td>
-                  <td className="text-end fw-bold">
-                    ₹{Number(item.total).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {/* Commercial Summary Row */}
-          <div className="row g-4 mb-4 text-dark" style={{ fontSize: "0.85rem" }}>
-            <div className="col-md-6">
-              {quotation.payment_terms && (
-                <div className="p-2 mb-2 bg-light rounded border">
-                  <div className="text-uppercase fw-bold text-secondary" style={{ fontSize: "0.72rem" }}>Payment Terms</div>
-                  <div className="small mt-1">{quotation.payment_terms}</div>
-                </div>
-              )}
-              {quotation.delivery_terms && (
-                <div className="p-2 mb-2 bg-light rounded border">
-                  <div className="text-uppercase fw-bold text-secondary" style={{ fontSize: "0.72rem" }}>Delivery Terms</div>
-                  <div className="small mt-1">{quotation.delivery_terms}</div>
-                </div>
-              )}
-            </div>
-
-            <div className="col-md-6">
-              <div className="p-3 bg-light rounded border">
-                <div className="d-flex justify-content-between mb-2">
-                  <span className="text-muted">Subtotal:</span>
-                  <span className="fw-bold">₹{Number(quotation.subtotal).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
-                </div>
-                {Number(quotation.discount) > 0 && (
-                  <div className="d-flex justify-content-between mb-2 text-danger">
-                    <span>Discount:</span>
-                    <span className="fw-bold">- ₹{Number(quotation.discount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
-                  </div>
-                )}
-                {Number(quotation.tax) > 0 && (
-                  <div className="d-flex justify-content-between mb-2">
-                    <span className="text-muted">Taxes / GST:</span>
-                    <span className="fw-bold">₹{Number(quotation.tax).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
-                  </div>
-                )}
+        <div className="card shadow-sm border-0 mx-auto" style={{ maxWidth: "850px" }}>
+          <div
+            className="card-body p-4 bg-white text-dark rounded-3"
+            id="printableQuoteCard"
+            style={{ minHeight: "680px" }}
+          >
+            {/* Header: DA Logo + Red DEFENCE AUTOLINK + Grey Address Box */}
+            <div className="d-flex align-items-center justify-content-between mb-3 pb-2">
+              {/* Brand Logo & Name */}
+              <div className="d-flex align-items-center gap-2" style={{ maxWidth: "35%" }}>
                 <div
-                  className="d-flex justify-content-between pt-2 border-top fw-bold fs-5 text-primary"
-                  style={{ borderTopWidth: "2px !important" }}
+                  style={{
+                    width: 50,
+                    height: 50,
+                    borderRadius: "8px",
+                    background: "#1e3a8a",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#fff",
+                    fontWeight: "bold",
+                    fontSize: "1.2rem",
+                    flexShrink: 0,
+                  }}
                 >
-                  <span>Grand Total:</span>
-                  <span>₹{Number(quotation.grand_total).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                  DA
+                </div>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: "1.1rem", color: "#1e3a8a", lineHeight: "1.1" }}>
+                    DEFENCE
+                  </div>
+                  <div style={{ fontWeight: 800, fontSize: "1.1rem", color: "#2563eb", lineHeight: "1.1" }}>
+                    AUTOLINK
+                  </div>
+                </div>
+              </div>
+
+              {/* Main Red Heading & Grey Address Box */}
+              <div className="text-center" style={{ width: "65%" }}>
+                <h3
+                  className="mb-1 text-uppercase fw-bold"
+                  style={{
+                    color: "#b91c1c",
+                    fontSize: "1.6rem",
+                    letterSpacing: "1.5px",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  DEFENCE AUTOLINK
+                </h3>
+                <div
+                  className="p-2 rounded-2"
+                  style={{
+                    background: "#e2e8f0",
+                    fontSize: "0.74rem",
+                    fontWeight: "600",
+                    color: "#1e293b",
+                    lineHeight: "1.3",
+                  }}
+                >
+                  D-601, 6TH FLOOR, S.G BUSINESS HUB, NEAR UMIYA CAMPUS,
+                  <br />
+                  Ahmedabad - 380060
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* Dealership Notes & Terms */}
-          {quotation.notes && (
-            <div className="p-3 mb-4 rounded bg-light border text-dark" style={{ fontSize: "0.78rem" }}>
-              <div className="text-uppercase fw-bold text-secondary mb-1">Notes / Terms & Conditions:</div>
-              <div style={{ whiteSpace: "pre-line", lineHeight: "1.4" }}>{quotation.notes}</div>
-            </div>
-          )}
+            {/* Date, QUOTATION Center Badge & Client Name */}
+            <div className="d-flex align-items-center justify-content-between mb-3 mt-4">
+              <div className="fw-bold" style={{ fontSize: "0.92rem", color: "#0f172a" }}>
+                DATE : {displayDate}
+              </div>
 
-          {/* Footer & Signatures */}
-          <div className="pt-4 mt-4 border-top text-dark d-flex justify-content-between align-items-end" style={{ fontSize: "0.8rem" }}>
-            <div>
-              <span className="text-muted d-block">Thank you for considering Defence Autolink.</span>
-              <span className="text-secondary small">For any queries, please reply to this quote or contact our sales director.</span>
+              <div
+                className="px-4 py-1 text-center"
+                style={{
+                  border: "2px solid #0f172a",
+                  color: "#b91c1c",
+                  fontWeight: 700,
+                  fontSize: "0.95rem",
+                  letterSpacing: "1px",
+                }}
+              >
+                QUOTATION
+              </div>
+
+              <div className="fw-bold" style={{ fontSize: "0.85rem", color: "#0f172a" }}>
+                {clientName ? (
+                  <>
+                    CLIENT: <span className="text-primary text-uppercase">{clientName.toUpperCase()}</span>
+                  </>
+                ) : (
+                  <span style={{ display: "inline-block", minWidth: "10px" }}></span>
+                )}
+              </div>
             </div>
-            <div className="text-end">
-              <div className="signature-box" style={{ display: "inline-block", textAlign: "center", borderTop: "1px dashed #94a3b8", paddingTop: "5px", width: "160px", fontSize: "0.75rem", fontWeight: "bold" }}>
-                Authorized Signatory
-                <span className="d-block text-muted" style={{ fontSize: "0.68rem", fontWeight: "normal" }}>
-                  DEFENCE AUTOLINK
-                </span>
+
+            {/* Dealership Spreadsheet Grid Table */}
+            <div className="table-responsive">
+              <table
+                className="table mb-0"
+                style={{
+                  border: "2px solid #334155",
+                  fontSize: "0.86rem",
+                  fontWeight: 600,
+                }}
+              >
+                <thead>
+                  <tr style={{ background: "#94a3b8", color: "#0f172a" }}>
+                    <th
+                      style={{
+                        width: "55%",
+                        border: "1px solid #334155",
+                        padding: "10px 12px",
+                        fontWeight: "800",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      CAR: {carName}
+                    </th>
+                    <th
+                      style={{
+                        width: "45%",
+                        border: "1px solid #334155",
+                        padding: "10px 12px",
+                        textAlign: "center",
+                        fontWeight: "800",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      MODEL: {modelSpec}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* CSD PRICE */}
+                  <tr>
+                    <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>CSD PRICE</td>
+                    <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center", fontWeight: "700" }}>
+                      {csdPrice}
+                    </td>
+                  </tr>
+
+                  {/* GJ RTO */}
+                  <tr>
+                    <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>GJ RTO</td>
+                    <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
+                      {gjRto}
+                    </td>
+                  </tr>
+
+                  {/* BH RTO * APPOROX */}
+                  <tr>
+                    <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>BH RTO * APPOROX</td>
+                    <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
+                      {bhRto}
+                    </td>
+                  </tr>
+
+                  {/* CRTM */}
+                  <tr>
+                    <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>CRTM</td>
+                    <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
+                      {crtm}
+                    </td>
+                  </tr>
+
+                  {/* INSURANCE */}
+                  <tr>
+                    <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>INSURANCE</td>
+                    <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
+                      {insurance}
+                    </td>
+                  </tr>
+
+                  {/* ACCESSORIES */}
+                  <tr>
+                    <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>ACCESSORIES</td>
+                    <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center", fontWeight: "700" }}>
+                      {accessories}
+                    </td>
+                  </tr>
+
+                  {/* WARRANTY */}
+                  <tr>
+                    <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>WARRANTY</td>
+                    <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
+                      {warranty}
+                    </td>
+                  </tr>
+
+                  {/* M.S REWORD */}
+                  <tr>
+                    <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>M.S REWORD</td>
+                    <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
+                      {msReward}
+                    </td>
+                  </tr>
+
+                  {/* DIFFERENCE AMT CASH */}
+                  <tr>
+                    <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>DIFFERENCE AMT CASH</td>
+                    <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
+                      {diffAmtCash}
+                    </td>
+                  </tr>
+
+                  {/* NET ON-ROAD ESTIMATE */}
+                  <tr style={{ background: "#fef3c7" }}>
+                    <td style={{ border: "1px solid #334155", padding: "10px 12px", fontWeight: "800", color: "#92400e" }}>
+                      ESTIMATED ON-ROAD PRICE
+                    </td>
+                    <td style={{ border: "1px solid #334155", padding: "10px 12px", textAlign: "center", fontWeight: "800", color: "#b91c1c", fontSize: "1.05rem" }}>
+                      ₹ {grandTotal.toLocaleString("en-IN")}/-
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Dealership Executive & Signature Footer */}
+            <div className="mt-4 pt-3 border-top d-flex justify-content-between align-items-end" style={{ fontSize: "0.8rem" }}>
+              <div>
+                <div className="fw-bold text-dark">
+                  Executive: <span className="text-primary">{executiveName}</span>
+                </div>
+                <div className="text-muted">Contact: +91 {executivePhone}</div>
+                <div className="text-secondary small mt-1" style={{ fontSize: "0.72rem" }}>
+                  * Prices prevailing at the time of delivery will be applicable. Road tax as per RTO norms.
+                </div>
+              </div>
+
+              <div className="text-end">
+                <div className="fw-bold text-dark">For DEFENCE AUTOLINK</div>
+                <div className="text-muted" style={{ fontSize: "0.72rem" }}>
+                  (Authorized Multi-Brand Dealership Signatory)
+                </div>
               </div>
             </div>
           </div>
@@ -474,7 +664,7 @@ export default function QuotationDetailsPage() {
             SEND QUOTATION EMAIL MODAL
             =================================================================== */}
         {showSendModal && (
-          <div className="modal-backdrop-custom" onClick={() => !isSendingEmail && setShowSendModal(false)}>
+          <div className="modal-backdrop-custom">
             <div className="modal-dialog-custom" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "550px" }}>
               <div className="modal-header-custom">
                 <h5 className="modal-title-custom text-white d-flex align-items-center gap-2 mb-0" style={{ color: "#FFFFFF" }}>
@@ -502,7 +692,7 @@ export default function QuotationDetailsPage() {
                     </div>
                     <div className="d-flex justify-content-between small">
                       <span style={{ color: "#CBD5E1" }}>Grand Total:</span>
-                      <strong style={{ color: "#4ADE80" }}>₹{Number(quotation.grand_total).toLocaleString("en-IN")}</strong>
+                      <strong style={{ color: "#4ADE80" }}>₹{Number(quotation.grand_total || 0).toLocaleString("en-IN")}</strong>
                     </div>
                   </div>
 

@@ -559,7 +559,7 @@ export default function ReceptionistDashboard() {
           ---------------------------------------------------- */}
       {/* Modal: Add New Inquiry */}
       {showInquiryModal && (
-        <div className="modal-backdrop-custom" onClick={() => setShowInquiryModal(false)}>
+        <div className="modal-backdrop-custom">
           <div className="modal-dialog-custom modal-md" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header-custom" style={{ backgroundColor: "#4D5D25", color: "#fff" }}>
               <h5 className="modal-title-custom text-white mb-0 fs-6">
@@ -660,7 +660,7 @@ export default function ReceptionistDashboard() {
 
       {/* Modal: Assign Lead */}
       {showAssignModal && unassignedLead && (
-        <div className="modal-backdrop-custom" onClick={() => setShowAssignModal(false)}>
+        <div className="modal-backdrop-custom">
           <div className="modal-dialog-custom modal-md" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header-custom" style={{ backgroundColor: "#4D5D25", color: "#fff" }}>
               <h5 className="modal-title-custom text-white mb-0 fs-6">

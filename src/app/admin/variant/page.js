@@ -351,21 +351,6 @@ export default function VariantPage() {
               <span className="text-primary small fw-semibold">Live Database Records</span>
             </div>
           </div>
-
-          <div className="col-md-4 col-sm-6">
-            <div className="card stat-card">
-              <div className="stat-card-header">
-                <span className="stat-card-title">Active Trims</span>
-                <div className="stat-icon-box success">
-                  <i className="bi bi-check-circle-fill"></i>
-                </div>
-              </div>
-              <div className="stat-card-value">
-                {variantStats.active_trims} Active
-              </div>
-              <span className="text-success small fw-semibold">Available for Quotations</span>
-            </div>
-          </div>
         </div>
 
         {/* Variants Table Card */}
@@ -539,7 +524,7 @@ export default function VariantPage() {
             ADD VEHICLE VARIANT MODAL (Matches user's exact UI screenshot)
             ------------------------------------------------------------------ */}
         {showAddModal && (
-          <div className="modal-backdrop-custom" onClick={() => setShowAddModal(false)}>
+          <div className="modal-backdrop-custom">
             <div className="modal-dialog-custom" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "520px" }}>
               <div className="modal-header-custom d-flex justify-content-between align-items-center">
                 <h5 className="modal-title-custom d-flex align-items-center gap-2 text-white mb-0 fs-5 fw-bold">
@@ -687,7 +672,7 @@ export default function VariantPage() {
             EDIT VEHICLE VARIANT MODAL
             ------------------------------------------------------------------ */}
         {editVariant && (
-          <div className="modal-backdrop-custom" onClick={() => setEditVariant(null)}>
+          <div className="modal-backdrop-custom">
             <div className="modal-dialog-custom" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "520px" }}>
               <div className="modal-header-custom d-flex justify-content-between align-items-center">
                 <h5 className="modal-title-custom d-flex align-items-center gap-2 text-white mb-0 fs-5 fw-bold">
@@ -835,7 +820,7 @@ export default function VariantPage() {
             DELETE CONFIRMATION MODAL
             ------------------------------------------------------------------ */}
         {deleteTarget && (
-          <div className="modal-backdrop-custom" onClick={() => setDeleteTarget(null)}>
+          <div className="modal-backdrop-custom">
             <div className="modal-dialog-custom" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "450px" }}>
               <div className="modal-header-custom">
                 <h5 className="modal-title-custom text-danger">

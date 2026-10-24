@@ -904,7 +904,7 @@ export default function LeadImportModal({
   if (!isOpen) return null;
 
   return (
-    <div className="modal-backdrop-custom" onClick={handleClose}>
+    <div className="modal-backdrop-custom">
       <div
         className="modal-dialog-custom modal-xl"
         onClick={(e) => e.stopPropagation()}

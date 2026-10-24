@@ -319,7 +319,7 @@ export default function ConvertDealModal({
   };
 
   return (
-    <div className="modal-backdrop-custom" onClick={onClose} style={{ zIndex: 1060 }}>
+    <div className="modal-backdrop-custom" style={{ zIndex: 1060 }}>
       <div
         className="modal-dialog-custom"
         onClick={(e) => e.stopPropagation()}

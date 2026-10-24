@@ -107,13 +107,13 @@ export default function QuotationMainPage() {
   // ----------------------------------------------------
   const [csdPrice, setCsdPrice] = useState("");
   const [gjRto, setGjRto] = useState("");
-  const [bhRto, setBhRto] = useState("N.A");
-  const [crtm, setCrtm] = useState("N.A");
+  const [bhRto, setBhRto] = useState("");
+  const [crtm, setCrtm] = useState("");
   const [insurance, setInsurance] = useState("");
-  const [accessories, setAccessories] = useState("0");
-  const [warranty, setWarranty] = useState("N.A");
-  const [msReward, setMsReward] = useState("N.A");
-  const [diffAmtCash, setDiffAmtCash] = useState("N.A");
+  const [accessories, setAccessories] = useState("");
+  const [warranty, setWarranty] = useState("");
+  const [msReward, setMsReward] = useState("");
+  const [diffAmtCash, setDiffAmtCash] = useState("");
 
   // Column 3 Values
   const [col3CsdPrice, setCol3CsdPrice] = useState("N.A");
@@ -300,10 +300,14 @@ export default function QuotationMainPage() {
         if (targetVariant.price && Number(targetVariant.price) > 0) {
           const numPrice = Number(targetVariant.price);
           setCsdPrice(String(numPrice));
-          const estRto = Math.round(numPrice * 0.06);
-          setGjRto(String(estRto));
-          const estIns = Math.round(numPrice * 0.038);
-          setInsurance(String(estIns));
+          setGjRto("");
+          setBhRto("");
+          setCrtm("");
+          setInsurance("");
+          setAccessories("");
+          setWarranty("");
+          setMsReward("");
+          setDiffAmtCash("");
         }
       } else if (lead.model_variant) {
         setCarName(lead.brand_name ? `${lead.brand_name} ${lead.model_variant}` : lead.model_variant);
@@ -399,12 +403,14 @@ export default function QuotationMainPage() {
       if (variantObj.price && Number(variantObj.price) > 0) {
         const numPrice = Number(variantObj.price);
         setCsdPrice(String(numPrice));
-
-        const estRto = Math.round(numPrice * 0.06);
-        setGjRto(String(estRto));
-
-        const estIns = Math.round(numPrice * 0.038);
-        setInsurance(String(estIns));
+        setGjRto("");
+        setBhRto("");
+        setCrtm("");
+        setInsurance("");
+        setAccessories("");
+        setWarranty("");
+        setMsReward("");
+        setDiffAmtCash("");
       }
 
       showToast(`Selected Variant ${variantObj.name} (₹${Number(variantObj.price || 0).toLocaleString("en-IN")})`, "info");
@@ -450,17 +456,24 @@ export default function QuotationMainPage() {
     setVariantFuel("PETROL");
     setCsdPrice("");
     setGjRto("");
-    setBhRto("N.A");
-    setCrtm("N.A");
+    setBhRto("");
+    setCrtm("");
     setInsurance("");
-    setAccessories("0");
-    setWarranty("N.A");
-    setMsReward("N.A");
-    setDiffAmtCash("N.A");
+    setAccessories("");
+    setWarranty("");
+    setMsReward("");
+    setDiffAmtCash("");
     showToast("Quotation sheet parameters cleared.", "info");
   };
 
-  const handlePrintPdf = () => {
+  const handlePrintPdf = async () => {
+    if (clientName && clientName.trim()) {
+      try {
+        await saveQuotationToBackend("print");
+      } catch (err) {
+        console.error("Auto save print error:", err);
+      }
+    }
     if (typeof window !== "undefined") {
       window.print();
     }
@@ -503,7 +516,7 @@ export default function QuotationMainPage() {
         "Subject / Vehicle": q.subject || q.car_name || "-",
         "Date": q.quotation_date || "-",
         "Grand Total (₹)": Number(q.grand_total || q.total_amount || q.total || 0),
-        "Status": (q.status || "draft").toUpperCase(),
+        "Status": (q.status || "pending").toUpperCase(),
       }));
 
       const worksheet = XLSX.utils.json_to_sheet(rows);
@@ -535,7 +548,7 @@ export default function QuotationMainPage() {
   // ----------------------------------------------------
   // 6. SAVE QUOTATION TO BACKEND DATABASE
   // ----------------------------------------------------
-  const saveQuotationToBackend = async (status = "draft") => {
+  const saveQuotationToBackend = async (status = "pending") => {
     if (!clientName.trim()) {
       showToast("Please enter client full name.", "warning");
       return null;
@@ -757,19 +770,28 @@ export default function QuotationMainPage() {
   // ----------------------------------------------------
   // 8. RECORDS LISTING LOAD
   // ----------------------------------------------------
+  const [recordView, setRecordView] = useState("active"); // "active" | "trash"
+  const [permanentDeleteTarget, setPermanentDeleteTarget] = useState(null);
+  const [isDeletingPermanent, setIsDeletingPermanent] = useState(false);
+
   const loadQuotationsList = async (
     page = 1,
     search = searchTerm,
     status = statusFilter,
     from = startDate,
     to = endDate,
-    customPerPage = pagination.per_page || 15
+    customPerPage = pagination.per_page || 15,
+    viewMode = recordView
   ) => {
     setIsLoadingQuotes(true);
     try {
       const params = { page, per_page: customPerPage };
+      if (viewMode === "trash") {
+        params.status = "deleted";
+      } else if (status && status !== "all") {
+        params.status = status;
+      }
       if (search && search.trim()) params.search = search.trim();
-      if (status && status !== "all") params.status = status;
       if (from) {
         params.from_date = from;
         params.start_date = from;
@@ -801,11 +823,107 @@ export default function QuotationMainPage() {
   useEffect(() => {
     if (activeTab === "records") {
       const timer = setTimeout(() => {
-        loadQuotationsList(1, searchTerm, statusFilter, startDate, endDate, pagination.per_page);
+        loadQuotationsList(1, searchTerm, statusFilter, startDate, endDate, pagination.per_page, recordView);
       }, 300);
       return () => clearTimeout(timer);
     }
-  }, [activeTab, searchTerm, statusFilter, startDate, endDate]);
+  }, [activeTab, searchTerm, statusFilter, startDate, endDate, recordView]);
+
+  const handleDeleteQuotation = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this quotation?")) return;
+    try {
+      setIsDeleting(true);
+      const res = await api.delete(`/quotations/${id}`);
+      if (res.data?.status) {
+        showToast("Quotation deleted successfully!", "success");
+        loadQuotationsList(pagination.current_page, searchTerm, statusFilter, startDate, endDate, pagination.per_page, recordView);
+      } else {
+        showToast(res.data?.message || "Failed to delete quotation.", "error");
+      }
+    } catch (err) {
+      console.error("Delete quotation error:", err);
+      showToast("An error occurred while deleting quotation.", "error");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleRestoreQuotation = async (id) => {
+    try {
+      const res = await api.post(`/quotations/${id}/restore`);
+      if (res.data?.status) {
+        showToast("Quotation restored successfully!", "success");
+        loadQuotationsList(pagination.current_page, searchTerm, statusFilter, startDate, endDate, pagination.per_page, recordView);
+      } else {
+        showToast(res.data?.message || "Failed to restore quotation.", "error");
+      }
+    } catch (err) {
+      console.error("Restore quotation error:", err);
+      showToast("An error occurred while restoring quotation.", "error");
+    }
+  };
+
+  const handlePermanentDeleteQuotation = async () => {
+    if (!permanentDeleteTarget) return;
+    setIsDeletingPermanent(true);
+    try {
+      const res = await api.delete(`/quotations/${permanentDeleteTarget.id}/force`);
+      if (res.data?.status) {
+        showToast("Quotation permanently deleted forever.", "success");
+        setPermanentDeleteTarget(null);
+        loadQuotationsList(pagination.current_page, searchTerm, statusFilter, startDate, endDate, pagination.per_page, recordView);
+      } else {
+        showToast(res.data?.message || "Failed to permanently delete quotation.", "error");
+      }
+    } catch (err) {
+      console.error("Permanent delete quotation error:", err);
+      showToast("An error occurred while permanently deleting quotation.", "error");
+    } finally {
+      setIsDeletingPermanent(false);
+    }
+  };
+
+  const renderStatusBadge = (status) => {
+    const s = (status || "pending").toLowerCase();
+    switch (s) {
+      case "sent":
+      case "send":
+        return (
+          <span className="badge bg-info text-dark px-2 py-1">
+            <i className="bi bi-send-check-fill me-1"></i>Sent
+          </span>
+        );
+      case "print":
+      case "printed":
+        return (
+          <span className="badge text-white px-2 py-1" style={{ backgroundColor: "#6366f1" }}>
+            <i className="bi bi-printer-fill me-1"></i>Print
+          </span>
+        );
+      case "accepted":
+        return (
+          <span className="badge bg-success text-white px-2 py-1">
+            <i className="bi bi-check-circle-fill me-1"></i>Accepted
+          </span>
+        );
+      case "rejected":
+        return (
+          <span className="badge bg-danger text-white px-2 py-1">
+            <i className="bi bi-x-circle-fill me-1"></i>Rejected
+          </span>
+        );
+      case "expired":
+        return <span className="badge bg-secondary px-2 py-1">Expired</span>;
+      case "pending":
+      case "draft":
+      default:
+        return (
+          <span className="badge bg-warning text-dark px-2 py-1">
+            <i className="bi bi-clock-history me-1"></i>Pending
+          </span>
+        );
+    }
+  };
 
   return (
     <AdminLayout>
@@ -814,27 +932,60 @@ export default function QuotationMainPage() {
           ========================================================================= */}
       <style jsx global>{`
         @media print {
+          @page {
+            size: A4 portrait;
+            margin: 6mm 8mm;
+          }
+          html, body {
+            height: auto !important;
+            max-height: 100% !important;
+            overflow: visible !important;
+            background: #ffffff !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
           body * {
             visibility: hidden !important;
+          }
+          .app-sidebar,
+          .app-header,
+          .page-header-wrapper,
+          aside,
+          header,
+          nav,
+          .no-print,
+          .col-xl-5,
+          .modal,
+          .modal-backdrop-custom {
+            display: none !important;
+          }
+          .app-main-content,
+          .page-body,
+          .container-fluid,
+          .row,
+          .col-xl-7 {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            display: block !important;
           }
           #printableQuoteCard,
           #printableQuoteCard * {
             visibility: visible !important;
           }
           #printableQuoteCard {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
+            position: static !important;
             width: 100% !important;
             max-width: 100% !important;
             margin: 0 !important;
-            padding: 15px !important;
+            padding: 10px 15px !important;
             background: #ffffff !important;
             box-shadow: none !important;
             border: none !important;
-          }
-          .no-print {
-            display: none !important;
+            page-break-after: avoid !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
         }
       `}</style>
@@ -878,6 +1029,7 @@ export default function QuotationMainPage() {
                   <span>Print / PDF</span>
                 </button>
               )
+              
             ) : (
               <button
                 type="button"
@@ -902,6 +1054,19 @@ export default function QuotationMainPage() {
               </button>
             )}
 
+             <button
+                  type="button"
+                  className={`btn btn-sm ${recordView === "trash" ? "btn-danger text-white shadow-sm" : "btn-outline-custom"} ms-2`}
+                  onClick={() => {
+                    const next = recordView === "trash" ? "active" : "trash";
+                    setRecordView(next);
+                    setPagination((prev) => ({ ...prev, current_page: 1 }));
+                  }}
+                  title={recordView === "trash" ? "Back to Active Quotations" : "View Deleted Quotations"}
+                >
+                  <i className={`bi ${recordView === "trash" ? "bi-arrow-left" : "bi-trash text-danger"} me-1`}></i>
+                  <span>{recordView === "trash" ? "Active Quotations" : "Trash"}</span>
+                </button>
             {/* Tab switch between Live Generator and All Saved Quotes */}
             {can("quotation.saved_view") && (
               <button
@@ -917,7 +1082,7 @@ export default function QuotationMainPage() {
         </div>
 
         {/* ===================================================================
-            TAB 1: LIVE QUOTATION BUILDER & SHEET (Screenshot UI)
+            TAB 1: LIVE QUOTATION BUILDER & SHEET
             =================================================================== */}
         {activeTab === "maker" && (
           <div className="row g-4">
@@ -1063,7 +1228,7 @@ export default function QuotationMainPage() {
 
                   {/* Variant & Fuel Type */}
                   <div className="row g-2 mb-3">
-                    <div className="col-md-6">
+                    <div className="col-12">
                       <label className="form-label text-dark small fw-medium mb-1">
                         Select Variant {isLoadingVariants && <span className="spinner-border spinner-border-sm ms-1"></span>}
                       </label>
@@ -1079,20 +1244,6 @@ export default function QuotationMainPage() {
                             {v.name} (₹{Number(v.price || 0).toLocaleString("en-IN")})
                           </option>
                         ))}
-                      </select>
-                    </div>
-                    <div className="col-md-6">
-                      <label className="form-label text-dark small fw-medium mb-1">Fuel / Variant Tag</label>
-                      <select
-                        className="form-select"
-                        value={variantFuel}
-                        onChange={(e) => setVariantFuel(e.target.value)}
-                      >
-                        <option value="PETROL">PETROL</option>
-                        <option value="DIESEL">DIESEL</option>
-                        <option value="CNG">CNG</option>
-                        <option value="ELECTRIC">ELECTRIC / EV</option>
-                        <option value="HYBRID">STRONG HYBRID</option>
                       </select>
                     </div>
                   </div>
@@ -1256,7 +1407,7 @@ export default function QuotationMainPage() {
                     <button
                       type="button"
                       className="btn btn-primary flex-fill d-flex align-items-center justify-content-center gap-2"
-                      onClick={() => saveQuotationToBackend("draft")}
+                      onClick={() => saveQuotationToBackend("pending")}
                       disabled={isSaving}
                     >
                       {isSaving ? (
@@ -1373,7 +1524,13 @@ export default function QuotationMainPage() {
                   </div>
 
                   <div className="fw-bold" style={{ fontSize: "0.85rem", color: "#0f172a" }}>
-                    CLIENT: <span className="text-primary">{clientName}</span>
+                    {clientName ? (
+                      <>
+                        CLIENT: <span className="text-primary text-uppercase">{clientName.toUpperCase()}</span>
+                      </>
+                    ) : (
+                      <span style={{ display: "inline-block", minWidth: "10px" }}></span>
+                    )}
                   </div>
                 </div>
 
@@ -1415,31 +1572,6 @@ export default function QuotationMainPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {/* Variant Green Row */}
-                      <tr>
-                        <td
-                          style={{
-                            background: "#86efac",
-                            color: "#052e16",
-                            border: "1px solid #334155",
-                            padding: "8px 12px",
-                            fontWeight: "800",
-                            textTransform: "uppercase",
-                          }}
-                        >
-                          VARIENT: {variantFuel}
-                        </td>
-                        <td
-                          style={{
-                            border: "1px solid #334155",
-                            padding: "8px 12px",
-                            textAlign: "center",
-                          }}
-                        >
-                          {variantCol2}
-                        </td>
-                      </tr>
-
                       {/* CSD PRICE */}
                       <tr>
                         <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>CSD PRICE</td>
@@ -1555,7 +1687,22 @@ export default function QuotationMainPage() {
         {activeTab === "records" && (
           <div className="card shadow-sm rounded-3 overflow-hidden">
             <div className="card-header d-flex justify-content-between align-items-center flex-wrap gap-2 p-3">
-              <h5 className="card-title text-dark mb-0 fw-bold">Saved Quotations Archive</h5>
+              <div className="d-flex align-items-center gap-2 flex-wrap">
+                <h5 className="card-title text-dark mb-0 fw-bold">Saved Quotations Archive</h5>
+                {/* <button
+                  type="button"
+                  className={`btn btn-sm ${recordView === "trash" ? "btn-danger text-white shadow-sm" : "btn-outline-custom"} ms-2`}
+                  onClick={() => {
+                    const next = recordView === "trash" ? "active" : "trash";
+                    setRecordView(next);
+                    setPagination((prev) => ({ ...prev, current_page: 1 }));
+                  }}
+                  title={recordView === "trash" ? "Back to Active Quotations" : "View Deleted Quotations"}
+                >
+                  <i className={`bi ${recordView === "trash" ? "bi-arrow-left" : "bi-trash text-danger"} me-1`}></i>
+                  <span>{recordView === "trash" ? "Active Quotations" : "Trash"}</span>
+                </button> */}
+              </div>
               <div className="d-flex align-items-center gap-2 flex-wrap">
                 {/* Start Date */}
                 <div className="input-group input-group-sm" style={{ width: "165px" }}>
@@ -1599,7 +1746,8 @@ export default function QuotationMainPage() {
                     onChange={(e) => setStatusFilter(e.target.value)}
                   >
                     <option value="">All Statuses</option>
-                    <option value="draft">Draft</option>
+                    <option value="pending">Pending</option>
+                    <option value="print">Print</option>
                     <option value="sent">Sent</option>
                     <option value="accepted">Accepted</option>
                   </select>
@@ -1703,14 +1851,58 @@ export default function QuotationMainPage() {
                         {/* 1. Actions First Column */}
                         <td className="py-3 px-3 text-center">
                           <div className="d-flex align-items-center justify-content-center gap-1">
-                            {(can("quotation.view") || isReceptionist) && (
-                              <Link
-                                href={`${baseQuotationPath}/${quote.id}`}
-                                className="btn btn-outline-custom btn-sm p-1 px-2"
-                                title="View Quotation"
-                              >
-                                <i className="bi bi-eye"></i>
-                              </Link>
+                            {recordView === "trash" ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="btn btn-outline-success btn-sm px-2.5 py-1 d-inline-flex align-items-center gap-1 rounded-pill shadow-xs fw-semibold"
+                                  title="Restore Quotation"
+                                  onClick={() => handleRestoreQuotation(quote.id)}
+                                >
+                                  <i className="bi bi-arrow-counterclockwise"></i>
+                                  <span>Restore</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-outline-danger btn-sm px-2.5 py-1 d-inline-flex align-items-center gap-1 rounded-pill shadow-xs fw-semibold"
+                                  title="Permanently Delete Quotation Forever"
+                                  onClick={() => setPermanentDeleteTarget(quote)}
+                                >
+                                  <i className="bi bi-trash3"></i>
+                                  <span>Delete</span>
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                {(can("quotation.view") || isReceptionist) && (
+                                  <Link
+                                    href={`${baseQuotationPath}/${quote.id}`}
+                                    className="btn btn-outline-custom btn-sm p-1 px-2"
+                                    title="View Quotation"
+                                  >
+                                    <i className="bi bi-eye"></i>
+                                  </Link>
+                                )}
+                                {(can("quotation.print_pdf") || isReceptionist) && (
+                                  <Link
+                                    href={`${baseQuotationPath}/${quote.id}`}
+                                    className="btn btn-outline-custom btn-sm p-1 px-2"
+                                    title="Print Dealership Quotation"
+                                  >
+                                    <i className="bi bi-printer-fill"></i>
+                                  </Link>
+                                )}
+                                {can("quotation.delete") && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-outline-danger btn-sm p-1 px-2"
+                                    title="Delete Quotation"
+                                    onClick={() => handleDeleteQuotation(quote.id)}
+                                  >
+                                    <i className="bi bi-trash3-fill"></i>
+                                  </button>
+                                )}
+                              </>
                             )}
                           </div>
                         </td>
@@ -1751,16 +1943,7 @@ export default function QuotationMainPage() {
 
                         {/* 7. Status */}
                         <td className="py-3 px-3 text-center">
-                          <span
-                            className={`badge text-capitalize ${quote.status === "accepted"
-                                ? "bg-success text-white"
-                                : quote.status === "sent"
-                                  ? "bg-info text-dark"
-                                  : "bg-warning text-dark"
-                              }`}
-                          >
-                            {quote.status || "draft"}
-                          </span>
+                          {renderStatusBadge(quote.status)}
                         </td>
                       </tr>
                     ))
@@ -1792,7 +1975,7 @@ export default function QuotationMainPage() {
             EMAIL CLIENT MODAL
             =================================================================== */}
         {showEmailModal && (
-          <div className="modal-backdrop-custom" onClick={() => !isSendingEmail && setShowEmailModal(false)}>
+          <div className="modal-backdrop-custom">
             <div className="modal-dialog-custom" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "520px" }}>
               <div className="modal-header-custom">
                 <h5 className="modal-title-custom text-white d-flex align-items-center gap-2 mb-0" style={{ color: "#FFFFFF" }}>
@@ -1868,6 +2051,64 @@ export default function QuotationMainPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Sweet Alert Confirmation Modal for Permanent Delete */}
+        {permanentDeleteTarget && (
+          <div
+            className="modal fade show d-block"
+            style={{ backgroundColor: "rgba(15, 23, 42, 0.65)", backdropFilter: "blur(4px)", zIndex: 1080 }}
+            onClick={() => !isDeletingPermanent && setPermanentDeleteTarget(null)}
+          >
+            <div
+              className="modal-dialog modal-dialog-centered"
+              style={{ maxWidth: "420px" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                <div className="modal-body p-4 text-center">
+                  <div
+                    className="d-inline-flex align-items-center justify-content-center rounded-circle mb-3 shadow-xs"
+                    style={{ width: "64px", height: "64px", background: "#FEE2E2", color: "#DC2626" }}
+                  >
+                    <i className="bi bi-exclamation-triangle-fill fs-2"></i>
+                  </div>
+                  <h5 className="modal-title fw-bold text-dark mb-2">Delete Permanently?</h5>
+                  <p className="text-muted small mb-0 px-2" style={{ lineHeight: "1.5" }}>
+                    Are you sure you want to permanently delete quotation <strong>&quot;{permanentDeleteTarget.quote_no || `#${permanentDeleteTarget.id}`}&quot;</strong> for <strong>{permanentDeleteTarget.customer_name || "this customer"}</strong>? This record will be deleted forever and <strong>cannot be restored</strong>.
+                  </p>
+                </div>
+                <div className="modal-footer border-0 p-3 bg-light d-flex gap-2 justify-content-center">
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary px-3 py-1.5 rounded-pill fw-medium"
+                    onClick={() => setPermanentDeleteTarget(null)}
+                    disabled={isDeletingPermanent}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-danger px-4 py-1.5 rounded-pill fw-semibold shadow-sm"
+                    onClick={handlePermanentDeleteQuotation}
+                    disabled={isDeletingPermanent}
+                  >
+                    {isDeletingPermanent ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                        <span>Deleting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <i className="bi bi-trash3-fill me-1"></i>
+                        <span>Yes, Delete Forever</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}

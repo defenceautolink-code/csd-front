@@ -93,6 +93,9 @@ export default function FollowUpPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
 
+  const [recordView, setRecordView] = useState("active"); // "active" | "trash"
+  const [viewHistoryCustomer, setViewHistoryCustomer] = useState(null);
+
   const getTodayDate = () => {
     const now = new Date();
     const y = now.getFullYear();
@@ -100,6 +103,11 @@ export default function FollowUpPage() {
     const d = String(now.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
   };
+
+  const getCurrentTimeFormatted = () => {
+    return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
+  };
+
   const [activeActionMenuId, setActiveActionMenuId] = useState(null);
   const [showLogModal, setShowLogModal] = useState(false);
   const [selectedLead, setSelectedLead] = useState(null);
@@ -113,7 +121,7 @@ export default function FollowUpPage() {
 
   useEffect(() => {
     const handleUpdate = () => {
-      fetchFollowUps(currentPage, perPage, searchTerm, startDate, endDate, activeTab);
+      fetchFollowUps(currentPage, perPage, searchTerm, startDate, endDate, activeTab, recordView);
       axios.get(`${API_URL}/leads`).then((res) => {
         if (res.data?.data && Array.isArray(res.data.data)) {
           setLeadsList(res.data.data);
@@ -122,11 +130,13 @@ export default function FollowUpPage() {
     };
     window.addEventListener("csd_approvals_updated", handleUpdate);
     return () => window.removeEventListener("csd_approvals_updated", handleUpdate);
-  }, [currentPage, perPage, searchTerm, startDate, endDate, activeTab]);
+  }, [currentPage, perPage, searchTerm, startDate, endDate, activeTab, recordView]);
 
   // Live follow-ups list & KPIs from backend
   const [followUpsList, setFollowUpsList] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [permanentDeleteTarget, setPermanentDeleteTarget] = useState(null);
+  const [isDeletingPermanent, setIsDeletingPermanent] = useState(false);
   const [kpis, setKpis] = useState({ overdue: 0, due_today: 0, upcoming: 0, total: 0 });
   const [pagination, setPagination] = useState({
     current_page: 1,
@@ -136,13 +146,15 @@ export default function FollowUpPage() {
   });
   const [leadsList, setLeadsList] = useState([]);
 
-  // New Log form state
+  // New Log form state with current Interaction Date and Time
   const [callLog, setCallLog] = useState({
     lead_id: null,
     customer: "",
     phone: "",
     vehicle: "",
     outcome: "Interested / Call Back",
+    interaction_date: getTodayDate(),
+    interaction_time: getCurrentTimeFormatted(),
     nextDate: "",
     type: "Phone Call",
     nextTime: "10:00 AM",
@@ -182,7 +194,8 @@ export default function FollowUpPage() {
     search = searchTerm,
     from = startDate,
     to = endDate,
-    tab = activeTab
+    tab = activeTab,
+    viewMode = recordView
   ) => {
     try {
       setLoading(true);
@@ -191,6 +204,9 @@ export default function FollowUpPage() {
         page: page,
         per_page: limit,
       };
+      if (viewMode === "trash") {
+        params.status = "deleted";
+      }
       if (search && search.trim()) {
         params.search = search.trim();
       }
@@ -202,7 +218,7 @@ export default function FollowUpPage() {
         params.to_date = to;
         params.end_date = to;
       }
-      if (tab && tab !== "all") {
+      if (tab && tab !== "all" && viewMode !== "trash") {
         params.tab = tab;
         params.due_filter = tab;
       }
@@ -305,8 +321,35 @@ export default function FollowUpPage() {
           };
         });
 
-        // Use real live items
-        setFollowUpsList(liveItems);
+        // Task 4: Group records by customer so that on the outside table each customer is displayed only once
+        // showing their latest follow-up information, with all history accessible inside.
+        const customerGroups = [];
+        const customerMap = new Map();
+
+        liveItems.forEach((item) => {
+          const phoneClean = (item.phone || "").replace(/\D/g, "");
+          const groupKey = item.lead_id
+            ? `lead_${item.lead_id}`
+            : (phoneClean && phoneClean.length >= 7
+              ? `phone_${phoneClean}`
+              : `name_${(item.customer || "").toLowerCase().trim()}`);
+
+          if (!customerMap.has(groupKey)) {
+            const groupRecord = {
+              ...item,
+              allFollowUps: [item],
+              followUpsCount: 1,
+            };
+            customerMap.set(groupKey, groupRecord);
+            customerGroups.push(groupRecord);
+          } else {
+            const existing = customerMap.get(groupKey);
+            existing.allFollowUps.push(item);
+            existing.followUpsCount += 1;
+          }
+        });
+
+        setFollowUpsList(customerGroups);
       }
     } catch (err) {
       console.log("Follow-ups fetch error:", err);
@@ -318,23 +361,24 @@ export default function FollowUpPage() {
   // Debounced fetch on search and filter change
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchFollowUps(1, perPage, searchTerm, startDate, endDate, activeTab);
+      fetchFollowUps(1, perPage, searchTerm, startDate, endDate, activeTab, recordView);
       setCurrentPage(1);
     }, 300);
     return () => clearTimeout(timer);
-  }, [startDate, endDate, searchTerm, activeTab]);
+  }, [startDate, endDate, searchTerm, activeTab, recordView]);
 
   const handlePageChange = (newPage) => {
     setCurrentPage(newPage);
-    fetchFollowUps(newPage, perPage, searchTerm, startDate, endDate, activeTab);
+    fetchFollowUps(newPage, perPage, searchTerm, startDate, endDate, activeTab, recordView);
   };
 
   const handlePerPageChange = (newPerPage) => {
     setPerPage(newPerPage);
     setCurrentPage(1);
-    fetchFollowUps(1, newPerPage, searchTerm, startDate, endDate, activeTab);
+    fetchFollowUps(1, newPerPage, searchTerm, startDate, endDate, activeTab, recordView);
   };
 
+  // Task 3: Submit with explicit Interaction Date & Interaction Time
   const handleLogSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -343,8 +387,8 @@ export default function FollowUpPage() {
         lead_id: callLog.lead_id || undefined,
         customer_name: callLog.customer,
         phone: callLog.phone,
-        follow_up_date: now.toISOString().split("T")[0],
-        follow_up_time: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }),
+        follow_up_date: callLog.interaction_date || now.toISOString().split("T")[0],
+        follow_up_time: callLog.interaction_time || now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }),
         type: callLog.type || "Phone Call",
         notes: callLog.notes || "",
         next_follow_up_date: callLog.nextDate || null,
@@ -366,7 +410,7 @@ export default function FollowUpPage() {
         "success"
       );
       setShowLogModal(false);
-      fetchFollowUps(currentPage, perPage, searchTerm, startDate, endDate, activeTab);
+      fetchFollowUps(currentPage, perPage, searchTerm, startDate, endDate, activeTab, recordView);
     } catch (err) {
       console.log("Submit error:", err);
       if (callLog.request_discount && callLog.discount_amount) {
@@ -384,6 +428,65 @@ export default function FollowUpPage() {
         showToast(`Follow-up call interaction logged for ${callLog.customer}!`, "success");
       }
       setShowLogModal(false);
+    }
+  };
+
+  // Task 5: Delete single follow-up
+  const handleDeleteFollowUp = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this follow-up record?")) return;
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("auth_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await axios.delete(`${API_URL}/follow-ups/${id}`, { headers });
+      if (res.data?.status) {
+        showToast("Follow-up interaction deleted successfully!", "success");
+        fetchFollowUps(currentPage, perPage, searchTerm, startDate, endDate, activeTab, recordView);
+      } else {
+        showToast(res.data?.message || "Failed to delete follow-up.", "error");
+      }
+    } catch (err) {
+      console.log("Delete follow-up error:", err);
+      showToast("An error occurred while deleting follow-up.", "error");
+    }
+  };
+
+  // Task 6: Restore soft-deleted follow-up
+  const handleRestoreFollowUp = async (id) => {
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("auth_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await axios.post(`${API_URL}/follow-ups/${id}/restore`, {}, { headers });
+      if (res.data?.status) {
+        showToast("Follow-up interaction restored successfully!", "success");
+        fetchFollowUps(currentPage, perPage, searchTerm, startDate, endDate, activeTab, recordView);
+      } else {
+        showToast(res.data?.message || "Failed to restore follow-up.", "error");
+      }
+    } catch (err) {
+      console.log("Restore follow-up error:", err);
+      showToast("An error occurred while restoring follow-up.", "error");
+    }
+  };
+
+  const handlePermanentDelete = async () => {
+    if (!permanentDeleteTarget) return;
+    setIsDeletingPermanent(true);
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("auth_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await axios.delete(`${API_URL}/follow-ups/${permanentDeleteTarget.id}/force`, { headers });
+      if (res.data?.status) {
+        showToast("Follow-up interaction permanently deleted forever.", "success");
+        setPermanentDeleteTarget(null);
+        fetchFollowUps(currentPage, perPage, searchTerm, startDate, endDate, activeTab, recordView);
+      } else {
+        showToast(res.data?.message || "Failed to permanently delete follow-up.", "error");
+      }
+    } catch (err) {
+      console.log("Delete follow-up error:", err);
+      showToast("An error occurred while permanently deleting follow-up.", "error");
+    } finally {
+      setIsDeletingPermanent(false);
     }
   };
 
@@ -506,6 +609,20 @@ export default function FollowUpPage() {
           </div>
 
           <div className="page-header-actions d-flex align-items-center gap-2">
+            <button
+              className={`btn ${recordView === "trash" ? "btn-danger text-white shadow-sm" : "btn-outline-custom"}`}
+              onClick={() => {
+                const next = recordView === "trash" ? "active" : "trash";
+                setRecordView(next);
+                setActiveTab("all");
+                setCurrentPage(1);
+              }}
+              title={recordView === "trash" ? "Back to Active Follow-Ups" : "View Deleted Follow-Ups"}
+            >
+              <i className={`bi ${recordView === "trash" ? "bi-arrow-left" : "bi-trash text-danger"}`}></i>
+              <span>{recordView === "trash" ? "Active Follow-Ups" : "Trash"}</span>
+            </button>
+
             {can("followup.export") && (
               <button
                 className="btn btn-outline-custom"
@@ -516,7 +633,7 @@ export default function FollowUpPage() {
                 <span>Export CSV</span>
               </button>
             )}
-            {can("followup.log_call") && (
+            {can("followup.log_call") && recordView === "active" && (
               <button
                 className="btn btn-primary"
                 onClick={() => {
@@ -527,6 +644,8 @@ export default function FollowUpPage() {
                     phone: "",
                     vehicle: "",
                     outcome: "Interested / Call Back",
+                    interaction_date: getTodayDate(),
+                    interaction_time: getCurrentTimeFormatted(),
                     nextDate: "",
                     type: "Phone Call",
                     nextTime: "10:00 AM",
@@ -548,6 +667,29 @@ export default function FollowUpPage() {
 
         {/* KPI Counter Cards */}
         <div className="row g-3 mb-4">
+          <div className="col-xl-3 col-sm-6">
+            <div
+              className={`card stat-card ${activeTab === "all" ? "border-success shadow-sm ring-1" : ""}`}
+              style={{ borderLeft: "4px solid #22c55e", cursor: "pointer" }}
+              onClick={() => {
+                if (activeTab !== "all") {
+                  setActiveTab("all");
+                  setCurrentPage(1);
+                }
+              }}
+              title="Click to view All Follow-Ups"
+            >
+              <div className="stat-card-header">
+                <span className="stat-card-title">Total Follow-Ups</span>
+                <div className="stat-icon-box success">
+                  <i className="bi bi-check2-all"></i>
+                </div>
+              </div>
+              <div className="stat-card-value">{kpis.total ?? 0} Calls</div>
+              <span className="text-success small fw-semibold">Active follow-up interactions</span>
+            </div>
+          </div>
+
           <div className="col-xl-3 col-sm-6">
             <div
               className={`card stat-card ${activeTab === "overdue" ? "border-danger shadow-sm ring-1" : ""}`}
@@ -614,29 +756,6 @@ export default function FollowUpPage() {
               </div>
               <div className="stat-card-value">{kpis.upcoming ?? 0} Calls</div>
               <span className="text-info small fw-semibold">Pipeline nurturing</span>
-            </div>
-          </div>
-
-          <div className="col-xl-3 col-sm-6">
-            <div
-              className={`card stat-card ${activeTab === "all" ? "border-success shadow-sm ring-1" : ""}`}
-              style={{ borderLeft: "4px solid #22c55e", cursor: "pointer" }}
-              onClick={() => {
-                if (activeTab !== "all") {
-                  setActiveTab("all");
-                  setCurrentPage(1);
-                }
-              }}
-              title="Click to view All Follow-Ups"
-            >
-              <div className="stat-card-header">
-                <span className="stat-card-title">Total Follow-Ups</span>
-                <div className="stat-icon-box success">
-                  <i className="bi bi-check2-all"></i>
-                </div>
-              </div>
-              <div className="stat-card-value">{kpis.total ?? 0} Calls</div>
-              <span className="text-success small fw-semibold">Active follow-up interactions</span>
             </div>
           </div>
         </div>
@@ -807,92 +926,144 @@ export default function FollowUpPage() {
                           {(currentPage - 1) * perPage + index + 1}
                         </span>
                       </td>
-                      {/* 1. Action Column with 3-Dots Dropdown Menu */}
+                      {/* 1. Action Column with 3-Dots Dropdown Menu or Restore Button */}
                       <td className="text-center" onClick={(e) => e.stopPropagation()}>
-                        <div className="dropdown position-relative d-inline-block">
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-light border rounded-circle shadow-none p-0 d-inline-flex align-items-center justify-content-center"
-                            style={{ width: "32px", height: "32px", cursor: "pointer" }}
-                            title="Quick Actions"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveActionMenuId(activeActionMenuId === item.id ? null : item.id);
-                            }}
-                          >
-                            <i className="bi bi-three-dots-vertical fs-6 text-dark"></i>
-                          </button>
-
-                          {activeActionMenuId === item.id && (
-                            <div
-                              className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute start-0 text-start"
-                              style={{
-                                minWidth: "195px",
-                                zIndex: 1050,
-                                top: "100%",
-                                backgroundColor: "#FFFFFF",
-                              }}
-                              onClick={(e) => e.stopPropagation()}
+                        {recordView === "trash" ? (
+                          <div className="d-flex align-items-center justify-content-center gap-1">
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-success d-inline-flex align-items-center gap-1 px-2.5 py-1 fw-bold rounded-pill shadow-xs"
+                              onClick={() => handleRestoreFollowUp(item.id)}
+                              title="Restore this deleted follow-up"
                             >
-                              {/* Call Now / Log Call */}
-                              {can("followup.call_now") && (
+                              <i className="bi bi-arrow-counterclockwise"></i>
+                              <span>Restore</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1 px-2.5 py-1 fw-bold rounded-pill shadow-xs"
+                              onClick={() => setPermanentDeleteTarget(item)}
+                              title="Permanently delete this follow-up forever"
+                            >
+                              <i className="bi bi-trash3"></i>
+                              <span>Delete</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="dropdown position-relative d-inline-block">
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-light border rounded-circle shadow-none p-0 d-inline-flex align-items-center justify-content-center"
+                              style={{ width: "32px", height: "32px", cursor: "pointer" }}
+                              title="Quick Actions"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveActionMenuId(activeActionMenuId === item.id ? null : item.id);
+                              }}
+                            >
+                              <i className="bi bi-three-dots-vertical fs-6 text-dark"></i>
+                            </button>
+
+                            {activeActionMenuId === item.id && (
+                              <div
+                                className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute start-0 text-start"
+                                style={{
+                                  minWidth: "210px",
+                                  zIndex: 1050,
+                                  top: "100%",
+                                  backgroundColor: "#FFFFFF",
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {/* Task 4: View Follow-Up History */}
                                 <button
                                   type="button"
-                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-primary"
-                                  style={{ backgroundColor: "rgba(13, 110, 253, 0.08)" }}
+                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-dark"
                                   onClick={() => {
                                     setActiveActionMenuId(null);
-                                    setSelectedLead(item.customer);
-                                    const existingDisc = item.lead_id ? discountApprovalApi.getLeadApprovalStatus(item.lead_id) : null;
-                                    setCallLog({
-                                      lead_id: item.lead_id || item.id,
-                                      customer: item.customer,
-                                      phone: item.phone,
-                                      vehicle: item.vehicle,
-                                      outcome: item.outcome || "Interested / Call Back",
-                                      nextDate: item.dueTime && /^\d{4}-\d{2}-\d{2}$/.test(item.dueTime) ? item.dueTime : "",
-                                      type: "Phone Call",
-                                      nextTime: "10:00 AM",
-                                      notes: "",
-                                      request_discount: existingDisc && existingDisc.status === "pending" ? true : false,
-                                      discount_amount: existingDisc ? String(existingDisc.discount_amount || "") : "",
-                                      proposed_price: existingDisc ? String(existingDisc.proposed_price || "") : "",
-                                      discount_reason: existingDisc ? existingDisc.reason || "" : "",
-                                    });
-                                    setShowLogModal(true);
+                                    setViewHistoryCustomer(item);
                                   }}
                                 >
-                                  <i className="bi bi-telephone-fill text-primary"></i>
-                                  <span>Call Now / Log</span>
+                                  <i className="bi bi-clock-history text-info"></i>
+                                  <span>View History ({item.followUpsCount || 1})</span>
                                 </button>
-                              )}
 
-                              {/* Send Quotation */}
-                              {can("followup.send_quotation") && (
-                                <Link
-                                  href={item.lead_id ? `/admin/quotation/create?lead_id=${item.lead_id}` : `/admin/quotation`}
-                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-dark text-decoration-none"
-                                  onClick={() => setActiveActionMenuId(null)}
-                                >
-                                  <i className="bi bi-file-earmark-spreadsheet text-success"></i>
-                                  <span>Send Quotation</span>
-                                </Link>
-                              )}
+                                {/* Call Now / Log Call */}
+                                {can("followup.call_now") && (
+                                  <button
+                                    type="button"
+                                    className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-primary"
+                                    style={{ backgroundColor: "rgba(13, 110, 253, 0.08)" }}
+                                    onClick={() => {
+                                      setActiveActionMenuId(null);
+                                      setSelectedLead(item.customer);
+                                      const existingDisc = item.lead_id ? discountApprovalApi.getLeadApprovalStatus(item.lead_id) : null;
+                                      setCallLog({
+                                        lead_id: item.lead_id || item.id,
+                                        customer: item.customer,
+                                        phone: item.phone,
+                                        vehicle: item.vehicle,
+                                        outcome: item.outcome || "Interested / Call Back",
+                                        interaction_date: getTodayDate(),
+                                        interaction_time: getCurrentTimeFormatted(),
+                                        nextDate: item.dueTime && /^\d{4}-\d{2}-\d{2}$/.test(item.dueTime) ? item.dueTime : "",
+                                        type: "Phone Call",
+                                        nextTime: "10:00 AM",
+                                        notes: "",
+                                        request_discount: existingDisc && existingDisc.status === "pending" ? true : false,
+                                        discount_amount: existingDisc ? String(existingDisc.discount_amount || "") : "",
+                                        proposed_price: existingDisc ? String(existingDisc.proposed_price || "") : "",
+                                        discount_reason: existingDisc ? existingDisc.reason || "" : "",
+                                      });
+                                      setShowLogModal(true);
+                                    }}
+                                  >
+                                    <i className="bi bi-telephone-fill text-primary"></i>
+                                    <span>Call Now / Log</span>
+                                  </button>
+                                )}
 
-                              {/* View Lead 360 Profile */}
-                              {(item.lead_id || item.id) && (
-                                <Link
-                                  href={getLeadProfileHref(item.lead_id || item.id)}
-                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-dark text-decoration-none"
-                                  onClick={() => setActiveActionMenuId(null)}
+                                {/* Send Quotation */}
+                                {can("followup.send_quotation") && (
+                                  <Link
+                                    href={item.lead_id ? `/admin/quotation/create?lead_id=${item.lead_id}` : `/admin/quotation`}
+                                    className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-dark text-decoration-none"
+                                    onClick={() => setActiveActionMenuId(null)}
+                                  >
+                                    <i className="bi bi-file-earmark-spreadsheet text-success"></i>
+                                    <span>Send Quotation</span>
+                                  </Link>
+                                )}
+
+                                {/* View Lead 360 Profile */}
+                                {(item.lead_id || item.id) && (
+                                  <Link
+                                    href={getLeadProfileHref(item.lead_id || item.id)}
+                                    className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-dark text-decoration-none"
+                                    onClick={() => setActiveActionMenuId(null)}
+                                  >
+                                    <i className="bi bi-person-lines-fill text-info"></i>
+                                    <span>View Lead Profile</span>
+                                  </Link>
+                                )}
+
+                                {/* Task 5: Delete Follow-Up */}
+                                <hr className="dropdown-divider my-1" />
+                                <button
+                                  type="button"
+                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-danger"
+                                  onClick={() => {
+                                    setActiveActionMenuId(null);
+                                    handleDeleteFollowUp(item.id);
+                                  }}
                                 >
-                                  <i className="bi bi-person-lines-fill text-info"></i>
-                                  <span>View Lead Profile</span>
-                                </Link>
-                              )}
-                            </div>
-                          )}
-                        </div>
+                                  <i className="bi bi-trash3-fill text-danger"></i>
+                                  <span>Delete Follow-Up</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </td>
 
                       {/* 2. Customer & Contact */}
@@ -904,19 +1075,34 @@ export default function FollowUpPage() {
                             style={{ width: "36px", height: "36px", borderRadius: "50%", flexShrink: 0 }}
                           />
                           <div>
-                            {item.lead_id || item.id ? (
-                              <Link
-                                href={getLeadProfileHref(item.lead_id || item.id)}
-                                className="text-decoration-none"
-                                title="View Lead Details"
-                              >
-                                <div className="text-primary fw-bold small" style={{ cursor: "pointer" }}>
-                                  {item.customer}
-                                </div>
-                              </Link>
-                            ) : (
-                              <div className="text-dark fw-bold small">{item.customer}</div>
-                            )}
+                            <div className="d-flex align-items-center gap-1">
+                              {item.lead_id || item.id ? (
+                                <Link
+                                  href={getLeadProfileHref(item.lead_id || item.id)}
+                                  className="text-decoration-none"
+                                  title="View Lead Details"
+                                >
+                                  <span className="text-primary fw-bold small" style={{ cursor: "pointer" }}>
+                                    {item.customer}
+                                  </span>
+                                </Link>
+                              ) : (
+                                <span className="text-dark fw-bold small">{item.customer}</span>
+                              )}
+                              {item.followUpsCount > 1 && (
+                                <span
+                                  className="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill ms-1"
+                                  style={{ cursor: "pointer", fontSize: "10px", padding: "2px 6px" }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setViewHistoryCustomer(item);
+                                  }}
+                                  title="Click to view all interactions for this customer"
+                                >
+                                  <i className="bi bi-clock-history me-1"></i>{item.followUpsCount} Calls
+                                </span>
+                              )}
+                            </div>
                             <div className="text-muted" style={{ fontSize: "0.75rem" }}>
                               {item.phone}{item.city ? ` • ${item.city}` : ""}
                             </div>
@@ -1047,7 +1233,7 @@ export default function FollowUpPage() {
 
         {/* Log Call Modal */}
         {showLogModal && (
-          <div className="modal-backdrop-custom" onClick={() => setShowLogModal(false)}>
+          <div className="modal-backdrop-custom">
             <div className="modal-dialog-custom modal-lg" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header-custom">
                 <h5 className="modal-title-custom text-white mb-0 fs-5 fw-bold" style={{ color: "#FFFFFF" }}>
@@ -1118,6 +1304,20 @@ export default function FollowUpPage() {
                     </div>
 
                     <div className="col-md-6">
+                      <label className="form-label text-dark fw-semibold small">Interaction Type</label>
+                      <select
+                        className="form-select"
+                        value={callLog.type}
+                        onChange={(e) => setCallLog({ ...callLog, type: e.target.value })}
+                      >
+                        <option value="Phone Call">Phone Call</option>
+                        <option value="Showroom Visit">Showroom Visit</option>
+                        <option value="WhatsApp">WhatsApp</option>
+                        <option value="Email">Email</option>
+                      </select>
+                    </div>
+
+                    <div className="col-md-6">
                       <label className="form-label text-dark fw-semibold small">Call Outcome</label>
                       <select
                         className="form-select"
@@ -1132,6 +1332,34 @@ export default function FollowUpPage() {
                         <option value="Bought Competitor Car">Bought Competitor Car</option>
                         <option value="Showroom Visit Done">Showroom Visit Done</option>
                       </select>
+                    </div>
+
+                    {/* Task 3: Interaction Date and Interaction Time defaulting to current */}
+                    <div className="col-md-6">
+                      <label className="form-label text-dark fw-semibold small">
+                        Interaction Date <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        className="form-control"
+                        value={callLog.interaction_date}
+                        onChange={(e) => setCallLog({ ...callLog, interaction_date: e.target.value })}
+                        required
+                      />
+                    </div>
+
+                    <div className="col-md-6">
+                      <label className="form-label text-dark fw-semibold small">
+                        Interaction Time <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. 02:30 PM"
+                        value={callLog.interaction_time}
+                        onChange={(e) => setCallLog({ ...callLog, interaction_time: e.target.value })}
+                        required
+                      />
                     </div>
 
                     <div className="col-md-6">
@@ -1156,20 +1384,6 @@ export default function FollowUpPage() {
                           setCallLog({ ...callLog, nextDate: val });
                         }}
                       />
-                    </div>
-
-                    <div className="col-md-6">
-                      <label className="form-label text-dark fw-semibold small">Interaction Type</label>
-                      <select
-                        className="form-select"
-                        value={callLog.type}
-                        onChange={(e) => setCallLog({ ...callLog, type: e.target.value })}
-                      >
-                        <option value="Phone Call">Phone Call</option>
-                        <option value="Showroom Visit">Showroom Visit</option>
-                        <option value="WhatsApp">WhatsApp</option>
-                        <option value="Email">Email</option>
-                      </select>
                     </div>
 
                     <div className="col-md-6">
@@ -1263,6 +1477,180 @@ export default function FollowUpPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Task 4: Customer Follow-Up History Modal */}
+        {viewHistoryCustomer && (
+          <div className="modal-backdrop-custom">
+            <div className="modal-dialog-custom modal-lg" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header-custom d-flex justify-content-between align-items-center">
+                <div>
+                  <h5 className="modal-title-custom text-white mb-0 fs-5 fw-bold">
+                    <i className="bi bi-clock-history text-info me-2"></i>
+                    Follow-Up History: {viewHistoryCustomer.customer}
+                  </h5>
+                  <div className="text-white-50 small mt-1">
+                    {viewHistoryCustomer.phone} {viewHistoryCustomer.vehicle ? ` • ${viewHistoryCustomer.vehicle}` : ""}
+                    <span className="badge bg-light text-dark ms-2">{viewHistoryCustomer.allFollowUps?.length || 1} Interactions Logged</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn-close btn-close-white"
+                  onClick={() => setViewHistoryCustomer(null)}
+                ></button>
+              </div>
+
+              <div className="modal-body-custom p-3" style={{ maxHeight: "70vh", overflowY: "auto" }}>
+                <div className="timeline-custom">
+                  {(viewHistoryCustomer.allFollowUps || []).map((follow, idx) => (
+                    <div key={follow.id || idx} className="card mb-3 border shadow-xs rounded-3">
+                      <div className="card-body p-3">
+                        <div className="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-2">
+                          <div className="d-flex align-items-center gap-2">
+                            <span className="badge bg-primary text-white rounded-pill px-2 py-1" style={{ fontSize: "11px" }}>
+                              #{(viewHistoryCustomer.allFollowUps?.length || 1) - idx}
+                            </span>
+                            <span className={`badge ${follow.badgeClass || "bg-info-subtle text-info"} px-2.5 py-1 rounded-pill small fw-bold`}>
+                              <i className={`${follow.badgeIcon || "bi bi-telephone-outbound"} me-1`}></i>
+                              {follow.outcome}
+                            </span>
+                            <span className="badge bg-light text-secondary border px-2 py-1 small">
+                              {follow.type || "Phone Call"}
+                            </span>
+                          </div>
+                          <div className="text-muted small d-flex align-items-center gap-2">
+                            <span>
+                              <i className="bi bi-calendar-check me-1 text-primary"></i>
+                              <strong>{follow.followUpDateFormatted || follow.follow_up_date || "-"}</strong>
+                            </span>
+                            {follow.follow_up_time && (
+                              <span>
+                                <i className="bi bi-clock me-1 text-secondary"></i>
+                                {follow.follow_up_time}
+                              </span>
+                            )}
+                            {recordView === "active" && (
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-danger p-0 px-1 border-0"
+                                title="Delete this interaction"
+                                onClick={async () => {
+                                  await handleDeleteFollowUp(follow.id);
+                                  setViewHistoryCustomer(null);
+                                }}
+                              >
+                                <i className="bi bi-trash3"></i>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="p-2.5 rounded bg-light border-start border-3 border-primary mb-2 text-dark small" style={{ whiteSpace: "pre-wrap" }}>
+                          {follow.outcomeDesc || follow.notes || "No call notes recorded for this interaction."}
+                        </div>
+
+                        <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap small text-muted pt-1">
+                          <div>
+                            {follow.nextDueDateFormatted || follow.next_follow_up_date ? (
+                              <span className="text-warning-emphasis fw-semibold">
+                                <i className="bi bi-alarm-fill text-warning me-1"></i>
+                                Next Follow-Up: <strong>{follow.nextDueDateFormatted || follow.next_follow_up_date}</strong> {follow.next_follow_up_time || ""}
+                              </span>
+                            ) : (
+                              <span>No next follow-up scheduled</span>
+                            )}
+                          </div>
+                          <div className="text-dark fw-semibold">
+                            <i className="bi bi-person-check me-1 text-primary"></i>
+                            {follow.rep || "Representative"}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="modal-footer-custom d-flex justify-content-between">
+                <div>
+                  {viewHistoryCustomer.lead_id && (
+                    <Link
+                      href={getLeadProfileHref(viewHistoryCustomer.lead_id)}
+                      className="btn btn-sm btn-outline-primary"
+                    >
+                      <i className="bi bi-person-lines-fill me-1"></i> View Full Lead Profile
+                    </Link>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary px-4"
+                  onClick={() => setViewHistoryCustomer(null)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Sweet Alert Confirmation Modal for Permanent Delete */}
+        {permanentDeleteTarget && (
+          <div
+            className="modal fade show d-block"
+            style={{ backgroundColor: "rgba(15, 23, 42, 0.65)", backdropFilter: "blur(4px)", zIndex: 1080 }}
+            onClick={() => !isDeletingPermanent && setPermanentDeleteTarget(null)}
+          >
+            <div
+              className="modal-dialog modal-dialog-centered"
+              style={{ maxWidth: "420px" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                <div className="modal-body p-4 text-center">
+                  <div
+                    className="d-inline-flex align-items-center justify-content-center rounded-circle mb-3 shadow-xs"
+                    style={{ width: "64px", height: "64px", background: "#FEE2E2", color: "#DC2626" }}
+                  >
+                    <i className="bi bi-exclamation-triangle-fill fs-2"></i>
+                  </div>
+                  <h5 className="modal-title fw-bold text-dark mb-2">Delete Permanently?</h5>
+                  <p className="text-muted small mb-0 px-2" style={{ lineHeight: "1.5" }}>
+                    Are you sure you want to permanently delete this follow-up record for <strong>&quot;{permanentDeleteTarget.customer || "this customer"}&quot;</strong>? This record will be deleted forever and <strong>cannot be restored</strong>.
+                  </p>
+                </div>
+                <div className="modal-footer border-0 p-3 bg-light d-flex gap-2 justify-content-center">
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary px-3 py-1.5 rounded-pill fw-medium"
+                    onClick={() => setPermanentDeleteTarget(null)}
+                    disabled={isDeletingPermanent}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-danger px-4 py-1.5 rounded-pill fw-semibold shadow-sm"
+                    onClick={handlePermanentDelete}
+                    disabled={isDeletingPermanent}
+                  >
+                    {isDeletingPermanent ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                        <span>Deleting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <i className="bi bi-trash3-fill me-1"></i>
+                        <span>Yes, Delete Forever</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}

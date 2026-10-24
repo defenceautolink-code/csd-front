@@ -61,6 +61,16 @@ export const quotationApi = {
   },
 
   /**
+   * Update quotation status (e.g. pending, print, sent)
+   * @param {number|string} id - Quotation ID
+   * @param {string} status - New status
+   */
+  updateStatus: async (id, status) => {
+    const response = await api.patch(`/quotations/${id}/status`, { status });
+    return response.data;
+  },
+
+  /**
    * Send quotation to customer via email with PDF attachment
    * @param {number|string} id - Quotation ID
    * @param {Object} payload - { recipient_email, custom_subject, custom_message }

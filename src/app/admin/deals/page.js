@@ -1533,7 +1533,7 @@ export default function DealsPage() {
             MODAL 2: UPDATE DEAL STAGE & DETAILS
             =================================================================== */}
         {showUpdateModal && selectedDealForUpdate && (
-          <div className="modal-backdrop-custom" onClick={() => setShowUpdateModal(false)}>
+          <div className="modal-backdrop-custom">
             <div
               className="modal-dialog-custom"
               onClick={(e) => e.stopPropagation()}
@@ -1698,7 +1698,7 @@ export default function DealsPage() {
             MODAL 3: DELETE CONFIRMATION
             =================================================================== */}
         {deleteTarget && (
-          <div className="modal-backdrop-custom" onClick={() => !isDeleting && setDeleteTarget(null)}>
+          <div className="modal-backdrop-custom">
             <div className="modal-dialog-custom modal-sm" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "420px" }}>
               <div className="modal-header-custom bg-danger text-white">
                 <h5 className="modal-title-custom text-white mb-0 fs-6 fw-bold">
@@ -1754,7 +1754,7 @@ export default function DealsPage() {
             MODAL 4: VIEW DEAL VOUCHER & PAYMENT HISTORY
             =================================================================== */}
         {viewDeal && (
-          <div className="modal-backdrop-custom" onClick={() => setViewDeal(null)}>
+          <div className="modal-backdrop-custom">
             <div
               className="modal-dialog-custom modal-lg"
               onClick={(e) => e.stopPropagation()}

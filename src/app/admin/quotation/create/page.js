@@ -81,13 +81,13 @@ function SendQuotationPageContent() {
   // ----------------------------------------------------
   const [csdPrice, setCsdPrice] = useState("");
   const [gjRto, setGjRto] = useState("");
-  const [bhRto, setBhRto] = useState("N.A");
-  const [crtm, setCrtm] = useState("N.A");
+  const [bhRto, setBhRto] = useState("");
+  const [crtm, setCrtm] = useState("");
   const [insurance, setInsurance] = useState("");
-  const [accessories, setAccessories] = useState("0");
-  const [warranty, setWarranty] = useState("N.A");
-  const [msReward, setMsReward] = useState("N.A");
-  const [diffAmtCash, setDiffAmtCash] = useState("N.A");
+  const [accessories, setAccessories] = useState("");
+  const [warranty, setWarranty] = useState("");
+  const [msReward, setMsReward] = useState("");
+  const [diffAmtCash, setDiffAmtCash] = useState("");
 
   // Column 2 Values
   const [col2CsdPrice, setCol2CsdPrice] = useState("N.A");
@@ -283,10 +283,14 @@ function SendQuotationPageContent() {
         if (targetVariant.price && Number(targetVariant.price) > 0) {
           const numPrice = Number(targetVariant.price);
           setCsdPrice(String(numPrice));
-          const estRto = Math.round(numPrice * 0.06);
-          setGjRto(String(estRto));
-          const estIns = Math.round(numPrice * 0.038);
-          setInsurance(String(estIns));
+          setGjRto("");
+          setBhRto("");
+          setCrtm("");
+          setInsurance("");
+          setAccessories("");
+          setWarranty("");
+          setMsReward("");
+          setDiffAmtCash("");
         }
       } else if (lead.model_variant) {
         setCarName(lead.brand_name ? `${lead.brand_name} ${lead.model_variant}` : lead.model_variant);
@@ -385,18 +389,17 @@ function SendQuotationPageContent() {
     if (variantObj) {
       setModelSpec(variantObj.name.toUpperCase());
 
-      // Auto-set CSD Price and estimate RTO/Insurance if valid price exists
       if (variantObj.price && Number(variantObj.price) > 0) {
         const numPrice = Number(variantObj.price);
         setCsdPrice(String(numPrice));
-
-        // Estimated Gujarat RTO: approx 6% of ex-showroom
-        const estRto = Math.round(numPrice * 0.06);
-        setGjRto(String(estRto));
-
-        // Estimated Comprehensive Insurance: approx 3.8% of price
-        const estIns = Math.round(numPrice * 0.038);
-        setInsurance(String(estIns));
+        setGjRto("");
+        setBhRto("");
+        setCrtm("");
+        setInsurance("");
+        setAccessories("");
+        setWarranty("");
+        setMsReward("");
+        setDiffAmtCash("");
       }
 
       showToast(`Selected Variant ${variantObj.name} with price ₹${Number(variantObj.price || 0).toLocaleString("en-IN")}`, "info");
@@ -460,13 +463,13 @@ function SendQuotationPageContent() {
     setVariantFuel("PETROL");
     setCsdPrice("");
     setGjRto("");
-    setBhRto("N.A");
-    setCrtm("N.A");
+    setBhRto("");
+    setCrtm("");
     setInsurance("");
-    setAccessories("0");
-    setWarranty("N.A");
-    setMsReward("N.A");
-    setDiffAmtCash("N.A");
+    setAccessories("");
+    setWarranty("");
+    setMsReward("");
+    setDiffAmtCash("");
     showToast("Quotation sheet parameters cleared.", "info");
   };
 
@@ -482,7 +485,7 @@ function SendQuotationPageContent() {
   // ----------------------------------------------------
   // SAVE QUOTATION TO BACKEND DATABASE
   // ----------------------------------------------------
-  const saveQuotationToBackend = async (status = "draft") => {
+  const saveQuotationToBackend = async (status = "pending") => {
     if (!clientName.trim()) {
       showToast("Please enter client full name.", "warning");
       return null;
@@ -674,27 +677,60 @@ function SendQuotationPageContent() {
           ========================================================================= */}
       <style jsx global>{`
         @media print {
+          @page {
+            size: A4 portrait;
+            margin: 6mm 8mm;
+          }
+          html, body {
+            height: auto !important;
+            max-height: 100% !important;
+            overflow: visible !important;
+            background: #ffffff !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
           body * {
             visibility: hidden !important;
+          }
+          .app-sidebar,
+          .app-header,
+          .page-header-wrapper,
+          aside,
+          header,
+          nav,
+          .no-print,
+          .col-xl-5,
+          .modal,
+          .modal-backdrop-custom {
+            display: none !important;
+          }
+          .app-main-content,
+          .page-body,
+          .container-fluid,
+          .row,
+          .col-xl-7 {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            display: block !important;
           }
           #printableQuoteCard,
           #printableQuoteCard * {
             visibility: visible !important;
           }
           #printableQuoteCard {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
+            position: static !important;
             width: 100% !important;
             max-width: 100% !important;
             margin: 0 !important;
-            padding: 15px !important;
+            padding: 10px 15px !important;
             background: #ffffff !important;
             box-shadow: none !important;
             border: none !important;
-          }
-          .no-print {
-            display: none !important;
+            page-break-after: avoid !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
         }
       `}</style>
@@ -893,7 +929,7 @@ function SendQuotationPageContent() {
 
                 {/* Variant & Fuel Type */}
                 <div className="row g-2 mb-3">
-                  <div className="col-md-6">
+                  <div className="col-12">
                     <label className="form-label text-dark small fw-medium mb-1">
                       Select Variant {isLoadingVariants && <span className="spinner-border spinner-border-sm ms-1"></span>}
                     </label>
@@ -909,20 +945,6 @@ function SendQuotationPageContent() {
                           {v.name} (₹{Number(v.price || 0).toLocaleString("en-IN")})
                         </option>
                       ))}
-                    </select>
-                  </div>
-                  <div className="col-md-6">
-                    <label className="form-label text-dark small fw-medium mb-1">Fuel / Variant Tag</label>
-                    <select
-                      className="form-select"
-                      value={variantFuel}
-                      onChange={(e) => setVariantFuel(e.target.value)}
-                    >
-                      <option value="PETROL">PETROL</option>
-                      <option value="DIESEL">DIESEL</option>
-                      <option value="CNG">CNG</option>
-                      <option value="ELECTRIC">ELECTRIC / EV</option>
-                      <option value="HYBRID">STRONG HYBRID</option>
                     </select>
                   </div>
                 </div>
@@ -1086,7 +1108,7 @@ function SendQuotationPageContent() {
                   <button
                     type="button"
                     className="btn btn-primary flex-fill d-flex align-items-center justify-content-center gap-2"
-                    onClick={() => saveQuotationToBackend("draft")}
+                    onClick={() => saveQuotationToBackend("pending")}
                     disabled={isSaving}
                   >
                     {isSaving ? (
@@ -1203,7 +1225,13 @@ function SendQuotationPageContent() {
                 </div>
 
                 <div className="fw-bold" style={{ fontSize: "0.85rem", color: "#0f172a" }}>
-                  CLIENT: <span className="text-primary">{clientName}</span>
+                  {clientName ? (
+                    <>
+                      CLIENT: <span className="text-primary text-uppercase">{clientName.toUpperCase()}</span>
+                    </>
+                  ) : (
+                    <span style={{ display: "inline-block", minWidth: "10px" }}></span>
+                  )}
                 </div>
               </div>
 
@@ -1248,31 +1276,6 @@ function SendQuotationPageContent() {
                     </tr>
                   </thead>
                   <tbody>
-                    {/* Variant Row: Highlighted in Mint Green */}
-                    <tr>
-                      <td
-                        style={{
-                          background: "#86efac",
-                          color: "#052e16",
-                          border: "1px solid #334155",
-                          padding: "8px 12px",
-                          fontWeight: "800",
-                          textTransform: "uppercase",
-                        }}
-                      >
-                        VARIENT: {variantFuel}
-                      </td>
-                      <td
-                        style={{
-                          border: "1px solid #334155",
-                          padding: "8px 12px",
-                          textAlign: "center",
-                        }}
-                      >
-                        {variantCol2}
-                      </td>
-                    </tr>
-
                     {/* CSD PRICE */}
                     <tr>
                       <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>CSD PRICE</td>
@@ -1385,7 +1388,7 @@ function SendQuotationPageContent() {
             EMAIL CLIENT MODAL
             =================================================================== */}
         {showEmailModal && (
-          <div className="modal-backdrop-custom" onClick={() => !isSendingEmail && setShowEmailModal(false)}>
+          <div className="modal-backdrop-custom">
             <div className="modal-dialog-custom" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "520px" }}>
               <div className="modal-header-custom">
                 <h5 className="modal-title-custom text-white d-flex align-items-center gap-2 mb-0" style={{ color: "#FFFFFF" }}>

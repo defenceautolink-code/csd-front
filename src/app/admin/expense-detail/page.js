@@ -932,7 +932,7 @@ export default function ExpenseDetailPage() {
             MODAL 1: ADD EXPENSE DETAIL
             ============================================================== */}
         {showAddModal && (
-          <div className="modal-backdrop-custom" onClick={() => setShowAddModal(false)}>
+          <div className="modal-backdrop-custom">
             <div
               className="modal-dialog-custom"
               onClick={(e) => e.stopPropagation()}
@@ -1187,7 +1187,7 @@ export default function ExpenseDetailPage() {
             MODAL 2: EDIT EXPENSE DETAIL
             ============================================================== */}
         {editItem && (
-          <div className="modal-backdrop-custom" onClick={() => setEditItem(null)}>
+          <div className="modal-backdrop-custom">
             <div
               className="modal-dialog-custom"
               onClick={(e) => e.stopPropagation()}
@@ -1423,7 +1423,7 @@ export default function ExpenseDetailPage() {
             MODAL 3: VIEW RECEIPT DETAILS
             ============================================================== */}
         {viewItem && (
-          <div className="modal-backdrop-custom" onClick={() => setViewItem(null)}>
+          <div className="modal-backdrop-custom">
             <div
               className="modal-dialog-custom"
               onClick={(e) => e.stopPropagation()}
@@ -1533,7 +1533,7 @@ export default function ExpenseDetailPage() {
             MODAL 4: DELETE CONFIRMATION
             ============================================================== */}
         {deleteTarget && (
-          <div className="modal-backdrop-custom" onClick={() => setDeleteTarget(null)}>
+          <div className="modal-backdrop-custom">
             <div
               className="modal-dialog-custom"
               onClick={(e) => e.stopPropagation()}

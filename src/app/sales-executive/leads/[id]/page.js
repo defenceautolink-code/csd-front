@@ -777,7 +777,7 @@ export default function SalesExecutiveLeadDetailsPage({ params }) {
             + ADD FOLLOW-UP CUSTOM MODAL
             ------------------------------------------------------------------ */}
         {showModal && (
-          <div className="modal-backdrop-custom" onClick={() => setShowModal(false)}>
+          <div className="modal-backdrop-custom">
             <div className="modal-dialog-custom modal-lg" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header-custom">
                 <h5 className="modal-title-custom text-white mb-0 fs-5 fw-bold" style={{ color: "#FFFFFF" }}>

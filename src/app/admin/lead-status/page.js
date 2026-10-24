@@ -387,7 +387,7 @@ export default function LeadStatusPage() {
             ADD LEAD STATUS MODAL (Matches user's exact UI screenshot)
             ------------------------------------------------------------------ */}
         {showAddModal && (
-          <div className="modal-backdrop-custom" onClick={() => setShowAddModal(false)}>
+          <div className="modal-backdrop-custom">
             <div className="modal-dialog-custom" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "520px" }}>
               <div className="modal-header-custom d-flex justify-content-between align-items-center">
                 <h5 className="modal-title-custom d-flex align-items-center gap-2 text-white mb-0 fs-5 fw-bold">
@@ -460,7 +460,7 @@ export default function LeadStatusPage() {
             EDIT LEAD STATUS MODAL
             ------------------------------------------------------------------ */}
         {editStatus && (
-          <div className="modal-backdrop-custom" onClick={() => setEditStatus(null)}>
+          <div className="modal-backdrop-custom">
             <div className="modal-dialog-custom" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "520px" }}>
               <div className="modal-header-custom d-flex justify-content-between align-items-center">
                 <h5 className="modal-title-custom d-flex align-items-center gap-2 text-white mb-0 fs-5 fw-bold">
@@ -533,7 +533,7 @@ export default function LeadStatusPage() {
             DELETE CONFIRMATION MODAL
             ------------------------------------------------------------------ */}
         {deleteTarget && (
-          <div className="modal-backdrop-custom" onClick={() => setDeleteTarget(null)}>
+          <div className="modal-backdrop-custom">
             <div className="modal-dialog-custom" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "450px" }}>
               <div className="modal-header-custom">
                 <h5 className="modal-title-custom text-danger">

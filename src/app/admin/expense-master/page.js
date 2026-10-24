@@ -385,7 +385,7 @@ export default function ExpenseMasterPage() {
             MODAL 1: ADD EXPENSE MASTER (Single Title Field as requested)
             ============================================================== */}
         {showAddModal && (
-          <div className="modal-backdrop-custom" onClick={() => setShowAddModal(false)}>
+          <div className="modal-backdrop-custom">
             <div
               className="modal-dialog-custom"
               onClick={(e) => e.stopPropagation()}
@@ -460,7 +460,7 @@ export default function ExpenseMasterPage() {
             MODAL 2: EDIT EXPENSE MASTER
             ============================================================== */}
         {editItem && (
-          <div className="modal-backdrop-custom" onClick={() => setEditItem(null)}>
+          <div className="modal-backdrop-custom">
             <div
               className="modal-dialog-custom"
               onClick={(e) => e.stopPropagation()}
@@ -538,7 +538,7 @@ export default function ExpenseMasterPage() {
             MODAL 3: DELETE CONFIRMATION
             ============================================================== */}
         {deleteTarget && (
-          <div className="modal-backdrop-custom" onClick={() => setDeleteTarget(null)}>
+          <div className="modal-backdrop-custom">
             <div
               className="modal-dialog-custom"
               onClick={(e) => e.stopPropagation()}

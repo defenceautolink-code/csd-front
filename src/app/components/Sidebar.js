@@ -8,9 +8,25 @@ import { canAccessAdminPath, getRoleDashboardPath, clearAuthSession } from "@/ut
 
 export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
   const pathname = usePathname();
-  const router = useRouter();
   const { showToast } = useToast();
   const [currentUser, setCurrentUser] = useState(null);
+  const navRef = React.useRef(null);
+
+  // Restore sidebar scroll position on mount and route change
+  useEffect(() => {
+    if (typeof window !== "undefined" && navRef.current) {
+      const savedScroll = sessionStorage.getItem("carcrm_sidebar_scroll");
+      if (savedScroll !== null) {
+        navRef.current.scrollTop = Number(savedScroll);
+      }
+    }
+  }, [pathname]);
+
+  const handleNavScroll = (e) => {
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("carcrm_sidebar_scroll", e.currentTarget.scrollTop);
+    }
+  };
 
   useEffect(() => {
     const syncUser = () => {
@@ -93,7 +109,7 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
       </div>
 
       {/* Navigation Links */}
-      <div className="sidebar-nav-container">
+      <div className="sidebar-nav-container" ref={navRef} onScroll={handleNavScroll}>
         {/* ===================================================================
             1. SALES EXECUTIVE MENU
             =================================================================== */}

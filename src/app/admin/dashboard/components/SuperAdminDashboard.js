@@ -733,7 +733,7 @@ export default function SuperAdminDashboard({ onAddLead }) {
           ---------------------------------------------------- */}
       {/* Quick Add Customer Modal */}
       {showCustomerModal && (
-        <div className="modal-backdrop-custom" onClick={() => setShowCustomerModal(false)}>
+        <div className="modal-backdrop-custom">
           <div className="modal-dialog-custom modal-md" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header-custom" style={{ backgroundColor: "#0D1554", color: "#fff" }}>
               <h5 className="modal-title-custom text-white mb-0 fs-6">
@@ -820,7 +820,7 @@ export default function SuperAdminDashboard({ onAddLead }) {
 
       {/* Quick Add Requirement Modal */}
       {showReqModal && (
-        <div className="modal-backdrop-custom" onClick={() => setShowReqModal(false)}>
+        <div className="modal-backdrop-custom">
           <div className="modal-dialog-custom modal-md" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header-custom" style={{ backgroundColor: "#0D1554", color: "#fff" }}>
               <h5 className="modal-title-custom text-white mb-0 fs-6">

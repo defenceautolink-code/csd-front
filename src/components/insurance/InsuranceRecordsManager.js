@@ -202,6 +202,21 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
   const handleSaveEdit = async (e) => {
     e.preventDefault();
     if (!editForm.id) return;
+
+    if (editForm.policy_start_date && editForm.policy_expiry_date) {
+      if (editForm.policy_expiry_date < editForm.policy_start_date) {
+        showToast("Policy Expiry Date cannot be earlier than Policy Start Date.", "warning");
+        return;
+      }
+    }
+
+    if (editForm.policy_start_date && editForm.reminder_date) {
+      if (editForm.reminder_date < editForm.policy_start_date) {
+        showToast("Calculated Reminder Date cannot be earlier than Policy Start Date.", "warning");
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
       const payload = {
@@ -927,9 +942,24 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
                           type="date"
                           className="form-control form-control-sm"
                           value={editForm.policy_start_date}
-                          onChange={(e) =>
-                            setEditForm({ ...editForm, policy_start_date: e.target.value })
-                          }
+                          onChange={(e) => {
+                            const newStart = e.target.value;
+                            let newExp = editForm.policy_expiry_date;
+                            let newRem = editForm.reminder_date;
+                            if (newExp && newStart && newExp < newStart) {
+                              newExp = "";
+                              newRem = "";
+                              showToast("Policy Expiry Date reset as it was earlier than new Start Date.", "info");
+                            } else if (newRem && newStart && newRem < newStart) {
+                              newRem = newStart;
+                            }
+                            setEditForm({
+                              ...editForm,
+                              policy_start_date: newStart,
+                              policy_expiry_date: newExp,
+                              reminder_date: newRem,
+                            });
+                          }}
                         />
                       </div>
 
@@ -941,15 +971,23 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
                         <input
                           type="date"
                           className="form-control form-control-sm"
+                          min={editForm.policy_start_date || undefined}
                           value={editForm.policy_expiry_date}
                           onChange={(e) => {
                             const val = e.target.value;
+                            if (val && editForm.policy_start_date && val < editForm.policy_start_date) {
+                              showToast("Policy Expiry Date cannot be earlier than Policy Start Date.", "warning");
+                              return;
+                            }
                             const rDays = Number(editForm.reminder_days_before || 15);
                             let newRem = editForm.reminder_date;
                             if (val) {
                               const remD = new Date(val);
                               remD.setDate(remD.getDate() - rDays);
                               newRem = remD.toISOString().split("T")[0];
+                              if (editForm.policy_start_date && newRem < editForm.policy_start_date) {
+                                newRem = editForm.policy_start_date;
+                              }
                             }
                             setEditForm({
                               ...editForm,
@@ -994,6 +1032,9 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
                               const remD = new Date(editForm.policy_expiry_date);
                               remD.setDate(remD.getDate() - rDays);
                               newRem = remD.toISOString().split("T")[0];
+                              if (editForm.policy_start_date && newRem < editForm.policy_start_date) {
+                                newRem = editForm.policy_start_date;
+                              }
                             } else if (!rDays) {
                               newRem = "";
                             }
@@ -1020,10 +1061,16 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
                         <input
                           type="date"
                           className="form-control form-control-sm"
+                          min={editForm.policy_start_date || undefined}
                           value={editForm.reminder_date}
-                          onChange={(e) =>
-                            setEditForm({ ...editForm, reminder_date: e.target.value })
-                          }
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val && editForm.policy_start_date && val < editForm.policy_start_date) {
+                              showToast("Calculated Reminder Date cannot be earlier than Policy Start Date.", "warning");
+                              return;
+                            }
+                            setEditForm({ ...editForm, reminder_date: val });
+                          }}
                         />
                       </div>
 

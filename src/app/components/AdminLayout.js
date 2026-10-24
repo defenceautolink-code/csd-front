@@ -209,7 +209,7 @@ function AdminLayoutInner({ children }) {
 
       {/* Quick Add Lead Modal */}
       {showQuickLeadModal && (
-        <div className="modal-backdrop-custom" onClick={() => setShowQuickLeadModal(false)}>
+        <div className="modal-backdrop-custom">
           <div className="modal-dialog-custom" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header-custom">
               <h5 className="modal-title-custom text-white mb-0 fs-5 fw-bold" style={{ color: "#FFFFFF" }}>

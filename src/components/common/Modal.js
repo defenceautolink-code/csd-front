@@ -22,7 +22,7 @@ export default function Modal({
   title,
   icon,
   size = "md",
-  closeOnBackdrop = true,
+  closeOnBackdrop = false,
   footer,
   children,
   className = "",

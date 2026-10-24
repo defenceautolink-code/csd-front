@@ -37,14 +37,26 @@ export default function LeadDetailPage() {
 
   // Follow-up state
   const [followUps, setFollowUps] = useState([]);
+  const getTodayDate = () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
+
+  const getCurrentTimeFormatted = () => {
+    return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
+  };
+
   const [isLoadingFollowUps, setIsLoadingFollowUps] = useState(false);
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
   const [isSubmittingFollowUp, setIsSubmittingFollowUp] = useState(false);
   const [followUpForm, setFollowUpForm] = useState({
     outcome: "Interested / Call Back",
     type: "Phone Call",
-    follow_up_date: new Date().toISOString().split("T")[0],
-    follow_up_time: "02:30 PM",
+    follow_up_date: "",
+    follow_up_time: "",
     next_follow_up_date: "",
     next_follow_up_time: "10:00 AM",
     notes: "",
@@ -54,12 +66,27 @@ export default function LeadDetailPage() {
     discount_reason: "",
   });
 
-  const getTodayDate = () => {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, "0");
-    const d = String(now.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
+  const handleOpenFollowUpModal = () => {
+    const today = getTodayDate();
+    const nowTime = getCurrentTimeFormatted();
+    const nextDate = new Date();
+    nextDate.setDate(nextDate.getDate() + 3);
+    const nextDateStr = nextDate.toISOString().split("T")[0];
+
+    setFollowUpForm({
+      outcome: "Interested / Call Back",
+      type: "Phone Call",
+      follow_up_date: today,
+      follow_up_time: nowTime,
+      next_follow_up_date: nextDateStr,
+      next_follow_up_time: "10:00 AM",
+      notes: "",
+      request_discount: false,
+      discount_amount: "",
+      proposed_price: "",
+      discount_reason: "",
+    });
+    setShowFollowUpModal(true);
   };
 
   // Quotations state
@@ -318,12 +345,18 @@ export default function LeadDetailPage() {
         "success"
       );
       setShowFollowUpModal(false);
+      const today = getTodayDate();
+      const nowTime = getCurrentTimeFormatted();
+      const nextDate = new Date();
+      nextDate.setDate(nextDate.getDate() + 3);
+      const nextDateStr = nextDate.toISOString().split("T")[0];
+
       setFollowUpForm({
         outcome: "Interested / Call Back",
         type: "Phone Call",
-        follow_up_date: new Date().toISOString().split("T")[0],
-        follow_up_time: "02:30 PM",
-        next_follow_up_date: "",
+        follow_up_date: today,
+        follow_up_time: nowTime,
+        next_follow_up_date: nextDateStr,
         next_follow_up_time: "10:00 AM",
         notes: "",
         request_discount: false,
@@ -399,7 +432,7 @@ export default function LeadDetailPage() {
             <button
               type="button"
               className="btn btn-outline-success d-inline-flex align-items-center gap-1 shadow-sm"
-              onClick={() => setShowFollowUpModal(true)}
+              onClick={handleOpenFollowUpModal}
             >
               <i className="bi bi-telephone-plus-fill me-1"></i>
               <span>Log Follow-Up</span>
@@ -632,7 +665,7 @@ export default function LeadDetailPage() {
                   type="button"
                   className="btn btn-sm btn-outline-success d-inline-flex align-items-center gap-1 py-1 px-2.5"
                   style={{ fontSize: "0.8rem" }}
-                  onClick={() => setShowFollowUpModal(true)}
+                  onClick={handleOpenFollowUpModal}
                 >
                   <i className="bi bi-plus-lg"></i>
                   <span>Log Call / Interaction</span>
@@ -663,7 +696,7 @@ export default function LeadDetailPage() {
                     <button
                       type="button"
                       className="btn btn-sm btn-success"
-                      onClick={() => setShowFollowUpModal(true)}
+                      onClick={handleOpenFollowUpModal}
                     >
                       <i className="bi bi-telephone-plus-fill me-1"></i> Log First Interaction
                     </button>
@@ -970,7 +1003,7 @@ export default function LeadDetailPage() {
 
         {/* Modal: Log Follow-Up Call */}
         {showFollowUpModal && (
-          <div className="modal-backdrop-custom" onClick={() => setShowFollowUpModal(false)}>
+          <div className="modal-backdrop-custom">
             <div className="modal-dialog-custom" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "520px" }}>
               <div className="modal-header-custom d-flex justify-content-between align-items-center">
                 <h5 className="modal-title-custom text-white mb-0 fs-5 fw-bold">
@@ -1013,23 +1046,27 @@ export default function LeadDetailPage() {
                     </div>
 
                     <div className="col-md-6">
-                      <label className="form-label text-dark fw-bold small">Interaction Date</label>
+                      <label className="form-label text-dark fw-bold small">
+                        <i className="bi bi-calendar-event me-1 text-primary"></i> Interaction Date
+                      </label>
                       <input
                         type="date"
                         className="form-control"
-                        value={followUpForm.follow_up_date}
+                        value={followUpForm.follow_up_date || ""}
                         onChange={(e) => setFollowUpForm({ ...followUpForm, follow_up_date: e.target.value })}
                         required
                       />
                     </div>
 
                     <div className="col-md-6">
-                      <label className="form-label text-dark fw-bold small">Interaction Time</label>
+                      <label className="form-label text-dark fw-bold small">
+                        <i className="bi bi-clock me-1 text-primary"></i> Interaction Time
+                      </label>
                       <input
                         type="text"
                         className="form-control"
-                        placeholder="e.g. 02:30 PM"
-                        value={followUpForm.follow_up_time}
+                        placeholder="e.g. 04:30 PM"
+                        value={followUpForm.follow_up_time || ""}
                         onChange={(e) => setFollowUpForm({ ...followUpForm, follow_up_time: e.target.value })}
                       />
                     </div>
@@ -1049,7 +1086,9 @@ export default function LeadDetailPage() {
                     </div>
 
                     <div className="col-md-6">
-                      <label className="form-label text-dark fw-bold small">Next Follow-Up Date</label>
+                      <label className="form-label text-dark fw-bold small">
+                        <i className="bi bi-calendar-plus me-1 text-success"></i> Next Follow-Up Date
+                      </label>
                       <input
                         type="date"
                         className="form-control"
@@ -1059,7 +1098,7 @@ export default function LeadDetailPage() {
                             e.target.showPicker?.();
                           } catch (err) {}
                         }}
-                        value={followUpForm.next_follow_up_date}
+                        value={followUpForm.next_follow_up_date || ""}
                         onChange={(e) => {
                           const val = e.target.value;
                           const today = getTodayDate();
@@ -1073,12 +1112,14 @@ export default function LeadDetailPage() {
                     </div>
 
                     <div className="col-md-6">
-                      <label className="form-label text-dark fw-bold small">Next Follow-Up Time</label>
+                      <label className="form-label text-dark fw-bold small">
+                        <i className="bi bi-alarm me-1 text-success"></i> Next Follow-Up Time
+                      </label>
                       <input
                         type="text"
                         className="form-control"
-                        placeholder="e.g. 11:00 AM"
-                        value={followUpForm.next_follow_up_time}
+                        placeholder="e.g. 10:00 AM"
+                        value={followUpForm.next_follow_up_time || ""}
                         onChange={(e) => setFollowUpForm({ ...followUpForm, next_follow_up_time: e.target.value })}
                       />
                     </div>

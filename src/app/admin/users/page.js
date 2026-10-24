@@ -37,6 +37,9 @@ export default function UsersPage() {
   const BASE_STORAGE_URL = API_URL.replace(/\/api\/?$/, "");
 
   // 1. Component States
+  const [recordView, setRecordView] = useState("active"); // "active" | "trash"
+  const [permanentDeleteTarget, setPermanentDeleteTarget] = useState(null);
+  const [isDeletingPermanent, setIsDeletingPermanent] = useState(false);
   const [users, setUsers] = useState([]);
   const [serverPagination, setServerPagination] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -104,9 +107,13 @@ export default function UsersPage() {
         page: currentPage,
         per_page: perPage,
       };
+      if (recordView === "trash") {
+        params.status = "deleted";
+      } else {
+        if (statusFilter) params.status = statusFilter;
+      }
       if (searchTerm) params.search = searchTerm;
       if (roleFilter) params.role = roleFilter;
-      if (statusFilter) params.status = statusFilter;
 
       const response = await api.get("/users", { params });
       if (response.data && response.data.status) {
@@ -127,12 +134,48 @@ export default function UsersPage() {
     }
   };
 
+  const handleRestoreUser = async (id) => {
+    try {
+      const res = await api.post(`/users/${id}/restore`);
+      if (res.data?.status) {
+        showToast("User account restored successfully!", "success");
+        fetchUsers();
+      } else {
+        showToast(res.data?.message || "Failed to restore user.", "error");
+      }
+    } catch (err) {
+      console.error("Restore user error:", err);
+      showToast(getErrorMessage(err, "Failed to restore user."), "error");
+    }
+  };
+
+  const handlePermanentDeleteUser = async () => {
+    if (!permanentDeleteTarget) return;
+    setIsDeletingPermanent(true);
+    try {
+      const res = await api.delete(`/users/${permanentDeleteTarget.id}/force`);
+      if (res.data?.status) {
+        showToast("User account permanently deleted forever.", "success");
+        setPermanentDeleteTarget(null);
+        fetchUsers();
+        fetchUserStats();
+      } else {
+        showToast(res.data?.message || "Failed to permanently delete user.", "error");
+      }
+    } catch (err) {
+      console.error("Permanent delete user error:", err);
+      showToast(getErrorMessage(err, "Failed to permanently delete user."), "error");
+    } finally {
+      setIsDeletingPermanent(false);
+    }
+  };
+
   // Run on page load and parameter change
   useEffect(() => {
     fetchUsers();
     fetchUserStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, perPage, searchTerm, roleFilter, statusFilter]);
+  }, [currentPage, perPage, searchTerm, roleFilter, statusFilter, recordView]);
 
   // Photo file validation handler (enforces Laravel's max 2MB and image mime rules)
   const handlePhotoSelect = (e, isEdit = false) => {
@@ -339,6 +382,9 @@ export default function UsersPage() {
           item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           item.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           item.phone?.toLowerCase().includes(searchTerm.toLowerCase());
+        if (recordView === "trash") {
+          return matchesSearch;
+        }
         const matchesRole = !roleFilter || item.role === roleFilter;
         const matchesStatus = !statusFilter || item.status === statusFilter;
         return matchesSearch && matchesRole && matchesStatus;
@@ -398,6 +444,18 @@ export default function UsersPage() {
           </div>
 
           <div className="page-header-actions d-flex align-items-center gap-2">
+            <button
+              className={`btn ${recordView === "trash" ? "btn-danger text-white shadow-sm" : "btn-outline-custom"}`}
+              onClick={() => {
+                const next = recordView === "trash" ? "active" : "trash";
+                setRecordView(next);
+                setCurrentPage(1);
+              }}
+              title={recordView === "trash" ? "Back to Active Users" : "View Deleted Users Archive"}
+            >
+              <i className={`bi ${recordView === "trash" ? "bi-arrow-left" : "bi-trash text-danger"}`}></i>
+              <span>{recordView === "trash" ? "Active Users" : "Trash"}</span>
+            </button>
             {can("user.export") && <button
               className="btn btn-outline-custom"
               onClick={() => showToast("Exporting team user roster as CSV...", "info")}
@@ -542,36 +600,61 @@ export default function UsersPage() {
                         <span className="text-muted small">{(currentPage - 1) * perPage + index + 1}</span>
                       </td>
                       <td className="text-center">
-                        <div className="table-actions justify-content-center">
-                          {can("user.edit") && <button
-                            className="btn-action btn-edit"
-                            title="Edit User"
-                            onClick={() =>
-                              setEditUser({
-                                id: user.id,
-                                name: user.name,
-                                email: user.email,
-                                phone: user.phone || "",
-                                role: user.role || "Sales Executive",
-                                status: user.status || "Active",
-                                password: "",
-                                profile_photo: user.profile_photo,
-                                newPhoto: null,
-                              })
-                            }
-                          >
-                            <i className="bi bi-pencil"></i>
-                          </button>}
-                          {can("user.delete") && user.role !== "Super Admin" && (
+                        {recordView === "trash" ? (
+                          <div className="d-flex align-items-center justify-content-center gap-1">
                             <button
-                              className="btn-action btn-delete"
-                              title="Delete User"
-                              onClick={() => setDeleteTarget(user)}
+                              type="button"
+                              className="btn btn-sm btn-outline-success fw-semibold d-inline-flex align-items-center gap-1 shadow-xs"
+                              style={{ fontSize: "0.8rem", padding: "4px 10px" }}
+                              title="Restore User Account"
+                              onClick={() => handleRestoreUser(user.id)}
                             >
-                              <i className="bi bi-trash"></i>
+                              <i className="bi bi-arrow-counterclockwise"></i>
+                              <span>Restore</span>
                             </button>
-                          )}
-                        </div>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-danger fw-semibold d-inline-flex align-items-center gap-1 shadow-xs"
+                              style={{ fontSize: "0.8rem", padding: "4px 10px" }}
+                              title="Permanently Delete User Forever"
+                              onClick={() => setPermanentDeleteTarget(user)}
+                            >
+                              <i className="bi bi-trash3"></i>
+                              <span>Delete</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="table-actions justify-content-center">
+                            {can("user.edit") && <button
+                              className="btn-action btn-edit"
+                              title="Edit User"
+                              onClick={() =>
+                                setEditUser({
+                                  id: user.id,
+                                  name: user.name,
+                                  email: user.email,
+                                  phone: user.phone || "",
+                                  role: user.role || "Sales Executive",
+                                  status: user.status || "Active",
+                                  password: "",
+                                  profile_photo: user.profile_photo,
+                                  newPhoto: null,
+                                })
+                              }
+                            >
+                              <i className="bi bi-pencil"></i>
+                            </button>}
+                            {can("user.delete") && user.role !== "Super Admin" && (
+                              <button
+                                className="btn-action btn-delete"
+                                title="Delete User"
+                                onClick={() => setDeleteTarget(user)}
+                              >
+                                <i className="bi bi-trash"></i>
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td>
                         <div className="d-flex align-items-center gap-2">
@@ -642,6 +725,10 @@ export default function UsersPage() {
                           <span className="badge-custom badge-active">
                             <span className="badge-dot-indicator"></span>Active
                           </span>
+                        ) : user.status === "deleted" ? (
+                          <span className="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1" style={{ fontSize: "11px" }}>
+                            Deleted
+                          </span>
                         ) : (
                           <span className="badge-custom badge-inactive">
                             <span className="badge-dot-indicator"></span>Inactive
@@ -677,7 +764,7 @@ export default function UsersPage() {
             ADD NEW USER MODAL (Matches user's exact UI screenshot)
             ------------------------------------------------------------------ */}
         {showAddModal && (
-          <div className="modal-backdrop-custom" onClick={() => setShowAddModal(false)}>
+          <div className="modal-backdrop-custom">
             <div
               className="modal-dialog-custom"
               onClick={(e) => e.stopPropagation()}
@@ -831,7 +918,7 @@ export default function UsersPage() {
             EDIT USER MODAL
             ------------------------------------------------------------------ */}
         {editUser && (
-          <div className="modal-backdrop-custom" onClick={() => setEditUser(null)}>
+          <div className="modal-backdrop-custom">
             <div
               className="modal-dialog-custom"
               onClick={(e) => e.stopPropagation()}
@@ -982,7 +1069,7 @@ export default function UsersPage() {
             DELETE CONFIRMATION MODAL
             ------------------------------------------------------------------ */}
         {deleteTarget && (
-          <div className="modal-backdrop-custom" onClick={() => setDeleteTarget(null)}>
+          <div className="modal-backdrop-custom">
             <div className="modal-dialog-custom" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "450px" }}>
               <div className="modal-header-custom">
                 <h5 className="modal-title-custom text-danger">
@@ -1012,6 +1099,64 @@ export default function UsersPage() {
                 <button type="button" className="btn btn-danger" onClick={handleDeleteSubmit}>
                   Delete User
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Sweet Alert Confirmation Modal for Permanent Delete */}
+        {permanentDeleteTarget && (
+          <div
+            className="modal fade show d-block"
+            style={{ backgroundColor: "rgba(15, 23, 42, 0.65)", backdropFilter: "blur(4px)", zIndex: 1080 }}
+            onClick={() => !isDeletingPermanent && setPermanentDeleteTarget(null)}
+          >
+            <div
+              className="modal-dialog modal-dialog-centered"
+              style={{ maxWidth: "420px" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                <div className="modal-body p-4 text-center">
+                  <div
+                    className="d-inline-flex align-items-center justify-content-center rounded-circle mb-3 shadow-xs"
+                    style={{ width: "64px", height: "64px", background: "#FEE2E2", color: "#DC2626" }}
+                  >
+                    <i className="bi bi-exclamation-triangle-fill fs-2"></i>
+                  </div>
+                  <h5 className="modal-title fw-bold text-dark mb-2">Delete Permanently?</h5>
+                  <p className="text-muted small mb-0 px-2" style={{ lineHeight: "1.5" }}>
+                    Are you sure you want to permanently delete user <strong>&quot;{permanentDeleteTarget.name}&quot;</strong> ({permanentDeleteTarget.email})? This user account and all personal access sessions will be deleted forever and <strong>cannot be restored</strong>.
+                  </p>
+                </div>
+                <div className="modal-footer border-0 p-3 bg-light d-flex gap-2 justify-content-center">
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary px-3 py-1.5 rounded-pill fw-medium"
+                    onClick={() => setPermanentDeleteTarget(null)}
+                    disabled={isDeletingPermanent}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-danger px-4 py-1.5 rounded-pill fw-semibold shadow-sm"
+                    onClick={handlePermanentDeleteUser}
+                    disabled={isDeletingPermanent}
+                  >
+                    {isDeletingPermanent ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                        <span>Deleting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <i className="bi bi-trash3-fill me-1"></i>
+                        <span>Yes, Delete Forever</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
