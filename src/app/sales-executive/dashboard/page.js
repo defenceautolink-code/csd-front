@@ -1,14 +1,28 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
 import SalesExecutiveDashboard from "@/app/admin/dashboard/components/SalesExecutiveDashboard";
+import axios from "@/lib/axios";
 
 export default function SalesExecutiveDashboardPage() {
   const { showToast } = useToast();
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => {
+    const userStr = localStorage.getItem("user");
+    if (userStr) {
+      try {
+        setCurrentUser(JSON.parse(userStr));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }, []);
 
   // New Lead Form state
   const [newLead, setNewLead] = useState({
@@ -21,27 +35,49 @@ export default function SalesExecutiveDashboardPage() {
     source: "Direct Prospecting",
   });
 
-  const handleAddLeadSubmit = (e) => {
+  const handleAddLeadSubmit = async (e) => {
     e.preventDefault();
     const cleanPhone = newLead.phone ? newLead.phone.trim().replace(/\D/g, "") : "";
     if (!cleanPhone || cleanPhone.length !== 10 || !/^[6-9]\d{9}$/.test(cleanPhone)) {
       showToast("Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9.", "error");
       return;
     }
-    showToast(
-      `New Lead created for ${newLead.name} (${newLead.brand} ${newLead.model}) with ${newLead.priority} priority!`,
-      "success"
-    );
-    setShowAddLeadModal(false);
-    setNewLead({
-      name: "",
-      phone: "",
-      brand: "Maruti Suzuki",
-      model: "Grand Vitara",
-      budget: "₹20 - 25 Lakhs",
-      priority: "Hot",
-      source: "Direct Prospecting",
-    });
+
+    setIsSubmitting(true);
+    try {
+      const response = await axios.post("/leads", {
+        name: newLead.name.trim(),
+        phone: cleanPhone,
+        brand_name: newLead.brand,
+        model_variant: `${newLead.brand} ${newLead.model}`,
+        priority: newLead.priority,
+        purchase_timeline: "Immediate (Within 7 Days)",
+        assigned_to: currentUser?.id,
+        assigned_user_name: currentUser?.name || "",
+      });
+
+      if (response.data && response.data.status) {
+        showToast(
+          `New Lead created for ${newLead.name} (${newLead.brand} ${newLead.model})!`,
+          "success"
+        );
+        setShowAddLeadModal(false);
+        setNewLead({
+          name: "",
+          phone: "",
+          brand: "Maruti Suzuki",
+          model: "Grand Vitara",
+          budget: "₹20 - 25 Lakhs",
+          priority: "Hot",
+          source: "Direct Prospecting",
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      showToast(err.response?.data?.message || "Failed to add lead.", "error");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

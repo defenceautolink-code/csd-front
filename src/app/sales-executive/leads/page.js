@@ -166,7 +166,11 @@ export default function SalesExecutiveLeadsPage() {
               <i className={`bi bi-arrow-clockwise me-1 ${isLoading ? "spin" : ""}`}></i>
               <span>Refresh</span>
             </button>
-            <Link href="/admin/follow-up" className="btn btn-primary">
+            <Link href="/sales-executive/pipeline" className="btn btn-primary">
+              <i className="bi bi-plus-circle me-1"></i>
+              <span>Add Customer Lead</span>
+            </Link>
+            <Link href="/admin/follow-up" className="btn btn-outline-custom">
               <i className="bi bi-telephone-outbound-fill me-1"></i>
               <span>Follow-Up Hub</span>
             </Link>

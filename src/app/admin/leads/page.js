@@ -483,10 +483,13 @@ export default function LeadsPage() {
 
     const selectedUser = usersList.find(
       (u) => `${u.name} (${u.role || "Executive"})` === formData.assigned_user_name || u.name === formData.assigned_user_name
-    );
+    ) || (currentUser && (currentUser.role === "Sales Executive" || currentUser.role === "sales_executive") ? currentUser : null);
 
     setIsSubmitting(true);
     try {
+      const assignedToId = selectedUser ? selectedUser.id : (currentUser && (currentUser.role === "Sales Executive" || currentUser.role === "sales_executive") ? currentUser.id : null);
+      const assignedName = formData.assigned_user_name || (selectedUser ? selectedUser.name : (currentUser?.name || ""));
+
       const response = await axios.post(`${API_URL}/leads`, {
         name: formData.name.trim(),
         email: formData.email.trim(),
@@ -508,8 +511,8 @@ export default function LeadsPage() {
         total_deal_amount: formData.budget ? parseFloat(formData.budget) : null,
         source_id: formData.source_id || null,
         status_id: formData.status_id || null,
-        assigned_to: selectedUser ? selectedUser.id : null,
-        assigned_user_name: formData.assigned_user_name || (selectedUser ? selectedUser.name : ""),
+        assigned_to: assignedToId,
+        assigned_user_name: assignedName,
       });
 
       if (response.data && response.data.status) {
@@ -1356,7 +1359,7 @@ export default function LeadsPage() {
                   budget: "",
                   source_id: sources[0]?.id || "",
                   status_id: statuses[0]?.id || "",
-                  assigned_user_name: "",
+                  assigned_user_name: currentUser?.name ? `${currentUser.name} (${currentUser.role || "Sales Executive"})` : "",
                 });
                 setShowAddModal(true);
               }}
