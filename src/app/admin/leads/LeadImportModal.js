@@ -5,6 +5,7 @@ import api from "@/lib/axios";
 import axios from "axios";
 import * as XLSX from "xlsx";
 import leadApi from "@/services/leadApi";
+import { logActivity } from "@/utils/activityLogger";
 
 /**
  * EXACT Target Fields matching the Lead Table & "Add Customer Lead" form:
@@ -816,6 +817,13 @@ export default function LeadImportModal({
             : res.message || `Successfully processed ${cleanPayloadLeads.length} leads!`;
 
           showToast(msg, summary?.failed_count > 0 && summary?.imported_count === 0 ? "warning" : "success");
+
+          // Log import activity
+          logActivity("Lead", "import", {
+            count: summary?.imported_count || cleanPayloadLeads.length,
+            detail: `import of lead - ${summary?.imported_count || cleanPayloadLeads.length} records`,
+          });
+
           onSuccess();
           handleClose();
           return;
@@ -885,6 +893,13 @@ export default function LeadImportModal({
           }`,
           "success"
         );
+
+        // Log import activity
+        logActivity("Lead", "import", {
+          count: successCount,
+          detail: `import of lead - ${successCount} records`,
+        });
+
         onSuccess();
         handleClose();
       } else {

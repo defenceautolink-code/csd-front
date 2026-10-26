@@ -8,6 +8,7 @@ import { hasPermission } from "@/utils/auth";
 import reportApi from "@/services/reportApi";
 import ReportsNav from "@/app/admin/reports/ReportsNav";
 import Pagination from "@/components/common/Pagination";
+import { logActivity } from "@/utils/activityLogger";
 
 export default function ReportsPage() {
   const { showToast } = useToast();
@@ -98,6 +99,11 @@ export default function ReportsPage() {
         link.click();
         document.body.removeChild(link);
         showToast("Exported CSV successfully", "success");
+
+        // Log export in Activity Logs
+        logActivity("Report", "export", {
+          detail: `export of report - Analytics Report CSV (${selectedPeriod})`,
+        });
       }
     } catch (err) {
       console.error(err);
@@ -108,6 +114,10 @@ export default function ReportsPage() {
   };
 
   const handleExportPdf = () => {
+    // Log print/PDF export in Activity Logs
+    logActivity("Report", "export", {
+      detail: `export of report - Analytics Report Print/PDF (${selectedPeriod})`,
+    });
     window.print();
   };
 

@@ -11,6 +11,69 @@ import quotationApi from "@/lib/quotationApi";
 import ConvertDealModal from "../ConvertDealModal";
 import discountApprovalApi from "@/services/discountApprovalApi";
 
+export const renderLeadStatusBadge = (statusName, extraClasses = "") => {
+  const s = (statusName || "New").trim();
+  const sLower = s.toLowerCase();
+  if (sLower === "new") {
+    return (
+      <span
+        className={`badge bg-primary-subtle text-primary border border-primary-subtle fw-semibold ${extraClasses}`}
+        style={{ fontSize: "12px", padding: "4px 10px" }}
+      >
+        <i className="bi bi-stars me-1"></i>New
+      </span>
+    );
+  }
+  if (sLower.includes("follow") || sLower.includes("discount")) {
+    return (
+      <span
+        className={`badge bg-warning-subtle text-dark border border-warning-subtle fw-semibold ${extraClasses}`}
+        style={{ fontSize: "12px", padding: "4px 10px" }}
+      >
+        <i className="bi bi-telephone-forward me-1"></i>Follow-up
+      </span>
+    );
+  }
+  if (sLower.includes("quotation") || sLower.includes("quote")) {
+    return (
+      <span
+        className={`badge bg-info-subtle text-dark border border-info-subtle fw-semibold ${extraClasses}`}
+        style={{ fontSize: "12px", padding: "4px 10px" }}
+      >
+        <i className="bi bi-file-earmark-spreadsheet me-1"></i>Quotation Sent
+      </span>
+    );
+  }
+  if (sLower.includes("deal") || sLower.includes("booking") || sLower.includes("won")) {
+    return (
+      <span
+        className={`badge bg-success-subtle text-success border border-success-subtle fw-semibold ${extraClasses}`}
+        style={{ fontSize: "12px", padding: "4px 10px" }}
+      >
+        <i className="bi bi-trophy-fill me-1"></i>Deal & Booking
+      </span>
+    );
+  }
+  if (sLower.includes("lost")) {
+    return (
+      <span
+        className={`badge bg-danger-subtle text-danger border border-danger-subtle fw-semibold ${extraClasses}`}
+        style={{ fontSize: "12px", padding: "4px 10px" }}
+      >
+        <i className="bi bi-x-circle-fill me-1"></i>Lost
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`badge bg-secondary-subtle text-dark border border-secondary fw-semibold ${extraClasses}`}
+      style={{ fontSize: "12px", padding: "4px 10px" }}
+    >
+      {s}
+    </span>
+  );
+};
+
 export default function LeadDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -327,7 +390,7 @@ export default function LeadDetailPage() {
         next_follow_up_time: followUpForm.next_follow_up_time || null,
         notes: followUpForm.notes.trim(),
         remarks: followUpForm.notes.trim(),
-        lead_status_name: followUpForm.request_discount ? "Discount Pending" : undefined,
+        lead_status_name: "Follow-up",
         is_discount_requested: Boolean(followUpForm.request_discount),
         discount_amount: followUpForm.request_discount && followUpForm.discount_amount ? Number(followUpForm.discount_amount) : null,
         proposed_price: followUpForm.proposed_price ? Number(followUpForm.proposed_price) : null,
@@ -415,6 +478,7 @@ export default function LeadDetailPage() {
             </div>
             <h3 className="mb-0 text-dark fw-bold d-flex align-items-center gap-2 flex-wrap">
               {lead.name}
+              {renderLeadStatusBadge(lead.status_name || lead.status?.name || "New")}
               {lead.is_birthday_today && (
                 <span className="badge bg-danger-subtle text-danger border border-danger-subtle fs-6">
                   🎂 Birthday Today!
@@ -584,9 +648,7 @@ export default function LeadDetailPage() {
                 <h5 className="card-title mb-0 text-dark fw-bold d-flex align-items-center gap-2">
                   <i className="bi bi-car-front-fill text-primary"></i> Vehicle & Requirements
                 </h5>
-                <span className="badge bg-success-subtle text-success border border-success-subtle px-3 py-1 fw-bold fs-6">
-                  {lead.status?.name || lead.status_name || "New Prospect"}
-                </span>
+                {renderLeadStatusBadge(lead.status_name || lead.status?.name || "New", "fs-6")}
               </div>
               <div className="card-body">
                 <div className="row g-3">
@@ -1040,7 +1102,7 @@ export default function LeadDetailPage() {
                         <option value="Quotation Requested">Quotation Requested</option>
                         <option value="Negotiation / Price Discussion">Negotiation / Price Discussion</option>
                         <option value="Not Reachable / Busy">Not Reachable / Busy</option>
-                        <option value="Lost to Competitor">Lost to Competitor</option>
+                        <option value="Lost to Competitor / Lost of Lead">Lost to Competitor / Lost of Lead</option>
                         <option value="Deal Won / Booking">Deal Won / Booking</option>
                       </select>
                     </div>

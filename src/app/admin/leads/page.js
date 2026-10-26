@@ -36,6 +36,82 @@ const isBrandMatchingSegment = (brand, segment) => {
   return true;
 };
 
+export const STATIC_LEAD_STATUSES = [
+  "New",
+  "Follow-up",
+  "Quotation Sent",
+  "Deal & Booking",
+  "Lost",
+];
+
+export const renderLeadStatusBadge = (statusName) => {
+  const s = (statusName || "New").trim();
+  const sLower = s.toLowerCase();
+  if (sLower === "new") {
+    return (
+      <span
+        className="badge bg-primary-subtle text-primary border border-primary-subtle fw-semibold"
+        style={{ fontSize: "11px", padding: "3px 8px" }}
+      >
+        <i className="bi bi-stars me-1" style={{ fontSize: "9px" }}></i>
+        New
+      </span>
+    );
+  }
+  if (sLower.includes("follow") || sLower.includes("discount")) {
+    return (
+      <span
+        className="badge bg-warning-subtle text-dark border border-warning-subtle fw-semibold"
+        style={{ fontSize: "11px", padding: "3px 8px" }}
+      >
+        <i className="bi bi-telephone-forward me-1" style={{ fontSize: "9px" }}></i>
+        Follow-up
+      </span>
+    );
+  }
+  if (sLower.includes("quotation") || sLower.includes("quote")) {
+    return (
+      <span
+        className="badge bg-info-subtle text-dark border border-info-subtle fw-semibold"
+        style={{ fontSize: "11px", padding: "3px 8px" }}
+      >
+        <i className="bi bi-file-earmark-spreadsheet me-1" style={{ fontSize: "9px" }}></i>
+        Quotation Sent
+      </span>
+    );
+  }
+  if (sLower.includes("deal") || sLower.includes("booking") || sLower.includes("won")) {
+    return (
+      <span
+        className="badge bg-success-subtle text-success border border-success-subtle fw-semibold"
+        style={{ fontSize: "11px", padding: "3px 8px" }}
+      >
+        <i className="bi bi-trophy-fill me-1" style={{ fontSize: "9px" }}></i>
+        Deal & Booking
+      </span>
+    );
+  }
+  if (sLower.includes("lost")) {
+    return (
+      <span
+        className="badge bg-danger-subtle text-danger border border-danger-subtle fw-semibold"
+        style={{ fontSize: "11px", padding: "3px 8px" }}
+      >
+        <i className="bi bi-x-circle-fill me-1" style={{ fontSize: "9px" }}></i>
+        Lost
+      </span>
+    );
+  }
+  return (
+    <span
+      className="badge bg-secondary-subtle text-dark border border-secondary fw-semibold"
+      style={{ fontSize: "11px", padding: "3px 8px" }}
+    >
+      {s}
+    </span>
+  );
+};
+
 export default function LeadsPage() {
   const pathname = usePathname();
   const { showToast } = useToast();
@@ -108,7 +184,7 @@ export default function LeadsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
   const [segmentFilter, setSegmentFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("New");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -189,6 +265,7 @@ export default function LeadsPage() {
     budget: "",
     source_id: "",
     status_id: "",
+    status_name: "New",
     assigned_user_name: "",
   });
   const [isTriggeringWishes, setIsTriggeringWishes] = useState(false);
@@ -511,6 +588,7 @@ export default function LeadsPage() {
         total_deal_amount: formData.budget ? parseFloat(formData.budget) : null,
         source_id: formData.source_id || null,
         status_id: formData.status_id || null,
+        status_name: formData.status_name || "New",
         assigned_to: assignedToId,
         assigned_user_name: assignedName,
       });
@@ -540,6 +618,7 @@ export default function LeadsPage() {
           budget: "",
           source_id: "",
           status_id: "",
+          status_name: "New",
           assigned_user_name: "",
         });
         setAddModels([]);
@@ -607,6 +686,7 @@ export default function LeadsPage() {
         budget: editLead.budget || null,
         source_id: editLead.source_id || null,
         status_id: editLead.status_id || null,
+        status_name: editLead.status_name || "New",
         assigned_user_name: editLead.assigned_user_name,
       });
 
@@ -696,13 +776,10 @@ export default function LeadsPage() {
     }
   }, [openStatusDropdown, openPriorityDropdown]);
 
-  // Active leads in pipeline (excluding leads already converted to deals)
+  // Active leads in pipeline
   const activeLeads = useMemo(() => {
-    if (recordView === "trash") return leads;
-    return leads.filter((item) => {
-      return !convertedLeadIds.some((cid) => String(cid) === String(item.id));
-    });
-  }, [leads, convertedLeadIds, recordView]);
+    return leads;
+  }, [leads]);
 
   // Filter leads based on user selection (excluding converted deals)
   const filteredLeads = useMemo(() => {
@@ -722,7 +799,16 @@ export default function LeadsPage() {
 
       const matchesPriority = !priorityFilter || item.priority === priorityFilter;
       const matchesSegment = !segmentFilter || item.vehicle_segment === segmentFilter;
-      const matchesStatus = !statusFilter || item.status_name === statusFilter;
+      const matchesStatus = !statusFilter || (() => {
+        const cur = (item.status_name || item.status?.name || "New").toLowerCase();
+        const filt = statusFilter.toLowerCase();
+        if (filt === "new") return cur === "new";
+        if (filt.includes("follow")) return cur.includes("follow");
+        if (filt.includes("quotation") || filt.includes("quote")) return cur.includes("quotation") || cur.includes("quote");
+        if (filt.includes("deal") || filt.includes("booking")) return cur.includes("deal") || cur.includes("booking");
+        if (filt.includes("lost")) return cur.includes("lost");
+        return cur === filt;
+      })();
 
       // Filter by Created Date (created_at)
       const matchesDate = (() => {
@@ -1008,7 +1094,7 @@ export default function LeadsPage() {
         next_follow_up_date: followUpForm.next_follow_up_date || null,
         next_follow_up_time: followUpForm.next_follow_up_time || "10:00 AM",
         status: followUpForm.outcome || "Interested",
-        lead_status_name: followUpForm.request_discount ? "Discount Pending" : "In Follow-Up",
+        lead_status_name: "Follow-up",
         is_discount_requested: Boolean(followUpForm.request_discount),
         discount_amount: followUpForm.request_discount && followUpForm.discount_amount ? Number(followUpForm.discount_amount) : null,
         proposed_price: followUpForm.proposed_price ? Number(followUpForm.proposed_price) : null,
@@ -1255,6 +1341,16 @@ export default function LeadsPage() {
       `Exported ${list.length} ${exportSelectedOnly ? "selected " : ""}leads to CSV!`,
       "success"
     );
+
+    // Notify backend to record export activity log
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("auth_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      axios.post(`${API_URL}/leads/log-export`, {
+        count: list.length,
+        type: exportSelectedOnly ? "selected" : "all",
+      }, { headers }).catch(() => {});
+    } catch {}
   };
 
   // Extract executive names list for assignment
@@ -1664,12 +1760,12 @@ export default function LeadsPage() {
                 className="form-select form-select-sm"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                style={{ width: "130px" }}
+                style={{ width: "145px" }}
               >
                 <option value="">All Statuses</option>
-                {statuses.map((s) => (
-                  <option key={s.id} value={s.name}>
-                    {s.name}
+                {STATIC_LEAD_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
                   </option>
                 ))}
               </select>
@@ -1836,152 +1932,153 @@ export default function LeadsPage() {
                               </button>
                             </div>
                           ) : (
-                          <div className="dropdown position-relative d-inline-block">
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-light border rounded-circle shadow-none p-0 d-inline-flex align-items-center justify-content-center"
-                              style={{ width: "32px", height: "32px", cursor: "pointer" }}
-                              title="Lead Actions"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveActionMenuId(activeActionMenuId === lead.id ? null : lead.id);
-                              }}
-                            >
-                              <i className="bi bi-three-dots-vertical fs-6 text-dark"></i>
-                            </button>
-
-                            {activeActionMenuId === lead.id && (
-                              <div
-                                className="dropdown-menu show shadow-lg border rounded-3 p-1.5 position-absolute start-0 text-start"
-                                style={{
-                                  minWidth: "205px",
-                                  zIndex: 1050,
-                                  top: "100%",
-                                  backgroundColor: "#FFFFFF",
-                                  boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.08)",
+                            <div className="dropdown position-relative d-inline-block">
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-light border rounded-circle shadow-none p-0 d-inline-flex align-items-center justify-content-center"
+                                style={{ width: "32px", height: "32px", cursor: "pointer" }}
+                                title="Lead Actions"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveActionMenuId(activeActionMenuId === lead.id ? null : lead.id);
                                 }}
-                                onClick={(e) => e.stopPropagation()}
                               >
-                                {/* Convert to Deal */}
-                                <button
-                                  type="button"
-                                  className="dropdown-item d-flex align-items-center gap-2.5 py-2 px-3 rounded-2 fw-semibold text-success"
-                                  style={{ fontSize: "0.85rem" }}
-                                  onClick={() => {
-                                    setActiveActionMenuId(null);
-                                    setConvertDealTarget(lead);
+                                <i className="bi bi-three-dots-vertical fs-6 text-dark"></i>
+                              </button>
+
+                              {activeActionMenuId === lead.id && (
+                                <div
+                                  className="dropdown-menu show shadow-lg border rounded-3 p-1.5 position-absolute start-0 text-start"
+                                  style={{
+                                    minWidth: "205px",
+                                    zIndex: 1050,
+                                    top: "100%",
+                                    backgroundColor: "#FFFFFF",
+                                    boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.08)",
                                   }}
+                                  onClick={(e) => e.stopPropagation()}
                                 >
-                                  <i className="bi bi-trophy-fill text-success text-center" style={{ width: "18px", fontSize: "0.95rem" }}></i>
-                                  <span>Convert to Deal</span>
-                                </button>
+                                  {/* 1. Log Follow-Up Call (First) */}
+                                  {(can("lead.followup") || can("followup.log_call") || !currentUser) && (
+                                    <button
+                                      type="button"
+                                      className="dropdown-item d-flex align-items-center gap-2.5 py-2 px-3 rounded-2 text-dark"
+                                      style={{ fontSize: "0.85rem" }}
+                                      onClick={() => {
+                                        setActiveActionMenuId(null);
+                                        handleOpenFollowUpModal(lead);
+                                      }}
+                                    >
+                                      <i className="bi bi-telephone-plus text-primary text-center" style={{ width: "18px", fontSize: "0.95rem" }}></i>
+                                      <span>Log Follow-Up</span>
+                                    </button>
+                                  )}
 
-                                <div className="dropdown-divider my-1"></div>
+                                  {/* 2. Send Quotation (Second) */}
+                                  {can("lead.send_quotation") && (
+                                    <Link
+                                      href={`/admin/quotation/create?lead_id=${lead.id}`}
+                                      className="dropdown-item d-flex align-items-center gap-2.5 py-2 px-3 rounded-2 text-dark text-decoration-none"
+                                      style={{ fontSize: "0.85rem" }}
+                                      onClick={() => setActiveActionMenuId(null)}
+                                    >
+                                      <i className="bi bi-file-earmark-spreadsheet text-info text-center" style={{ width: "18px", fontSize: "0.95rem" }}></i>
+                                      <span>Send Quotation</span>
+                                    </Link>
+                                  )}
 
-                                {/* Log Follow-Up Call */}
-                                {(can("lead.followup") || can("followup.log_call") || !currentUser) && (
+                                  {/* 3. Convert to Deal (Third) */}
                                   <button
                                     type="button"
-                                    className="dropdown-item d-flex align-items-center gap-2.5 py-2 px-3 rounded-2 text-dark"
+                                    className="dropdown-item d-flex align-items-center gap-2.5 py-2 px-3 rounded-2 fw-semibold text-success"
                                     style={{ fontSize: "0.85rem" }}
                                     onClick={() => {
                                       setActiveActionMenuId(null);
-                                      handleOpenFollowUpModal(lead);
+                                      setConvertDealTarget(lead);
                                     }}
                                   >
-                                    <i className="bi bi-telephone-plus text-primary text-center" style={{ width: "18px", fontSize: "0.95rem" }}></i>
-                                    <span>Log Follow-Up</span>
+                                    <i className="bi bi-trophy-fill text-success text-center" style={{ width: "18px", fontSize: "0.95rem" }}></i>
+                                    <span>Convert to Deal</span>
                                   </button>
-                                )}
 
-                                {/* Send Quotation */}
-                                {can("lead.send_quotation") && (
-                                  <Link
-                                    href={`/admin/quotation/create?lead_id=${lead.id}`}
-                                    className="dropdown-item d-flex align-items-center gap-2.5 py-2 px-3 rounded-2 text-dark text-decoration-none"
-                                    style={{ fontSize: "0.85rem" }}
-                                    onClick={() => setActiveActionMenuId(null)}
-                                  >
-                                    <i className="bi bi-file-earmark-spreadsheet text-info text-center" style={{ width: "18px", fontSize: "0.95rem" }}></i>
-                                    <span>Send Quotation</span>
-                                  </Link>
-                                )}
+                                  <div className="dropdown-divider my-1"></div>
 
-                                {/* View Lead Details */}
-                                {(can("lead.view_assigned") || can("lead.view_all")) && (
-                                  <button
-                                    type="button"
-                                    className="dropdown-item d-flex align-items-center gap-2.5 py-2 px-3 rounded-2 text-dark"
-                                    style={{ fontSize: "0.85rem" }}
-                                    onClick={() => {
-                                      setActiveActionMenuId(null);
-                                      handleOpenViewLead(lead);
-                                    }}
-                                  >
-                                    <i className="bi bi-eye text-secondary text-center" style={{ width: "18px", fontSize: "0.95rem" }}></i>
-                                    <span>View Lead Details</span>
-                                  </button>
-                                )}
+                                  {/* 4. View Lead Details */}
+                                  {(can("lead.view_assigned") || can("lead.view_all")) && (
+                                    <button
+                                      type="button"
+                                      className="dropdown-item d-flex align-items-center gap-2.5 py-2 px-3 rounded-2 text-dark"
+                                      style={{ fontSize: "0.85rem" }}
+                                      onClick={() => {
+                                        setActiveActionMenuId(null);
+                                        handleOpenViewLead(lead);
+                                      }}
+                                    >
+                                      <i className="bi bi-eye text-secondary text-center" style={{ width: "18px", fontSize: "0.95rem" }}></i>
+                                      <span>View Lead Details</span>
+                                    </button>
+                                  )}
 
-                                {/* Edit Lead */}
-                                {can("lead.edit") && (
-                                  <button
-                                    type="button"
-                                    className="dropdown-item d-flex align-items-center gap-2.5 py-2 px-3 rounded-2 text-dark"
-                                    style={{ fontSize: "0.85rem" }}
-                                    onClick={() => {
-                                      setActiveActionMenuId(null);
-                                      setEditLead({
-                                        id: lead.id,
-                                        name: lead.name,
-                                        email: lead.email || "",
-                                        phone: lead.phone ? String(lead.phone).replace(/\D/g, "").slice(-10) : "",
-                                        city: lead.city || lead.home_town || "",
-                                        posting: lead.posting || "",
-                                        state: lead.state || "",
-                                        birth_date: lead.birth_date ? lead.birth_date.split("T")[0] : "",
-                                        anniversary_date: lead.anniversary_date ? lead.anniversary_date.split("T")[0] : "",
-                                        vehicle_segment: lead.vehicle_segment || "4 Wheeler",
-                                        brand_id: lead.brand_id || "",
-                                        model_id: lead.model_id || "",
-                                        variant_id: lead.variant_id || "",
-                                        model_variant: lead.model_variant || "",
-                                        priority: lead.priority || "Hot",
-                                        purchase_timeline: lead.purchase_timeline || "Immediate (Within 7 Days)",
-                                        budget: lead.budget || "",
-                                        source_id: lead.source_id || "",
-                                        status_id: lead.status_id || "",
-                                        assigned_user_name: lead.assigned_user_name || "David Miller (Sales Executive)",
-                                      });
-                                      if (lead.brand_id) fetchEditModels(lead.brand_id);
-                                      if (lead.model_id) fetchEditVariants(lead.model_id);
-                                    }}
-                                  >
-                                    <i className="bi bi-pencil-square text-warning text-center" style={{ width: "18px", fontSize: "0.95rem" }}></i>
-                                    <span>Edit Lead</span>
-                                  </button>
-                                )}
+                                  {/* Edit Lead */}
+                                  {can("lead.edit") && (
+                                    <button
+                                      type="button"
+                                      className="dropdown-item d-flex align-items-center gap-2.5 py-2 px-3 rounded-2 text-dark"
+                                      style={{ fontSize: "0.85rem" }}
+                                      onClick={() => {
+                                        setActiveActionMenuId(null);
+                                        setEditLead({
+                                          id: lead.id,
+                                          name: lead.name,
+                                          email: lead.email || "",
+                                          phone: lead.phone ? String(lead.phone).replace(/\D/g, "").slice(-10) : "",
+                                          city: lead.city || lead.home_town || "",
+                                          posting: lead.posting || "",
+                                          state: lead.state || "",
+                                          birth_date: lead.birth_date ? lead.birth_date.split("T")[0] : "",
+                                          anniversary_date: lead.anniversary_date ? lead.anniversary_date.split("T")[0] : "",
+                                          vehicle_segment: lead.vehicle_segment || "4 Wheeler",
+                                          brand_id: lead.brand_id || "",
+                                          model_id: lead.model_id || "",
+                                          variant_id: lead.variant_id || "",
+                                          model_variant: lead.model_variant || "",
+                                          priority: lead.priority || "Hot",
+                                          purchase_timeline: lead.purchase_timeline || "Immediate (Within 7 Days)",
+                                          budget: lead.budget || "",
+                                          source_id: lead.source_id || "",
+                                          status_id: lead.status_id || "",
+                                          status_name: lead.status_name || lead.status?.name || "New",
+                                          assigned_user_name: lead.assigned_user_name || "David Miller (Sales Executive)",
+                                        });
+                                        if (lead.brand_id) fetchEditModels(lead.brand_id);
+                                        if (lead.model_id) fetchEditVariants(lead.model_id);
+                                      }}
+                                    >
+                                      <i className="bi bi-pencil-square text-warning text-center" style={{ width: "18px", fontSize: "0.95rem" }}></i>
+                                      <span>Edit Lead</span>
+                                    </button>
+                                  )}
 
-                                <div className="dropdown-divider my-1"></div>
+                                  <div className="dropdown-divider my-1"></div>
 
-                                {/* Delete Lead */}
-                                {can("lead.delete") && (
-                                  <button
-                                    type="button"
-                                    className="dropdown-item d-flex align-items-center gap-2.5 py-2 px-3 rounded-2 text-danger"
-                                    style={{ fontSize: "0.85rem" }}
-                                    onClick={() => {
-                                      setActiveActionMenuId(null);
-                                      setDeleteTarget(lead);
-                                    }}
-                                  >
-                                    <i className="bi bi-trash3-fill text-danger text-center" style={{ width: "18px", fontSize: "0.95rem" }}></i>
-                                    <span>Delete Lead</span>
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                          </div>
+                                  {/* Delete Lead */}
+                                  {can("lead.delete") && (
+                                    <button
+                                      type="button"
+                                      className="dropdown-item d-flex align-items-center gap-2.5 py-2 px-3 rounded-2 text-danger"
+                                      style={{ fontSize: "0.85rem" }}
+                                      onClick={() => {
+                                        setActiveActionMenuId(null);
+                                        setDeleteTarget(lead);
+                                      }}
+                                    >
+                                      <i className="bi bi-trash3-fill text-danger text-center" style={{ width: "18px", fontSize: "0.95rem" }}></i>
+                                      <span>Delete Lead</span>
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           )}
                         </td>
 
@@ -2036,7 +2133,7 @@ export default function LeadsPage() {
                           </div>
                         </td>
 
-                        {/* 3. Vehicle Requirement Column (with Source Badge inside) */}
+                        {/* 3. Vehicle Requirement Column (with Source Badge inside & Discount Pending below) */}
                         <td>
                           <div>
                             <div className="text-dark fw-semibold">
@@ -2052,30 +2149,45 @@ export default function LeadsPage() {
                                 {lead.source?.title || lead.source_name || "Direct"}
                               </span>
                             </div>
+                            {/* Discount Pending badge moved here under Vehicle Requirement per Task 2 */}
+                            {(lead.discount_approval_status === "pending" ||
+                              lead.has_discount_pending ||
+                              lead.status_name === "Discount Pending" ||
+                              lead.status?.name === "Discount Pending") && (
+                              <div className="mt-1">
+                                <span
+                                  className="badge bg-warning-subtle text-dark border border-warning-subtle fw-semibold d-inline-flex align-items-center gap-1"
+                                  style={{ fontSize: "10px", padding: "2px 6px" }}
+                                  title="Discount Approval Requested"
+                                >
+                                  <i className="bi bi-tag-fill text-warning"></i>
+                                  <span>Discount Pending</span>
+                                  {lead.requested_discount ? ` (₹${Number(lead.requested_discount).toLocaleString("en-IN")})` : ""}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </td>
 
-                        {/* 4. Priority & Status Combined Column (Static clean badges, no inline changing) */}
+                        {/* 4. Priority & Status Combined Column (Static clean statuses) */}
                         <td>
                           <div className="d-flex flex-column gap-1 align-items-start">
                             <span
                               className={`badge ${lead.priority === "Hot"
-                                  ? "bg-danger-subtle text-danger border border-danger-subtle"
-                                  : lead.priority === "Warm"
-                                    ? "bg-warning-subtle text-warning border border-warning-subtle"
-                                    : "bg-info-subtle text-info border border-info-subtle"
+                                ? "bg-danger-subtle text-danger border border-danger-subtle"
+                                : lead.priority === "Warm"
+                                  ? "bg-warning-subtle text-warning border border-warning-subtle"
+                                  : "bg-info-subtle text-info border border-info-subtle"
                                 }`}
                               style={{ fontSize: "11px", padding: "3px 8px" }}
                             >
                               {lead.priority === "Hot" ? "🔥 Hot" : lead.priority === "Warm" ? "☀️ Warm" : "❄️ Cold"}
                             </span>
-                            <span
-                              className="badge bg-success-subtle text-success border border-success-subtle fw-semibold"
-                              style={{ fontSize: "11px", padding: "3px 8px" }}
-                            >
-                              <i className="bi bi-check-circle-fill me-1" style={{ fontSize: "9px" }}></i>
-                              {lead.status?.name || lead.status_name || "New"}
-                            </span>
+                            {renderLeadStatusBadge(
+                              lead.status_name === "Discount Pending" || lead.status?.name === "Discount Pending"
+                                ? "Follow-up"
+                                : (lead.status_name || lead.status?.name || "New")
+                            )}
                           </div>
                         </td>
 
@@ -2552,13 +2664,12 @@ export default function LeadsPage() {
                       <label className="form-label text-dark fw-bold small">Lead Status</label>
                       <select
                         className="form-select"
-                        value={formData.status_id}
-                        onChange={(e) => setFormData({ ...formData, status_id: e.target.value })}
+                        value={formData.status_name || "New"}
+                        onChange={(e) => setFormData({ ...formData, status_name: e.target.value })}
                       >
-                        <option value="">Choose Status</option>
-                        {statuses.map((st) => (
-                          <option key={st.id} value={st.id}>
-                            {st.name}
+                        {STATIC_LEAD_STATUSES.map((st) => (
+                          <option key={st} value={st}>
+                            {st}
                           </option>
                         ))}
                       </select>
@@ -2973,13 +3084,12 @@ export default function LeadsPage() {
                       <label className="form-label text-dark fw-bold small">Lead Status</label>
                       <select
                         className="form-select"
-                        value={editLead.status_id}
-                        onChange={(e) => setEditLead({ ...editLead, status_id: e.target.value })}
+                        value={editLead.status_name || "New"}
+                        onChange={(e) => setEditLead({ ...editLead, status_name: e.target.value })}
                       >
-                        <option value="">Choose Status</option>
-                        {statuses.map((st) => (
-                          <option key={st.id} value={st.id}>
-                            {st.name}
+                        {STATIC_LEAD_STATUSES.map((st) => (
+                          <option key={st} value={st}>
+                            {st}
                           </option>
                         ))}
                       </select>
@@ -3058,16 +3168,19 @@ export default function LeadsPage() {
                       )}
                     </div>
                   </div>
-                  <span
-                    className={`badge ${viewLead.priority === "Hot"
-                      ? "bg-danger-subtle text-danger"
-                      : viewLead.priority === "Warm"
-                        ? "bg-warning-subtle text-warning"
-                        : "bg-info-subtle text-info"
-                      }`}
-                  >
-                    {viewLead.priority} Priority
-                  </span>
+                  <div className="d-flex align-items-center gap-2">
+                    <span
+                      className={`badge ${viewLead.priority === "Hot"
+                        ? "bg-danger-subtle text-danger"
+                        : viewLead.priority === "Warm"
+                          ? "bg-warning-subtle text-warning"
+                          : "bg-info-subtle text-info"
+                        }`}
+                    >
+                      {viewLead.priority} Priority
+                    </span>
+                    {renderLeadStatusBadge(viewLead.status_name || viewLead.status?.name || "New")}
+                  </div>
                 </div>
 
                 <div className="row g-2 mb-3">
@@ -3114,8 +3227,8 @@ export default function LeadsPage() {
                     <strong className="text-dark">{viewLead.brand?.name || viewLead.brand_name || viewLead.vehicle_segment}</strong>
                   </div>
                   <div className="col-6 mt-2">
-                    <span className="text-muted small d-block">Pipeline Stage</span>
-                    <span className="badge bg-success-subtle text-success">{viewLead.status?.name || viewLead.status_name || "New"}</span>
+                    <span className="text-muted small d-block">Pipeline Stage / Status</span>
+                    <div className="mt-1">{renderLeadStatusBadge(viewLead.status_name || viewLead.status?.name || "New")}</div>
                   </div>
                   <div className="col-6 mt-2">
                     <span className="text-muted small d-block">Assigned Executive</span>
@@ -3601,11 +3714,10 @@ export default function LeadsPage() {
                       >
                         <option value="Interested / Call Back">Interested / Call Back</option>
                         <option value="Quotation Requested">Quotation Requested</option>
-                        <option value="Ready for Booking">Ready for Booking</option>
-                        <option value="Not Answering / Busy">Not Answering / Busy</option>
-                        <option value="Price Too High">Price Too High</option>
-                        <option value="Bought Competitor Car">Bought Competitor Car</option>
-                        <option value="Showroom Visit Done">Showroom Visit Done</option>
+                        <option value="Negotiation / Price Discussion">Negotiation / Price Discussion</option>
+                        <option value="Not Reachable / Busy">Not Reachable / Busy</option>
+                        <option value="Lost to Competitor / Lost of Lead">Lost to Competitor / Lost of Lead</option>
+                        <option value="Deal Won / Booking">Deal Won / Booking</option>
                       </select>
                     </div>
 
@@ -3660,7 +3772,7 @@ export default function LeadsPage() {
                         onClick={(e) => {
                           try {
                             e.target.showPicker?.();
-                          } catch (err) {}
+                          } catch (err) { }
                         }}
                         value={followUpForm.next_follow_up_date || ""}
                         onChange={(e) => {

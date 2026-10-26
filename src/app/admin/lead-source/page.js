@@ -7,6 +7,7 @@ import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
 import Pagination from "@/components/common/Pagination";
 import * as XLSX from "xlsx";
+import { logActivity } from "@/utils/activityLogger";
 
 export default function LeadSourcePage() {
   const { showToast } = useToast();
@@ -133,6 +134,12 @@ export default function LeadSourcePage() {
       XLSX.writeFile(wb, fileName);
 
       showToast("Lead Sources Excel file downloaded successfully!", "success");
+
+      // Log export in Activity Logs
+      logActivity("Lead Source", "export", {
+        count: dataToExport.length,
+        format: "Excel",
+      });
     } catch (error) {
       console.error("Export Error:", error);
       showToast("Failed to export lead sources to Excel.", "error");

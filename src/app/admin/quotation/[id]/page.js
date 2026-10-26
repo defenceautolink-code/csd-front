@@ -49,7 +49,8 @@ export default function QuotationDetailsPage() {
       if (res && res.status && res.data) {
         setQuotation(res.data);
         setRecipientEmail(res.data.customer_email || "");
-        setCustomSubject(`Quotation ${res.data.quotation_number} – ${res.data.subject}`);
+        const cleanSub = (res.data.subject || "").replace(/^Official Vehicle Quotation\s*[–-]?\s*/i, "").trim();
+        setCustomSubject(`Official Vehicle Quotation: ${cleanSub || "Defence Autolink"} [${res.data.quotation_number}]`);
       }
     } catch (error) {
       console.error("Fetch quotation error:", error);
@@ -82,41 +83,42 @@ export default function QuotationDetailsPage() {
     }
   };
 
-  // Send Email Handler: Updates status to 'sent'
-  const handleSendEmailSubmit = async (e) => {
-    e.preventDefault();
-    if (!recipientEmail.trim()) {
-      showToast("Please enter a valid recipient email address.", "warning");
+  // Direct Send Email Handler: Sends PDF directly without popup modal
+  const handleDirectSendQuotationEmail = async () => {
+    const targetEmail = (recipientEmail || quotation.customer_email || quotation.lead?.email || "").trim();
+    if (!targetEmail) {
+      showToast("Customer email address is required to send the quotation. Please edit the customer lead to add an email.", "warning");
       return;
     }
 
     setIsSendingEmail(true);
     try {
       const res = await quotationApi.sendQuotationEmail(quotation.id, {
-        recipient_email: recipientEmail.trim(),
+        recipient_email: targetEmail,
         custom_subject: customSubject.trim() || undefined,
         custom_message: customMessage.trim() || undefined,
       });
 
       if (res && res.status) {
-        showToast(res.message || "Quotation emailed successfully with attached PDF!", "success");
+        showToast(res.message || `Quotation PDF sent successfully to ${targetEmail}!`, "success");
         setShowSendModal(false);
         setQuotation((prev) => ({ ...prev, status: "sent" }));
 
-        // Auto log follow-up in lead history table
+        // Auto log follow-up in lead history table & update lead status to Quotation Sent
         if (quotation.lead_id) {
           try {
             await api.post(`/leads/${quotation.lead_id}/follow-ups`, {
-              type: "Quotation Sent",
-              outcome: "Sent",
+              type: "Email",
+              outcome: "Quotation Sent",
               status: "Sent",
-              notes: `Official Quotation #${quotation.quotation_number} emailed to customer (${recipientEmail.trim()}). Total Amount: ₹${Number(quotation.grand_total || 0).toLocaleString("en-IN")}`,
+              notes: `Official Quotation #${quotation.quotation_number} emailed to customer (${targetEmail}). Total Amount: ₹${Number(quotation.grand_total || 0).toLocaleString("en-IN")}`,
               follow_up_date: new Date().toISOString().split("T")[0],
               follow_up_time: new Date().toLocaleTimeString("en-IN", {
                 hour: "2-digit",
                 minute: "2-digit",
               }),
               quotation_id: quotation.id,
+              lead_status_name: "Quotation Sent",
             });
           } catch (fuErr) {
             console.log("Follow-up auto log note:", fuErr);
@@ -124,6 +126,8 @@ export default function QuotationDetailsPage() {
         }
 
         fetchQuotation();
+      } else {
+        showToast(res?.message || "Failed to send quotation email.", "error");
       }
     } catch (error) {
       console.error("Send email error:", error);
@@ -407,10 +411,20 @@ export default function QuotationDetailsPage() {
             <button
               type="button"
               className="btn btn-primary d-flex align-items-center gap-2 shadow-sm"
-              onClick={() => setShowSendModal(true)}
+              onClick={handleDirectSendQuotationEmail}
+              disabled={isSendingEmail}
             >
-              <i className="bi bi-send-fill"></i>
-              <span>Send Quotation Email</span>
+              {isSendingEmail ? (
+                <>
+                  <span className="spinner-border spinner-border-sm" role="status"></span>
+                  <span>Sending Quotation PDF...</span>
+                </>
+              ) : (
+                <>
+                  <i className="bi bi-send-fill"></i>
+                  <span>Send Quotation Email</span>
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -478,9 +492,9 @@ export default function QuotationDetailsPage() {
                     lineHeight: "1.3",
                   }}
                 >
-                  D-601, 6TH FLOOR, S.G BUSINESS HUB, NEAR UMIYA CAMPUS,
+                  D-601, S G BUSINESS HUB, S G HIGHWAY,
                   <br />
-                  Ahmedabad - 380060
+                  Ahmedabad, Gujarat - 382470
                 </div>
               </div>
             </div>
@@ -659,109 +673,6 @@ export default function QuotationDetailsPage() {
             </div>
           </div>
         </div>
-
-        {/* ===================================================================
-            SEND QUOTATION EMAIL MODAL
-            =================================================================== */}
-        {showSendModal && (
-          <div className="modal-backdrop-custom">
-            <div className="modal-dialog-custom" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "550px" }}>
-              <div className="modal-header-custom">
-                <h5 className="modal-title-custom text-white d-flex align-items-center gap-2 mb-0" style={{ color: "#FFFFFF" }}>
-                  <i className="bi bi-send-fill text-warning"></i>
-                  <span style={{ color: "#FFFFFF" }}>Send Quotation to Customer</span>
-                </h5>
-                <button
-                  type="button"
-                  className="btn-close btn-close-white"
-                  onClick={() => !isSendingEmail && setShowSendModal(false)}
-                  disabled={isSendingEmail}
-                ></button>
-              </div>
-
-              <form onSubmit={handleSendEmailSubmit}>
-                <div className="modal-body-custom">
-                  <div className="p-3 mb-3 rounded dark-selection-box border border-secondary border-opacity-25" style={{ background: "#181A1B", color: "#FFFFFF" }}>
-                    <div className="d-flex justify-content-between small mb-1">
-                      <span style={{ color: "#CBD5E1" }}>Quotation Number:</span>
-                      <strong style={{ color: "#60A5FA" }}>{quotation.quotation_number}</strong>
-                    </div>
-                    <div className="d-flex justify-content-between small mb-1">
-                      <span style={{ color: "#CBD5E1" }}>Customer:</span>
-                      <strong style={{ color: "#FFFFFF" }}>{quotation.customer_name}</strong>
-                    </div>
-                    <div className="d-flex justify-content-between small">
-                      <span style={{ color: "#CBD5E1" }}>Grand Total:</span>
-                      <strong style={{ color: "#4ADE80" }}>₹{Number(quotation.grand_total || 0).toLocaleString("en-IN")}</strong>
-                    </div>
-                  </div>
-
-                  <div className="mb-3">
-                    <label className="form-label text-dark small fw-semibold">
-                      Recipient Customer Email <span className="text-danger">*</span>
-                    </label>
-                    <input
-                      type="email"
-                      className="form-control"
-                      placeholder="customer@example.com"
-                      value={recipientEmail}
-                      onChange={(e) => setRecipientEmail(e.target.value)}
-                      required
-                    />
-                    <div className="form-text text-secondary" style={{ fontSize: "0.75rem" }}>
-                      An official quotation PDF will be attached to this email.
-                    </div>
-                  </div>
-
-                  <div className="mb-3">
-                    <label className="form-label text-dark small fw-semibold">Email Subject</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={customSubject}
-                      onChange={(e) => setCustomSubject(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="mb-2">
-                    <label className="form-label text-dark small fw-semibold">Personalized Message / Notes</label>
-                    <textarea
-                      className="form-control"
-                      rows="3"
-                      placeholder="e.g. Please find attached the updated quotation for your consideration..."
-                      value={customMessage}
-                      onChange={(e) => setCustomMessage(e.target.value)}
-                    ></textarea>
-                  </div>
-                </div>
-
-                <div className="modal-footer-custom d-flex justify-content-between">
-                  <button
-                    type="button"
-                    className="btn btn-outline-custom"
-                    onClick={() => setShowSendModal(false)}
-                    disabled={isSendingEmail}
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary d-flex align-items-center gap-2" disabled={isSendingEmail}>
-                    {isSendingEmail ? (
-                      <>
-                        <span className="spinner-border spinner-border-sm" role="status"></span>
-                        <span>Sending Email & PDF...</span>
-                      </>
-                    ) : (
-                      <>
-                        <i className="bi bi-send-fill"></i>
-                        <span>Confirm & Send Email</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
       </div>
     </AdminLayout>
   );

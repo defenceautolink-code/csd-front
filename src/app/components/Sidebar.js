@@ -706,16 +706,6 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                   <span>Lead Sources</span>
                 </Link>
               </li>
-              <li className="nav-item">
-                <Link
-                  href="/admin/lead-status"
-                  className={`nav-link ${isLinkActive("/admin/lead-status") ? "active" : ""}`}
-                  onClick={onCloseMobile}
-                >
-                  <i className="bi bi-tags-fill"></i>
-                  <span>Lead Status</span>
-                </Link>
-              </li>
             </ul>
 
             <div className="nav-section-title">Management</div>

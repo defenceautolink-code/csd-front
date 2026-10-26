@@ -10,6 +10,7 @@ import insuranceApi, {
 } from "@/services/insuranceApi";
 import Pagination from "@/components/common/Pagination";
 import { formatIndianCurrency } from "@/utils/numberToWords";
+import { logActivity } from "@/utils/activityLogger";
 
 export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
   const { showToast } = useToast();
@@ -368,6 +369,12 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
     link.click();
     document.body.removeChild(link);
     showToast("CSV file exported successfully", "success");
+
+    // Log export in Activity Logs
+    logActivity("Insurance", "export", {
+      count: records.length,
+      format: "CSV",
+    });
   };
 
   // Status Badge Helper
@@ -1228,7 +1235,7 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
                           onClick={(e) => {
                             try {
                               e.target.showPicker?.();
-                            } catch (err) {}
+                            } catch (err) { }
                           }}
                           value={renewForm.policy_start_date}
                           onChange={(e) => {
@@ -1254,7 +1261,7 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
                           onClick={(e) => {
                             try {
                               e.target.showPicker?.();
-                            } catch (err) {}
+                            } catch (err) { }
                           }}
                           value={renewForm.policy_expiry_date}
                           onChange={(e) => {

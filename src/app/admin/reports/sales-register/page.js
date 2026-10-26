@@ -9,6 +9,7 @@ import { hasPermission } from "@/utils/auth";
 import { dealApi } from "@/services/dealApi";
 import api from "@/lib/axios";
 import Pagination from "@/components/common/Pagination";
+import { logActivity } from "@/utils/activityLogger";
 
 export default function SalesRegisterReportPage() {
   const { showToast } = useToast();
@@ -216,6 +217,12 @@ export default function SalesRegisterReportPage() {
       link.click();
       document.body.removeChild(link);
       showToast("Sales register CSV exported successfully!", "success");
+
+      // Log export in Activity Logs
+      logActivity("Report", "export", {
+        count: rows.length,
+        detail: `export of report - Sales Register (${rows.length} records)`,
+      });
     } catch (err) {
       console.error("Export error:", err);
       showToast("Failed to export CSV", "error");

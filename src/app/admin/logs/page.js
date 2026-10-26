@@ -1,11 +1,186 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
 import Pagination from "@/components/common/Pagination";
 import axios from "@/lib/axios";
+
+/**
+ * Reusable Searchable Dropdown Component
+ */
+function SearchableSelect({
+  value,
+  onChange,
+  options = [],
+  placeholder = "Select...",
+  searchPlaceholder = "Type to search...",
+  width = "180px",
+  icon = null,
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const dropdownRef = useRef(null);
+  const searchInputRef = useRef(null);
+
+  // Close when clicked outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    }
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      // Auto-focus search input when opened
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 50);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen]);
+
+  // Find currently selected option
+  const selectedOption = options.find((opt) => String(opt.value) === String(value));
+
+  // Filter options based on search query (search by label, sublabel, or value)
+  const filteredOptions = options.filter((opt) => {
+    if (!search.trim()) return true;
+    const term = search.toLowerCase();
+    const labelMatch = (opt.label || "").toLowerCase().includes(term);
+    const sublabelMatch = (opt.sublabel || "").toLowerCase().includes(term);
+    const valueMatch = String(opt.value || "").toLowerCase().includes(term);
+    return labelMatch || sublabelMatch || valueMatch;
+  });
+
+  const handleSelect = (val) => {
+    onChange(val);
+    setIsOpen(false);
+    setSearch("");
+  };
+
+  return (
+    <div className="position-relative" ref={dropdownRef} style={{ width }}>
+      {/* Trigger Button */}
+      <button
+        type="button"
+        className={`form-select form-select-sm text-start d-flex align-items-center justify-content-between text-truncate ${
+          isOpen ? "border-primary shadow-sm" : ""
+        }`}
+        style={{
+          cursor: "pointer",
+          backgroundColor: "#fff",
+          fontSize: "12.5px",
+          paddingRight: "28px",
+        }}
+        onClick={() => setIsOpen((prev) => !prev)}
+        title={selectedOption ? selectedOption.label : placeholder}
+      >
+        <span className="text-truncate">
+          {icon && <i className={`${icon} me-1 text-muted`}></i>}
+          {selectedOption ? selectedOption.label : placeholder}
+        </span>
+      </button>
+
+      {/* Dropdown Menu */}
+      {isOpen && (
+        <div
+          className="dropdown-menu show shadow-lg border p-2"
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            zIndex: 1050,
+            minWidth: width === "100%" ? "100%" : Math.max(parseInt(width, 10) || 200, 240) + "px",
+            maxHeight: "320px",
+            display: "flex",
+            flexDirection: "column",
+            marginTop: "4px",
+            borderRadius: "8px",
+          }}
+        >
+          {/* Search Input */}
+          <div className="p-1 mb-2">
+            <div className="input-group input-group-sm">
+              <span className="input-group-text bg-light border-end-0">
+                <i className="bi bi-search text-muted small"></i>
+              </span>
+              <input
+                ref={searchInputRef}
+                type="text"
+                className="form-control form-control-sm border-start-0"
+                placeholder={searchPlaceholder}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+              />
+              {search && (
+                <button
+                  className="btn btn-outline-secondary btn-sm"
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSearch("");
+                    searchInputRef.current?.focus();
+                  }}
+                >
+                  <i className="bi bi-x"></i>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Options List */}
+          <div className="overflow-auto flex-grow-1" style={{ maxHeight: "230px" }}>
+            {filteredOptions.length === 0 ? (
+              <div className="text-muted small text-center py-3">No matching results</div>
+            ) : (
+              filteredOptions.map((opt) => {
+                const isSelected = String(opt.value) === String(value);
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    className={`dropdown-item text-wrap rounded py-1 px-2 d-flex flex-column mb-1 ${
+                      isSelected ? "active bg-primary text-white" : ""
+                    }`}
+                    onClick={() => handleSelect(opt.value)}
+                    style={{ fontSize: "12.5px" }}
+                  >
+                    <div className="d-flex align-items-center justify-content-between w-100">
+                      <span className="fw-medium text-truncate">{opt.label}</span>
+                      {opt.badge && (
+                        <span
+                          className={`badge ${
+                            isSelected ? "bg-white text-primary" : "bg-light text-muted border"
+                          } ms-1 small`}
+                          style={{ fontSize: "10px" }}
+                        >
+                          {opt.badge}
+                        </span>
+                      )}
+                    </div>
+                    {opt.sublabel && (
+                      <span
+                        className={`small text-truncate ${isSelected ? "text-white-50" : "text-muted"}`}
+                        style={{ fontSize: "11px" }}
+                      >
+                        {opt.sublabel}
+                      </span>
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function ActivityLogsPage() {
   const { showToast } = useToast();
@@ -38,11 +213,9 @@ export default function ActivityLogsPage() {
   // Filter Dropdown Options
   const [filterUsers, setFilterUsers] = useState([]);
   const [filterModules, setFilterModules] = useState([]);
+  const [filterActions, setFilterActions] = useState([]);
 
-  // Detail Modal State
-  const [selectedLog, setSelectedLog] = useState(null);
-
-  // Fetch Filter Dropdowns (Users & Modules)
+  // Fetch Filter Dropdowns (Users, Modules & Actions)
   useEffect(() => {
     const fetchFilterData = async () => {
       try {
@@ -50,6 +223,7 @@ export default function ActivityLogsPage() {
         if (res.data?.status && res.data.data) {
           setFilterUsers(res.data.data.users || []);
           setFilterModules(res.data.data.modules || []);
+          setFilterActions(res.data.data.actions || []);
         }
       } catch (err) {
         console.error("Failed to load filter options", err);
@@ -150,70 +324,148 @@ export default function ActivityLogsPage() {
     }
   };
 
-  // Action Badge Helper matching CRM aesthetic
-  const getActionBadge = (action, method) => {
+  // Action Badge Helper
+  const getActionBadge = (action) => {
     const act = (action || "").toLowerCase();
     switch (act) {
+      case "add":
       case "insert":
       case "post":
         return (
-          <span className="badge bg-success-subtle text-success small">
-            <i className="bi bi-plus-circle me-1"></i>POST / Insert
+          <span className="badge bg-success-subtle text-success px-2 py-1 fw-semibold">
+            <i className="bi bi-plus-circle me-1"></i>ADD
           </span>
         );
+      case "edit":
       case "update":
       case "put":
+      case "patch":
         return (
-          <span className="badge bg-warning-subtle text-warning small">
-            <i className="bi bi-pencil-square me-1"></i>PUT / Update
+          <span className="badge bg-warning-subtle text-warning px-2 py-1 fw-semibold">
+            <i className="bi bi-pencil-square me-1"></i>EDIT
+          </span>
+        );
+      case "trash":
+      case "soft_delete":
+        return (
+          <span className="badge bg-warning-subtle text-dark border border-warning px-2 py-1 fw-semibold">
+            <i className="bi bi-trash me-1 text-warning"></i>TRASH
+          </span>
+        );
+      case "restore":
+        return (
+          <span className="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 fw-semibold">
+            <i className="bi bi-arrow-counterclockwise me-1"></i>RESTORE
           </span>
         );
       case "delete":
         return (
-          <span className="badge bg-danger-subtle text-danger small">
+          <span className="badge bg-danger-subtle text-danger px-2 py-1 fw-semibold">
             <i className="bi bi-trash3 me-1"></i>DELETE
+          </span>
+        );
+      case "send":
+      case "email":
+        return (
+          <span className="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 fw-semibold">
+            <i className="bi bi-send-fill me-1"></i>SEND
+          </span>
+        );
+      case "print":
+      case "printed":
+        return (
+          <span className="badge bg-secondary-subtle text-dark border px-2 py-1 fw-semibold">
+            <i className="bi bi-printer-fill me-1 text-secondary"></i>PRINT
           </span>
         );
       case "login":
         return (
-          <span className="badge bg-primary-subtle text-primary small">
-            <i className="bi bi-box-arrow-in-right me-1"></i>Login
+          <span className="badge bg-primary-subtle text-primary px-2 py-1 fw-semibold">
+            <i className="bi bi-box-arrow-in-right me-1"></i>LOGIN
           </span>
         );
       case "logout":
         return (
-          <span className="badge bg-secondary-subtle text-muted small">
-            <i className="bi bi-box-arrow-right me-1"></i>Logout
+          <span className="badge bg-secondary-subtle text-secondary px-2 py-1 fw-semibold">
+            <i className="bi bi-box-arrow-right me-1"></i>LOGOUT
           </span>
         );
       case "export":
         return (
-          <span className="badge bg-info-subtle text-info small">
-            <i className="bi bi-file-earmark-arrow-down me-1"></i>Export
+          <span className="badge bg-info-subtle text-info px-2 py-1 fw-semibold">
+            <i className="bi bi-file-earmark-arrow-down me-1"></i>EXPORT
           </span>
         );
       default:
         return (
-          <span className="badge bg-light text-dark small">
-            {method || action || "Action"}
+          <span className="badge bg-light text-dark border px-2 py-1 fw-semibold">
+            {action ? action.toUpperCase() : "ACTION"}
           </span>
         );
     }
   };
 
-  // Format Date and Time
-  const formatDateTime = (dateStr) => {
-    if (!dateStr) return "-";
-    const d = new Date(dateStr);
-    return d.toLocaleString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
+  // Format Date and Time in Indian Standard Time (IST)
+  const formatISTDateTime = (dateStr, fallbackStr) => {
+    if (fallbackStr && typeof fallbackStr === "string" && fallbackStr.includes("M")) {
+      return fallbackStr;
+    }
+    if (!dateStr) return fallbackStr || "-";
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return fallbackStr || dateStr;
+      return d.toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+      });
+    } catch {
+      return fallbackStr || dateStr;
+    }
   };
+
+  // Prepare User Options for SearchableSelect
+  const userOptions = [
+    { value: "all", label: "All Users", sublabel: "Filter by any user" },
+    ...filterUsers.map((u) => ({
+      value: String(u.id),
+      label: u.name,
+      badge: `#${u.id}`,
+      sublabel: u.phone ? `📞 ${u.phone}` : u.email || "No phone",
+    })),
+  ];
+
+  // Prepare Module Options for SearchableSelect
+  const moduleOptions = [
+    { value: "all", label: "All Modules" },
+    ...filterModules.map((mod) => ({
+      value: mod,
+      label: mod,
+    })),
+  ];
+
+  // Prepare Action Options for SearchableSelect
+  const standardActions = [
+    { value: "all", label: "All Actions" },
+    { value: "add", label: "ADD" },
+    { value: "edit", label: "EDIT" },
+    { value: "delete", label: "DELETE" },
+    { value: "login", label: "LOGIN" },
+    { value: "logout", label: "LOGOUT" },
+    { value: "export", label: "EXPORT" },
+  ];
+  const extraActions = filterActions
+    .filter((a) => !["add", "edit", "delete", "login", "logout", "export"].includes(a.toLowerCase()))
+    .map((act) => ({
+      value: act,
+      label: act.toUpperCase(),
+    }));
+  const actionOptions = [...standardActions, ...extraActions];
 
   const hasActiveFilters = Boolean(
     searchTerm ||
@@ -227,7 +479,7 @@ export default function ActivityLogsPage() {
   return (
     <AdminLayout activePage="logs">
       <div className="page-body">
-        {/* Page Breadcrumbs & Header Actions - Matching Brand Master */}
+        {/* Page Breadcrumbs & Header Actions */}
         <div className="page-header-wrapper">
           <div>
             <ul className="breadcrumb-custom">
@@ -239,7 +491,8 @@ export default function ActivityLogsPage() {
               </li>
               <li className="breadcrumb-item active">Activity Logs</li>
             </ul>
-            <h1 className="page-title mt-1">Activity & Audit Logs</h1>
+            <h1 className="page-title mt-1 mb-1">Activity & Audit Logs</h1>
+            <p className="text-muted small mb-0">System audit trail of team activities, logins, and database operations.</p>
           </div>
 
           <div className="page-header-actions d-flex align-items-center gap-2">
@@ -261,138 +514,96 @@ export default function ActivityLogsPage() {
           </div>
         </div>
 
-        {/* Activity KPI Counters - Matching Brand Page */}
-        <div className="row g-3 mb-4">
-          <div className="col-md-3 col-sm-6">
-            <div className="card stat-card">
-              <div className="stat-card-header">
-                <span className="stat-card-title">Total Logs</span>
-                <div className="stat-icon-box primary">
-                  <i className="bi bi-clock-history"></i>
-                </div>
-              </div>
-              <div className="stat-card-value">
-                {pagination.total || 0} Logs
-              </div>
-              <span className="text-primary small fw-semibold">Audit Trail Events</span>
-            </div>
-          </div>
-
-          <div className="col-md-3 col-sm-6">
-            <div className="card stat-card">
-              <div className="stat-card-header">
-                <span className="stat-card-title">Inserts / Posts</span>
-                <div className="stat-icon-box success">
-                  <i className="bi bi-plus-circle"></i>
-                </div>
-              </div>
-              <div className="stat-card-value">
-                {logs.filter((l) => l.action === "insert").length} Actions
-              </div>
-              <span className="text-success small fw-semibold">New Data Added</span>
-            </div>
-          </div>
-
-          <div className="col-md-3 col-sm-6">
-            <div className="card stat-card">
-              <div className="stat-card-header">
-                <span className="stat-card-title">Updates / Puts</span>
-                <div className="stat-icon-box warning">
-                  <i className="bi bi-pencil-square"></i>
-                </div>
-              </div>
-              <div className="stat-card-value">
-                {logs.filter((l) => l.action === "update").length} Actions
-              </div>
-              <span className="text-warning small fw-semibold">Modified Records</span>
-            </div>
-          </div>
-
-          <div className="col-md-3 col-sm-6">
-            <div className="card stat-card">
-              <div className="stat-card-header">
-                <span className="stat-card-title">Deletes / Logins</span>
-                <div className="stat-icon-box danger">
-                  <i className="bi bi-shield-lock"></i>
-                </div>
-              </div>
-              <div className="stat-card-value">
-                {logs.filter((l) => l.action === "delete" || l.action === "login").length} Actions
-              </div>
-              <span className="text-danger small fw-semibold">Deletions & Logins</span>
-            </div>
+        {/* Action Color Guide Note (Task 3) */}
+        <div className="card border-0 shadow-sm mb-3 px-3 py-2.5" style={{ backgroundColor: "#ffffff", borderRadius: "10px" }}>
+          <div className="d-flex flex-wrap align-items-center gap-2">
+            <span className="text-dark small fw-bold d-flex align-items-center gap-1.5 me-1">
+              <i className="bi bi-info-circle-fill text-primary"></i>
+              <span>Action Color Guide:</span>
+            </span>
+            <span className="badge bg-success-subtle text-success px-2 py-1 fw-semibold" title="Record Created / Added">
+              <i className="bi bi-plus-circle me-1"></i>Green: ADD (Create)
+            </span>
+            <span className="badge bg-warning-subtle text-warning px-2 py-1 fw-semibold" title="Record Edited / Updated">
+              <i className="bi bi-pencil-square me-1"></i>Yellow: EDIT (Update)
+            </span>
+            <span className="badge bg-warning-subtle text-dark border border-warning px-2 py-1 fw-semibold" title="Record moved to Trash">
+              <i className="bi bi-trash me-1 text-warning"></i>Amber: TRASH (Archive)
+            </span>
+            <span className="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 fw-semibold" title="Record Restored">
+              <i className="bi bi-arrow-counterclockwise me-1"></i>Light Green: RESTORE
+            </span>
+            <span className="badge bg-danger-subtle text-danger px-2 py-1 fw-semibold" title="Record Permanently Deleted">
+              <i className="bi bi-trash3 me-1"></i>Red: DELETE
+            </span>
+            <span className="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 fw-semibold" title="Quotation / Email Sent or Login">
+              <i className="bi bi-send-fill me-1"></i>Blue: SEND / LOGIN
+            </span>
+            <span className="badge bg-info-subtle text-info px-2 py-1 fw-semibold" title="Data Exported">
+              <i className="bi bi-file-earmark-arrow-down me-1"></i>Cyan: EXPORT
+            </span>
+            <span className="badge bg-secondary-subtle text-secondary px-2 py-1 fw-semibold" title="Logout or Print">
+              <i className="bi bi-box-arrow-right me-1"></i>Gray: LOGOUT / PRINT
+            </span>
           </div>
         </div>
 
-        {/* Activity Logs Table Card - Matching Brand Page Structure */}
+        {/* Activity Logs Table Card */}
         <div className="card">
-          {/* Card Header with Title, Count Badge and Filters */}
+          {/* Card Header with Title, Count Badge and Searchable Filters */}
           <div className="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
             <div className="d-flex align-items-center gap-2">
-              <h5 className="card-title mb-0">System Activity Records</h5>
+              <h5 className="card-title mb-0">Activity Records</h5>
               <span className="badge bg-primary-subtle text-primary rounded-pill px-2">
                 {pagination.total} Records
               </span>
             </div>
 
-            {/* Filter Bar Controls */}
+            {/* Filter Bar Controls with Searchable Dropdowns */}
             <div className="d-flex flex-wrap align-items-center gap-2">
-              {/* User Filter */}
-              <select
-                className="form-select form-select-sm"
+              {/* 1. Searchable User Filter (User Name, Mobile, ID) */}
+              <SearchableSelect
                 value={selectedUser}
-                onChange={(e) => {
-                  setSelectedUser(e.target.value);
+                onChange={(val) => {
+                  setSelectedUser(val);
                   setCurrentPage(1);
                 }}
-                style={{ width: "135px" }}
-              >
-                <option value="all">All Users</option>
-                {filterUsers.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name} (ID: #{u.id})
-                  </option>
-                ))}
-              </select>
+                options={userOptions}
+                placeholder="All Users"
+                searchPlaceholder="Search name, mobile or ID..."
+                width="200px"
+                icon="bi bi-person"
+              />
 
-              {/* Module Filter */}
-              <select
-                className="form-select form-select-sm"
+              {/* 2. Searchable Module Filter */}
+              <SearchableSelect
                 value={selectedModule}
-                onChange={(e) => {
-                  setSelectedModule(e.target.value);
+                onChange={(val) => {
+                  setSelectedModule(val);
                   setCurrentPage(1);
                 }}
-                style={{ width: "125px" }}
-              >
-                <option value="all">All Modules</option>
-                {filterModules.map((mod) => (
-                  <option key={mod} value={mod}>
-                    {mod}
-                  </option>
-                ))}
-              </select>
+                options={moduleOptions}
+                placeholder="All Modules"
+                searchPlaceholder="Search module..."
+                width="155px"
+                icon="bi bi-folder"
+              />
 
-              {/* Action Filter */}
-              <select
-                className="form-select form-select-sm"
+              {/* 3. Searchable Action Filter */}
+              <SearchableSelect
                 value={selectedAction}
-                onChange={(e) => {
-                  setSelectedAction(e.target.value);
+                onChange={(val) => {
+                  setSelectedAction(val);
                   setCurrentPage(1);
                 }}
-                style={{ width: "105px" }}
-              >
-                <option value="all">All Actions</option>
-                <option value="insert">Insert</option>
-                <option value="update">Update</option>
-                <option value="delete">Delete</option>
-                <option value="login">Login</option>
-                <option value="logout">Logout</option>
-                <option value="export">Export</option>
-              </select>
+                options={actionOptions}
+                placeholder="All Actions"
+                searchPlaceholder="Search action..."
+                width="135px"
+                icon="bi bi-lightning-charge"
+              />
 
-              {/* Start Date */}
+              {/* 4. Start Date */}
               <input
                 type="date"
                 className="form-control form-control-sm"
@@ -405,7 +616,7 @@ export default function ActivityLogsPage() {
                 style={{ width: "130px" }}
               />
 
-              {/* End Date */}
+              {/* 5. End Date */}
               <input
                 type="date"
                 className="form-control form-control-sm"
@@ -418,17 +629,17 @@ export default function ActivityLogsPage() {
                 style={{ width: "130px" }}
               />
 
-              {/* Search Box */}
+              {/* 6. Search Box */}
               <input
                 type="text"
                 className="form-control form-control-sm"
-                placeholder="Search logs..."
+                placeholder="Search detail, IP..."
                 value={searchTerm}
                 onChange={(e) => {
                   setSearchTerm(e.target.value);
                   setCurrentPage(1);
                 }}
-                style={{ width: "160px" }}
+                style={{ width: "150px" }}
               />
 
               {/* Reset Filters Button */}
@@ -444,110 +655,114 @@ export default function ActivityLogsPage() {
             </div>
           </div>
 
-          {/* Table - Using .table-custom matching Brand page */}
+          {/* Table: No, User (ID, Name, Mobile), Module, Action, Detail, IP Address, Time (IST) */}
           <div className="table-responsive">
             <table className="table table-custom">
               <thead>
                 <tr>
-                  <th style={{ width: "60px" }}>No</th>
-                  <th style={{ width: "80px" }} className="text-center">Action</th>
-                  <th>Title & Activity</th>
-                  <th>Module</th>
-                  <th>Updated By (User ID)</th>
-                  <th>Date & Time</th>
+                  <th style={{ width: "50px" }}>No</th>
+                  <th style={{ width: "230px" }}>User</th>
+                  <th style={{ width: "140px" }}>Module</th>
+                  <th style={{ width: "110px" }}>Action</th>
+                  <th>Detail</th>
+                  <th style={{ width: "135px" }}>IP Address</th>
+                  <th style={{ width: "190px" }}>Date & Time (IST)</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan="6" className="text-center py-4 text-muted">
+                    <td colSpan="7" className="text-center py-4 text-muted">
                       <div className="spinner-border spinner-border-sm me-2" role="status"></div>
-                      Loading activity logs from API...
+                      Loading activity logs...
                     </td>
                   </tr>
                 ) : logs.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="text-center py-4 text-muted">
+                    <td colSpan="7" className="text-center py-4 text-muted">
                       No activity logs found matching the selected criteria.
                     </td>
                   </tr>
                 ) : (
                   logs.map((log, index) => (
                     <tr key={log.id}>
-                      {/* No / ID */}
+                      {/* No / Index */}
                       <td>
                         <span className="text-muted small">
                           {(currentPage - 1) * perPage + index + 1}
                         </span>
                       </td>
 
-                      {/* Action Button */}
-                      <td className="text-center">
-                        <div className="table-actions justify-content-center">
-                          <button
-                            className="btn-action btn-view"
-                            title="View Log Details"
-                            onClick={() => setSelectedLog(log)}
-                          >
-                            <i className="bi bi-eye"></i>
-                          </button>
-                        </div>
-                      </td>
-
-                      {/* Title & Activity Badge */}
-                      <td>
-                        <div className="d-flex flex-column gap-1">
-                          <span className="fw-semibold text-dark">{log.title}</span>
-                          <div>{getActionBadge(log.action, log.method)}</div>
-                        </div>
-                      </td>
-
-                      {/* Module */}
-                      <td>
-                        <span className="badge bg-info-subtle text-info small">
-                          <i className="bi bi-folder2-open me-1"></i>
-                          {log.module}
-                        </span>
-                      </td>
-
-                      {/* Updated By (User ID & Name) */}
+                      {/* User: Name, ID, Mobile */}
                       <td>
                         {log.user ? (
                           <div className="d-flex align-items-center gap-2">
                             <div
-                              className="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold"
-                              style={{ width: "30px", height: "30px", fontSize: "11px" }}
+                              className="rounded-circle bg-primary-subtle text-primary fw-bold d-flex align-items-center justify-content-center flex-shrink-0"
+                              style={{ width: "32px", height: "32px", fontSize: "12px" }}
                             >
-                              {log.user.name.charAt(0).toUpperCase()}
+                              {log.user.name?.charAt(0).toUpperCase() || "U"}
                             </div>
-                            <div>
-                              <div className="fw-semibold text-dark lh-sm" style={{ fontSize: "13px" }}>
+                            <div className="d-flex flex-column text-truncate" style={{ maxWidth: "180px" }}>
+                              <div className="fw-semibold text-dark lh-sm text-truncate" style={{ fontSize: "13px" }}>
                                 {log.user.name}{" "}
                                 <span className="badge bg-light text-muted border ms-1 small" style={{ fontSize: "10px" }}>
-                                  ID: #{log.user_id}
+                                  #{log.user.id}
                                 </span>
                               </div>
-                              <span className="text-muted small" style={{ fontSize: "11px" }}>
-                                {log.user.email}
-                              </span>
+                              <div className="text-muted d-flex align-items-center gap-1 mt-1 small" style={{ fontSize: "11px" }}>
+                                <i className="bi bi-telephone text-secondary" style={{ fontSize: "10px" }}></i>
+                                <span>{log.user.phone || log.user_phone || "No Mobile"}</span>
+                              </div>
                             </div>
                           </div>
                         ) : log.user_id ? (
-                          <span className="text-muted small">User ID: #{log.user_id} (Deleted)</span>
+                          <div>
+                            <span className="fw-medium text-dark small">User #{log.user_id}</span>
+                            <div className="text-muted small" style={{ fontSize: "11px" }}>
+                              {log.user_phone && log.user_phone !== "-" ? `📞 ${log.user_phone}` : "Deleted User"}
+                            </div>
+                          </div>
                         ) : (
-                          <span className="badge bg-light text-secondary border small">System / Anonymous</span>
+                          <span className="badge bg-light text-secondary border small">
+                            <i className="bi bi-gear me-1"></i>System
+                          </span>
                         )}
                       </td>
 
-                      {/* Date & Time */}
+                      {/* Module */}
                       <td>
-                        <div className="d-flex flex-column">
-                          <span className="text-dark fw-medium small">
-                            {formatDateTime(log.created_at)}
-                          </span>
-                          <span className="text-muted" style={{ fontSize: "11px" }}>
-                            IP: {log.ip_address || "127.0.0.1"}
-                          </span>
+                        <span className="badge bg-light text-dark border px-2 py-1 fw-medium" style={{ fontSize: "12px" }}>
+                          <i className="bi bi-folder2 me-1 text-primary"></i>
+                          {log.module}
+                        </span>
+                      </td>
+
+                      {/* Action */}
+                      <td>
+                        {getActionBadge(log.action)}
+                      </td>
+
+                      {/* Detail */}
+                      <td>
+                        <span className="text-dark fw-medium" style={{ fontSize: "13px" }}>
+                          {log.detail || "-"}
+                        </span>
+                      </td>
+
+                      {/* IP Address (IPv4) */}
+                      <td>
+                        <span className="badge bg-light text-secondary border font-monospace px-2 py-1" style={{ fontSize: "12px" }}>
+                          <i className="bi bi-hdd-network me-1 text-muted"></i>
+                          {log.ip_address || "127.0.0.1"}
+                        </span>
+                      </td>
+
+                      {/* Date & Time (IST) */}
+                      <td>
+                        <div className="d-flex align-items-center gap-1 text-muted small">
+                          <i className="bi bi-clock me-1 text-primary"></i>
+                          <span>{formatISTDateTime(log.raw_time, log.created_at)}</span>
                         </div>
                       </td>
                     </tr>
@@ -557,7 +772,7 @@ export default function ActivityLogsPage() {
             </table>
           </div>
 
-          {/* Pagination Controls - Placed cleanly inside card matching Brand page */}
+          {/* Pagination Controls */}
           {!isLoading && pagination.total > 0 && (
             <Pagination
               currentPage={currentPage}
@@ -574,114 +789,6 @@ export default function ActivityLogsPage() {
             />
           )}
         </div>
-
-        {/* Log Detail Modal */}
-        {selectedLog && (
-          <div
-            className="modal fade show d-block"
-            tabIndex="-1"
-            style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-            role="dialog"
-          >
-            <div className="modal-dialog modal-dialog-centered modal-lg" role="document">
-              <div className="modal-content shadow-lg border-0">
-                <div className="modal-header bg-light">
-                  <h5 className="modal-title fw-bold d-flex align-items-center gap-2">
-                    <i className="bi bi-info-circle-fill text-primary"></i>
-                    Activity Log Details #{selectedLog.id}
-                  </h5>
-                  <button
-                    type="button"
-                    className="btn-close"
-                    onClick={() => setSelectedLog(null)}
-                    aria-label="Close"
-                  ></button>
-                </div>
-                <div className="modal-body p-4">
-                  <div className="row g-3">
-                    <div className="col-md-6">
-                      <label className="text-muted small fw-semibold">Title</label>
-                      <div className="fw-bold fs-6">{selectedLog.title}</div>
-                    </div>
-                    <div className="col-md-6">
-                      <label className="text-muted small fw-semibold">Action & Method</label>
-                      <div>
-                        {getActionBadge(selectedLog.action, selectedLog.method)}
-                        <span className="badge bg-dark ms-2">{selectedLog.method}</span>
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <label className="text-muted small fw-semibold">Module</label>
-                      <div>
-                        <span className="badge bg-info-subtle text-info border px-2 py-1">
-                          {selectedLog.module}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <label className="text-muted small fw-semibold">Timestamp</label>
-                      <div className="text-dark fw-medium">
-                        {formatDateTime(selectedLog.created_at)}
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <label className="text-muted small fw-semibold">Updated By (User)</label>
-                      <div className="fw-semibold">
-                        {selectedLog.user ? (
-                          <>
-                            {selectedLog.user.name} ({selectedLog.user.email}) - Role:{" "}
-                            {selectedLog.user.role || "N/A"}
-                          </>
-                        ) : selectedLog.user_id ? (
-                          `User ID: #${selectedLog.user_id}`
-                        ) : (
-                          "System"
-                        )}
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <label className="text-muted small fw-semibold">IP Address</label>
-                      <div className="font-monospace text-dark">
-                        {selectedLog.ip_address || "N/A"}
-                      </div>
-                    </div>
-                    <div className="col-12">
-                      <label className="text-muted small fw-semibold">Request URL</label>
-                      <div className="p-2 bg-light border rounded font-monospace small text-break">
-                        {selectedLog.url || "N/A"}
-                      </div>
-                    </div>
-                    {selectedLog.description && (
-                      <div className="col-12">
-                        <label className="text-muted small fw-semibold">Details / Payload Info</label>
-                        <div className="p-3 bg-light border rounded text-dark">
-                          {selectedLog.description}
-                        </div>
-                      </div>
-                    )}
-                    {selectedLog.user_agent && (
-                      <div className="col-12">
-                        <label className="text-muted small fw-semibold">User Agent / Browser</label>
-                        <div className="text-muted small text-break">
-                          {selectedLog.user_agent}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="modal-footer bg-light">
-                  <button
-                    type="button"
-                    className="btn btn-secondary px-4"
-                    onClick={() => setSelectedLog(null)}
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </AdminLayout>
   );

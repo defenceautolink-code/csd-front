@@ -7,6 +7,7 @@ import { useToast } from "@/app/components/Toast";
 import dealApi from "@/services/dealApi";
 import { numberToWords, formatIndianCurrency } from "@/utils/numberToWords";
 import Pagination from "@/components/common/Pagination";
+import { logActivity } from "@/utils/activityLogger";
 
 // Helper to generate Invoice Number in exact required format: DAL-/YYYY/MM/XXXX
 export const generateInvoiceNumber = () => {
@@ -214,7 +215,7 @@ export default function DealsPage() {
       try {
         const userObj = JSON.parse(localStorage.getItem("user") || "{}");
         currentUserName = userObj?.name || "";
-      } catch (e) {}
+      } catch (e) { }
     }
 
     const netVal = Number(deal.net_amount || deal.total_amount || 0);
@@ -523,6 +524,12 @@ export default function DealsPage() {
     link.click();
     document.body.removeChild(link);
     showToast("Deals report exported successfully!", "success");
+
+    // Log deal export in Activity Logs
+    logActivity("Deal", "export", {
+      count: deals.length,
+      format: "CSV",
+    });
   };
 
   const getStageBadgeClass = (stage) => {
@@ -870,32 +877,32 @@ export default function DealsPage() {
                               <i className="bi bi-three-dots-vertical fs-6 text-dark"></i>
                             </button>
 
-                              {activeActionMenuId === deal.id && (
-                                <div
-                                  className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute start-0 text-start"
-                                  style={{
-                                    minWidth: "210px",
-                                    zIndex: 1050,
-                                    top: "100%",
-                                    backgroundColor: "#FFFFFF",
-                                  }}
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  {/* Add Bill */}
-                                  {deal.balance_amount > 0 && (
-                                    <button
-                                      type="button"
-                                      className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-success"
-                                      style={{ backgroundColor: "rgba(21, 128, 61, 0.08)" }}
-                                      onClick={() => {
-                                        setActiveActionMenuId(null);
-                                        handleOpenPayment(deal);
-                                      }}
-                                    >
-                                      <i className="bi bi-plus-circle text-success"></i>
-                                      <span>Add Bill</span>
-                                    </button>
-                                  )}
+                            {activeActionMenuId === deal.id && (
+                              <div
+                                className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute start-0 text-start"
+                                style={{
+                                  minWidth: "210px",
+                                  zIndex: 1050,
+                                  top: "100%",
+                                  backgroundColor: "#FFFFFF",
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {/* Add Bill */}
+                                {deal.balance_amount > 0 && (
+                                  <button
+                                    type="button"
+                                    className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-success"
+                                    style={{ backgroundColor: "rgba(21, 128, 61, 0.08)" }}
+                                    onClick={() => {
+                                      setActiveActionMenuId(null);
+                                      handleOpenPayment(deal);
+                                    }}
+                                  >
+                                    <i className="bi bi-plus-circle text-success"></i>
+                                    <span>Add Bill</span>
+                                  </button>
+                                )}
 
                                 {/* Update Deal & Stage */}
                                 <button
@@ -1041,11 +1048,10 @@ export default function DealsPage() {
                             </div>
                             <div className="d-flex justify-content-between align-items-center mt-1">
                               <span
-                                className={`badge ${
-                                  deal.payment_status === "Fully Paid"
+                                className={`badge ${deal.payment_status === "Fully Paid"
                                     ? "bg-success text-white"
                                     : "bg-warning text-dark"
-                                } px-2 py-0.5`}
+                                  } px-2 py-0.5`}
                                 style={{ fontSize: "10px" }}
                               >
                                 {deal.payment_status}
@@ -1070,10 +1076,10 @@ export default function DealsPage() {
                             <i className="bi bi-calendar-event text-primary me-1"></i>
                             {deal.expected_delivery_date
                               ? new Date(deal.expected_delivery_date).toLocaleDateString("en-IN", {
-                                  day: "2-digit",
-                                  month: "short",
-                                  year: "numeric",
-                                })
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                              })
                               : "Pending"}
                           </span>
                         </td>
@@ -1277,9 +1283,9 @@ export default function DealsPage() {
                             prev.map((item, idx) =>
                               idx === 0
                                 ? {
-                                    ...item,
-                                    desc: `${val} for ${selectedDealForPayment.model_variant || "Vehicle"} (${selectedDealForPayment.deal_number})`,
-                                  }
+                                  ...item,
+                                  desc: `${val} for ${selectedDealForPayment.model_variant || "Vehicle"} (${selectedDealForPayment.deal_number})`,
+                                }
                                 : item
                             )
                           );
@@ -1618,7 +1624,7 @@ export default function DealsPage() {
                         onClick={(e) => {
                           try {
                             e.target.showPicker?.();
-                          } catch (err) {}
+                          } catch (err) { }
                         }}
                         value={updateForm.expected_delivery_date}
                         onChange={(e) => {

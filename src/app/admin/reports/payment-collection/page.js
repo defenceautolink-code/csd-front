@@ -7,6 +7,7 @@ import ReportsNav from "@/app/admin/reports/ReportsNav";
 import { useToast } from "@/app/components/Toast";
 import { dealApi, normalizeDeal } from "@/services/dealApi";
 import Pagination from "@/components/common/Pagination";
+import { logActivity } from "@/utils/activityLogger";
 
 export default function PaymentCollectionReportPage() {
   const { showToast } = useToast();
@@ -218,6 +219,12 @@ export default function PaymentCollectionReportPage() {
       link.click();
       document.body.removeChild(link);
       showToast("Payment collection report exported successfully!", "success");
+
+      // Log export in Activity Logs
+      logActivity("Report", "export", {
+        count: filteredDeals.length,
+        detail: `export of report - Payment Collection (${filteredDeals.length} records)`,
+      });
     } catch (err) {
       console.error("Export error:", err);
       showToast("Failed to export CSV", "error");

@@ -11,6 +11,7 @@ import insuranceApi, {
 } from "@/services/insuranceApi";
 import { dealApi } from "@/services/dealApi";
 import Pagination from "@/components/common/Pagination";
+import { logActivity } from "@/utils/activityLogger";
 
 export default function InsuranceRenewalsReportPage() {
   const { showToast } = useToast();
@@ -234,6 +235,12 @@ export default function InsuranceRenewalsReportPage() {
       link.click();
       document.body.removeChild(link);
       showToast("Insurance renewal report exported successfully!", "success");
+
+      // Log export in Activity Logs
+      logActivity("Report", "export", {
+        count: rows.length,
+        detail: `export of report - Insurance Renewals (${rows.length} records)`,
+      });
     } catch (err) {
       console.error("Export error:", err);
       showToast("Failed to export CSV", "error");

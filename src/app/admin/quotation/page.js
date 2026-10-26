@@ -11,6 +11,7 @@ import { useToast } from "@/app/components/Toast";
 import { hasPermission } from "@/utils/auth";
 import Pagination from "@/components/common/Pagination";
 import * as XLSX from "xlsx";
+import { logActivity } from "@/utils/activityLogger";
 
 export default function QuotationMainPage() {
   const router = useRouter();
@@ -145,7 +146,7 @@ export default function QuotationMainPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("sent");
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -539,6 +540,12 @@ export default function QuotationMainPage() {
       const today = new Date().toISOString().split("T")[0];
       XLSX.writeFile(workbook, `Saved_Quotations_Archive_${today}.xlsx`);
       showToast("Quotation records exported to Excel successfully!", "success");
+
+      // Log quotation export in Activity Logs
+      logActivity("Quotation", "export", {
+        count: dataToExport.length,
+        format: "Excel",
+      });
     } catch (err) {
       console.error("Excel export error:", err);
       showToast("Failed to export Excel file.", "error");
@@ -548,7 +555,7 @@ export default function QuotationMainPage() {
   // ----------------------------------------------------
   // 6. SAVE QUOTATION TO BACKEND DATABASE
   // ----------------------------------------------------
-  const saveQuotationToBackend = async (status = "pending") => {
+  const saveQuotationToBackend = async (status = "sent") => {
     if (!clientName.trim()) {
       showToast("Please enter client full name.", "warning");
       return null;
@@ -716,7 +723,9 @@ export default function QuotationMainPage() {
           }
         }
 
-        showToast(`Quotation #${res.data.quotation_number} saved to CRM!`, "success");
+        showToast(`Quotation #${res.data.quotation_number} saved and added to Quotations!`, "success");
+        setActiveTab("records");
+        loadQuotationsList(1, searchTerm, statusFilter, startDate, endDate, pagination.per_page, recordView);
         return res.data;
       }
     } catch (err) {
@@ -1407,7 +1416,7 @@ export default function QuotationMainPage() {
                     <button
                       type="button"
                       className="btn btn-primary flex-fill d-flex align-items-center justify-content-center gap-2"
-                      onClick={() => saveQuotationToBackend("pending")}
+                      onClick={() => saveQuotationToBackend("sent")}
                       disabled={isSaving}
                     >
                       {isSaving ? (
@@ -1497,9 +1506,9 @@ export default function QuotationMainPage() {
                         lineHeight: "1.3",
                       }}
                     >
-                      D-601, 6TH FLOOR, S.G BUSINESS HUB, NEAR UMIYA CAMPUS,
+                      D-601, S G BUSINESS HUB, S G HIGHWAY,
                       <br />
-                      Ahmedabad - 380060
+                      Ahmedabad, Gujarat - 382470
                     </div>
                   </div>
                 </div>

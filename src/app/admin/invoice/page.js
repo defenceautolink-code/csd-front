@@ -7,6 +7,7 @@ import { useToast } from "@/app/components/Toast";
 import Pagination from "@/components/common/Pagination";
 import dealApi from "@/services/dealApi";
 import { formatIndianCurrency, numberToWords } from "@/utils/numberToWords";
+import { logActivity } from "@/utils/activityLogger";
 
 // Helper to generate Invoice Number in exact required format: DAL-/YYYY/MM/XXXX
 export const generateInvoiceNumber = () => {
@@ -91,14 +92,17 @@ export default function GenerateInvoicePage() {
 
   // Close dropdown on click outside
   useEffect(() => {
-    const handleDocClick = (e) => {
-      setActiveActionMenuId(null);
+    const handleOutsideClick = (e) => {
+      // Don't close if clicking inside action menu dropdown button or popup
+      if (!e.target || !e.target.closest || !e.target.closest(".action-menu-container")) {
+        setActiveActionMenuId(null);
+      }
       if (dealDropdownRef.current && !dealDropdownRef.current.contains(e.target)) {
         setIsDealDropdownOpen(false);
       }
     };
-    document.addEventListener("click", handleDocClick);
-    return () => document.removeEventListener("click", handleDocClick);
+    window.addEventListener("click", handleOutsideClick);
+    return () => window.removeEventListener("click", handleOutsideClick);
   }, []);
 
   // Reset pagination to page 1 when any filter or tab changes
@@ -604,6 +608,12 @@ export default function GenerateInvoicePage() {
     link.click();
     URL.revokeObjectURL(url);
     showToast("All invoices exported to CSV!", "success");
+
+    // Log export in Activity Logs
+    logActivity("Invoices & Billing", "export", {
+      count: allInvoicesList.length,
+      format: "CSV",
+    });
   };
 
   // Print Invoice Handler
@@ -731,9 +741,8 @@ export default function GenerateInvoicePage() {
               <li className="nav-item">
                 <button
                   type="button"
-                  className={`nav-link border-0 py-3 px-4 fw-bold position-relative ${
-                    activeTab === "deals" ? "active text-primary" : "text-secondary"
-                  }`}
+                  className={`nav-link border-0 py-3 px-4 fw-bold position-relative ${activeTab === "deals" ? "active text-primary" : "text-secondary"
+                    }`}
                   style={{
                     backgroundColor: "transparent",
                     borderBottom: activeTab === "deals" ? "3px solid var(--primary, #58632A)" : "none",
@@ -751,9 +760,8 @@ export default function GenerateInvoicePage() {
               <li className="nav-item">
                 <button
                   type="button"
-                  className={`nav-link border-0 py-3 px-4 fw-bold position-relative ${
-                    activeTab === "all-invoices" ? "active text-primary" : "text-secondary"
-                  }`}
+                  className={`nav-link border-0 py-3 px-4 fw-bold position-relative ${activeTab === "all-invoices" ? "active text-primary" : "text-secondary"
+                    }`}
                   style={{
                     backgroundColor: "transparent",
                     borderBottom: activeTab === "all-invoices" ? "3px solid var(--primary, #58632A)" : "none",
@@ -893,79 +901,76 @@ export default function GenerateInvoicePage() {
               ========================================================================= */}
           {activeTab === "deals" && (
             <>
-              <div className="table-responsive">
-              <table className="table align-middle mb-0 table-hover">
-                <thead className="table-light small text-uppercase">
-                  <tr>
-                    <th className="px-3 text-center" style={{ width: "50px" }}>No</th>
-                    <th className="text-center" style={{ width: "70px" }}>Actions</th>
-                    <th style={{ width: "120px" }}>Deal No</th>
-                    <th>Customer</th>
-                    <th>Vehicle & Spec</th>
-                    <th>Deal Financials</th>
-                    <th style={{ width: "180px" }}>Payment Status</th>
-                    <th>Delivery Stage</th>
-                    <th>Delivery Date</th>
-                    <th className="text-center" style={{ width: "120px" }}>Invoices</th>
-                  </tr>
-                </thead>
-                <tbody style={{ fontSize: "0.9rem" }}>
-                  {isLoadingDeals ? (
+              <div className="table-responsive" style={{ minHeight: "320px" }}>
+                <table className="table align-middle mb-0 table-hover">
+                  <thead className="table-light small text-uppercase">
                     <tr>
-                      <td colSpan="10" className="text-center py-5 text-muted">
-                        <div className="spinner-border spinner-border-sm me-2" role="status"></div>
-                        Loading vehicle deals & invoices...
-                      </td>
+                      <th className="px-3 text-center" style={{ width: "50px" }}>No</th>
+                      <th className="text-center" style={{ width: "70px" }}>Actions</th>
+                      <th style={{ width: "120px" }}>Deal No</th>
+                      <th>Customer</th>
+                      <th>Vehicle & Spec</th>
+                      <th>Deal Financials</th>
+                      <th style={{ width: "180px" }}>Payment Status</th>
+                      <th>Delivery Stage</th>
+                      <th>Delivery Date</th>
+                      <th className="text-center" style={{ width: "120px" }}>Invoices</th>
                     </tr>
-                  ) : filteredDeals.length === 0 ? (
-                    <tr>
-                      <td colSpan="10" className="text-center py-5 text-muted">
-                        <i className="bi bi-inbox fs-1 d-block mb-2 text-secondary opacity-50"></i>
-                        No vehicle deals found matching criteria.
-                      </td>
-                    </tr>
-                  ) : (
-                    paginatedDeals.map((deal, index) => {
-                      const pctPaid = deal.computedPercentPaid || 0;
-                      return (
-                        <tr key={deal.id || deal.deal_number}>
-                          {/* 0. No */}
-                          <td className="px-3 text-center text-muted small fw-semibold">
-                            {(dealsPage - 1) * dealsPerPage + index + 1}
-                          </td>
+                  </thead>
+                  <tbody style={{ fontSize: "0.9rem" }}>
+                    {isLoadingDeals ? (
+                      <tr>
+                        <td colSpan="10" className="text-center py-5 text-muted">
+                          <div className="spinner-border spinner-border-sm me-2" role="status"></div>
+                          Loading vehicle deals & invoices...
+                        </td>
+                      </tr>
+                    ) : filteredDeals.length === 0 ? (
+                      <tr>
+                        <td colSpan="10" className="text-center py-5 text-muted">
+                          <i className="bi bi-inbox fs-1 d-block mb-2 text-secondary opacity-50"></i>
+                          No vehicle deals found matching criteria.
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedDeals.map((deal, index) => {
+                        const pctPaid = deal.computedPercentPaid || 0;
+                        const rowKey = deal.id || deal.deal_number || index;
+                        return (
+                          <tr key={rowKey}>
+                            {/* 0. No */}
+                            <td className="px-3 text-center text-muted small fw-semibold">
+                              {(dealsPage - 1) * dealsPerPage + index + 1}
+                            </td>
 
-                          {/* 1. Actions 3-Dots Dropdown */}
-                          <td className="text-center" onClick={(e) => e.stopPropagation()}>
-                            <div className="dropdown position-relative d-inline-block">
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-light border rounded-circle shadow-none p-0 d-inline-flex align-items-center justify-content-center"
-                                style={{ width: "32px", height: "32px", cursor: "pointer" }}
-                                title="Actions"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveActionMenuId(
-                                    activeActionMenuId === (deal.id || deal.deal_number)
-                                      ? null
-                                      : (deal.id || deal.deal_number)
-                                  );
-                                }}
-                              >
-                                <i className="bi bi-three-dots-vertical fs-6 text-dark"></i>
-                              </button>
-
-                              {activeActionMenuId === (deal.id || deal.deal_number) && (
-                                <div
-                                  className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute start-0 text-start"
-                                  style={{
-                                    minWidth: "160px",
-                                    zIndex: 1050,
-                                    top: "100%",
-                                    backgroundColor: "#FFFFFF",
+                            {/* 1. Actions 3-Dots Dropdown */}
+                            <td className="text-center" onClick={(e) => e.stopPropagation()}>
+                              <div className="dropdown position-relative d-inline-block action-menu-container">
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-light border rounded-circle shadow-none p-0 d-inline-flex align-items-center justify-content-center"
+                                  style={{ width: "32px", height: "32px", cursor: "pointer" }}
+                                  title="Actions"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setActiveActionMenuId((prev) => (prev === rowKey ? null : rowKey));
                                   }}
-                                  onClick={(e) => e.stopPropagation()}
                                 >
-                                  {deal.computedBalanceDue > 0 && (
+                                  <i className="bi bi-three-dots-vertical fs-6 text-dark"></i>
+                                </button>
+
+                                {activeActionMenuId === rowKey && (
+                                  <div
+                                    className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute start-0 text-start"
+                                    style={{
+                                      minWidth: "185px",
+                                      zIndex: 1055,
+                                      top: "100%",
+                                      backgroundColor: "#FFFFFF",
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
                                     <button
                                       type="button"
                                       className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-primary"
@@ -974,185 +979,197 @@ export default function GenerateInvoicePage() {
                                         handleOpenGenerateForDeal(deal);
                                       }}
                                     >
-                                      <i className="bi bi-plus-circle"></i> Add Bill
+                                      <i className="bi bi-plus-circle text-primary"></i>
+                                      <span>{deal.computedBalanceDue > 0 ? "Add Bill" : "Add Additional Bill"}</span>
                                     </button>
+
+                                    <button
+                                      type="button"
+                                      className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-secondary"
+                                      onClick={() => {
+                                        setActiveActionMenuId(null);
+                                        setSelectedDealForMultiView(deal);
+                                      }}
+                                    >
+                                      <i className="bi bi-receipt text-secondary"></i>
+                                      <span>View Ledger & Bills</span>
+                                    </button>
+
+                                    {deal.quotation_id && (
+                                      <Link
+                                        href={`/admin/quotation/${deal.quotation_id}`}
+                                        className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-dark text-decoration-none"
+                                        onClick={() => setActiveActionMenuId(null)}
+                                      >
+                                        <i className="bi bi-file-earmark-text text-info"></i>
+                                        <span>View Quotation</span>
+                                      </Link>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* 2. Deal ID Badge */}
+                            <td>
+                              <span className="badge bg-light text-primary border font-monospace px-2 py-1">
+                                {deal.deal_number || `#${deal.id}`}
+                              </span>
+                            </td>
+
+                            {/* 2. Customer Particulars */}
+                            <td>
+                              <div>
+                                <h6 className="mb-0 text-dark fw-bold">{deal.customer_name}</h6>
+                                <div className="small text-muted">
+                                  <i className="bi bi-telephone me-1"></i>
+                                  {deal.customer_phone || "-"}
+                                </div>
+                                {deal.customer_city && (
+                                  <div className="small text-secondary" style={{ fontSize: "11px" }}>
+                                    <i className="bi bi-geo-alt me-1"></i>{deal.customer_city}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* 3. Vehicle & Spec Particulars */}
+                            <td>
+                              <div>
+                                <div className="fw-semibold text-dark">{deal.model_variant}</div>
+                                <div className="small text-muted d-flex align-items-center gap-1.5 mt-1 flex-wrap">
+                                  <span className="badge bg-light text-dark border">
+                                    <i className="bi bi-palette me-1"></i>
+                                    {deal.color || "Standard"}
+                                  </span>
+                                  {deal.vin_chassis_number && (
+                                    <span className="badge bg-light text-secondary border font-monospace" title="VIN/Chassis">
+                                      {deal.vin_chassis_number}
+                                    </span>
                                   )}
-                                  <button
-                                    type="button"
-                                    className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-secondary"
-                                    onClick={() => {
-                                      setActiveActionMenuId(null);
-                                      setSelectedDealForMultiView(deal);
-                                    }}
+                                  {deal.has_insurance === "Yes" ? (
+                                    <span className="badge bg-success-subtle text-success border border-success-subtle" title="Insurance Included">
+                                      <i className="bi bi-shield-check me-1"></i>Insurance: Yes
+                                    </span>
+                                  ) : (
+                                    <span className="badge bg-light text-muted border" title="Insurance Not Included">
+                                      Insurance: No
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* 4. Deal Financials */}
+                            <td>
+                              <div>
+                                <div className="fw-bold text-dark fs-6">
+                                  ₹{formatIndianCurrency(deal.net_amount || deal.total_amount)}
+                                </div>
+                                {deal.discount_amount > 0 && (
+                                  <div className="small text-success" style={{ fontSize: "11px" }}>
+                                    Incl. ₹{formatIndianCurrency(deal.discount_amount)} disc.
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* 5. Payment Status & Progress */}
+                            <td>
+                              <div style={{ maxWidth: "170px" }}>
+                                <div className="d-flex justify-content-between align-items-center small mb-1">
+                                  <span className="fw-semibold text-success" style={{ fontSize: "11px" }}>
+                                    Paid: ₹{formatIndianCurrency(deal.computedTotalPaid || 0)}
+                                  </span>
+                                  <span className="fw-semibold text-danger" style={{ fontSize: "11px" }}>
+                                    Due: ₹{formatIndianCurrency(deal.computedBalanceDue || 0)}
+                                  </span>
+                                </div>
+                                <div className="progress" style={{ height: "5px" }}>
+                                  <div
+                                    className={`progress-bar ${pctPaid === 100 ? "bg-success" : "bg-warning"}`}
+                                    role="progressbar"
+                                    style={{ width: `${pctPaid}%` }}
+                                    aria-valuenow={pctPaid}
+                                    aria-valuemin="0"
+                                    aria-valuemax="100"
+                                  ></div>
+                                </div>
+                                <div className="d-flex justify-content-between align-items-center mt-1">
+                                  <span
+                                    className={`badge ${deal.payment_status === "Fully Paid" || deal.computedBalanceDue === 0
+                                        ? "bg-success text-white"
+                                        : "bg-warning text-dark"
+                                      } px-2 py-0.5`}
+                                    style={{ fontSize: "10px" }}
                                   >
-                                    <i className="bi bi-eye"></i> View Ledger
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </td>
-
-                          {/* 2. Deal ID Badge */}
-                          <td>
-                            <span className="badge bg-light text-primary border font-monospace px-2 py-1">
-                              {deal.deal_number || `#${deal.id}`}
-                            </span>
-                          </td>
-
-                          {/* 2. Customer Particulars */}
-                          <td>
-                            <div>
-                              <h6 className="mb-0 text-dark fw-bold">{deal.customer_name}</h6>
-                              <div className="small text-muted">
-                                <i className="bi bi-telephone me-1"></i>
-                                {deal.customer_phone || "-"}
-                              </div>
-                              {deal.customer_city && (
-                                <div className="small text-secondary" style={{ fontSize: "11px" }}>
-                                  <i className="bi bi-geo-alt me-1"></i>{deal.customer_city}
-                                </div>
-                              )}
-                            </div>
-                          </td>
-
-                          {/* 3. Vehicle & Spec Particulars */}
-                          <td>
-                            <div>
-                              <div className="fw-semibold text-dark">{deal.model_variant}</div>
-                              <div className="small text-muted d-flex align-items-center gap-1.5 mt-1 flex-wrap">
-                                <span className="badge bg-light text-dark border">
-                                  <i className="bi bi-palette me-1"></i>
-                                  {deal.color || "Standard"}
-                                </span>
-                                {deal.vin_chassis_number && (
-                                  <span className="badge bg-light text-secondary border font-monospace" title="VIN/Chassis">
-                                    {deal.vin_chassis_number}
+                                    {deal.computedBalanceDue === 0 && deal.computedTotalPaid > 0 ? "Fully Paid" : deal.payment_status || "Partially Paid"}
                                   </span>
-                                )}
-                                {deal.has_insurance === "Yes" ? (
-                                  <span className="badge bg-success-subtle text-success border border-success-subtle" title="Insurance Included">
-                                    <i className="bi bi-shield-check me-1"></i>Insurance: Yes
+                                  <span className="text-muted" style={{ fontSize: "10px" }}>
+                                    {pctPaid}%
                                   </span>
-                                ) : (
-                                  <span className="badge bg-light text-muted border" title="Insurance Not Included">
-                                    Insurance: No
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* 4. Deal Financials */}
-                          <td>
-                            <div>
-                              <div className="fw-bold text-dark fs-6">
-                                ₹{formatIndianCurrency(deal.net_amount || deal.total_amount)}
-                              </div>
-                              {deal.discount_amount > 0 && (
-                                <div className="small text-success" style={{ fontSize: "11px" }}>
-                                  Incl. ₹{formatIndianCurrency(deal.discount_amount)} disc.
                                 </div>
-                              )}
-                            </div>
-                          </td>
-
-                          {/* 5. Payment Status & Progress */}
-                          <td>
-                            <div style={{ maxWidth: "170px" }}>
-                              <div className="d-flex justify-content-between align-items-center small mb-1">
-                                <span className="fw-semibold text-success" style={{ fontSize: "11px" }}>
-                                  Paid: ₹{formatIndianCurrency(deal.computedTotalPaid || 0)}
-                                </span>
-                                <span className="fw-semibold text-danger" style={{ fontSize: "11px" }}>
-                                  Due: ₹{formatIndianCurrency(deal.computedBalanceDue || 0)}
-                                </span>
                               </div>
-                              <div className="progress" style={{ height: "5px" }}>
-                                <div
-                                  className={`progress-bar ${pctPaid === 100 ? "bg-success" : "bg-warning"}`}
-                                  role="progressbar"
-                                  style={{ width: `${pctPaid}%` }}
-                                  aria-valuenow={pctPaid}
-                                  aria-valuemin="0"
-                                  aria-valuemax="100"
-                                ></div>
-                              </div>
-                              <div className="d-flex justify-content-between align-items-center mt-1">
-                                <span
-                                  className={`badge ${
-                                    deal.payment_status === "Fully Paid" || deal.computedBalanceDue === 0
-                                      ? "bg-success text-white"
-                                      : "bg-warning text-dark"
-                                  } px-2 py-0.5`}
-                                  style={{ fontSize: "10px" }}
-                                >
-                                  {deal.computedBalanceDue === 0 && deal.computedTotalPaid > 0 ? "Fully Paid" : deal.payment_status || "Partially Paid"}
-                                </span>
-                                <span className="text-muted" style={{ fontSize: "10px" }}>
-                                  {pctPaid}%
-                                </span>
-                              </div>
-                            </div>
-                          </td>
+                            </td>
 
-                          {/* 6. Delivery Stage */}
-                          <td>
-                            <span className={`badge text-capitalize px-2 py-1 ${getStageBadgeClass(deal.deal_status)}`}>
-                              {deal.deal_status?.replace(/_/g, " ") || "Booking Confirmed"}
-                            </span>
-                          </td>
+                            {/* 6. Delivery Stage */}
+                            <td>
+                              <span className={`badge text-capitalize px-2 py-1 ${getStageBadgeClass(deal.deal_status)}`}>
+                                {deal.deal_status?.replace(/_/g, " ") || "Booking Confirmed"}
+                              </span>
+                            </td>
 
-                          {/* 7. Delivery Date */}
-                          <td>
-                            <span className="small text-dark fw-semibold">
-                              <i className="bi bi-calendar-event text-primary me-1"></i>
-                              {deal.expected_delivery_date
-                                ? new Date(deal.expected_delivery_date).toLocaleDateString("en-IN", {
+                            {/* 7. Delivery Date */}
+                            <td>
+                              <span className="small text-dark fw-semibold">
+                                <i className="bi bi-calendar-event text-primary me-1"></i>
+                                {deal.expected_delivery_date
+                                  ? new Date(deal.expected_delivery_date).toLocaleDateString("en-IN", {
                                     day: "2-digit",
                                     month: "short",
                                     year: "numeric",
                                   })
-                                : "Pending"}
-                            </span>
-                          </td>
+                                  : "Pending"}
+                              </span>
+                            </td>
 
-                          {/* 8. Invoices Count */}
-                          <td className="text-center">
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-outline-primary px-2.5 py-1 d-inline-flex align-items-center gap-1 shadow-none"
-                              onClick={() => setSelectedDealForMultiView(deal)}
-                              title="View all invoices issued for this deal"
-                            >
-                              <i className="bi bi-receipt"></i>
-                              <span className="fw-bold">{deal.invoicesCount} Bills</span>
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+                            {/* 8. Invoices Count */}
+                            <td className="text-center">
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-primary px-2.5 py-1 d-inline-flex align-items-center gap-1 shadow-none"
+                                onClick={() => setSelectedDealForMultiView(deal)}
+                                title="View all invoices issued for this deal"
+                              >
+                                <i className="bi bi-receipt"></i>
+                                <span className="fw-bold">{deal.invoicesCount} Bills</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
 
-            </div>
+              </div>
 
-            {!isLoadingDeals && filteredDeals.length > 0 && (
-              <Pagination
-                currentPage={dealsPage}
-                lastPage={Math.max(1, Math.ceil(filteredDeals.length / dealsPerPage))}
-                total={filteredDeals.length}
-                perPage={dealsPerPage}
-                onPageChange={(p) => setDealsPage(p)}
-                onPerPageChange={(newPerPage) => {
-                  setDealsPerPage(newPerPage);
-                  setDealsPage(1);
-                }}
-                perPageOptions={[10, 20, 50, 100]}
-                itemName="deals"
-              />
-            )}
-          </>
+              {!isLoadingDeals && filteredDeals.length > 0 && (
+                <Pagination
+                  currentPage={dealsPage}
+                  lastPage={Math.max(1, Math.ceil(filteredDeals.length / dealsPerPage))}
+                  total={filteredDeals.length}
+                  perPage={dealsPerPage}
+                  onPageChange={(p) => setDealsPage(p)}
+                  onPerPageChange={(newPerPage) => {
+                    setDealsPerPage(newPerPage);
+                    setDealsPage(1);
+                  }}
+                  perPageOptions={[10, 20, 50, 100]}
+                  itemName="deals"
+                />
+              )}
+            </>
           )}
 
           {/* =========================================================================
@@ -1160,197 +1177,212 @@ export default function GenerateInvoicePage() {
               ========================================================================= */}
           {activeTab === "all-invoices" && (
             <>
-              <div className="table-responsive">
-              <table className="table align-middle mb-0 table-hover">
-                <thead className="table-light small text-uppercase">
-                  <tr>
-                    <th className="py-3 px-3" style={{ width: "50px" }}>No</th>
-                    <th className="py-3 px-3 text-center" style={{ width: "70px" }}>Action</th>
-                    <th className="py-3">Invoice No</th>
-                    <th className="py-3">Date & Time</th>
-                    <th className="py-3">Deal Number</th>
-                    <th className="py-3">Customer</th>
-                    <th className="py-3">Vehicle & Spec</th>
-                    <th className="py-3">Payment Type</th>
-                    <th className="py-3 text-end">Amount Paid</th>
-                    <th className="py-3">Payment Mode & Ref</th>
-                    <th className="py-3 text-center">Status</th>
-                  </tr>
-                </thead>
-                <tbody style={{ fontSize: "0.9rem" }}>
-                  {filteredAllInvoices.length === 0 ? (
+              <div className="table-responsive" style={{ minHeight: "320px" }}>
+                <table className="table align-middle mb-0 table-hover">
+                  <thead className="table-light small text-uppercase">
                     <tr>
-                      <td colSpan="11" className="text-center py-5 text-muted">
-                        <i className="bi bi-receipt fs-1 d-block mb-2 text-secondary opacity-50"></i>
-                        No invoices found matching criteria.
-                      </td>
+                      <th className="py-3 px-3" style={{ width: "50px" }}>No</th>
+                      <th className="py-3 px-3 text-center" style={{ width: "70px" }}>Action</th>
+                      <th className="py-3">Invoice No</th>
+                      <th className="py-3">Date & Time</th>
+                      <th className="py-3">Deal Number</th>
+                      <th className="py-3">Customer</th>
+                      <th className="py-3">Vehicle & Spec</th>
+                      <th className="py-3">Payment Type</th>
+                      <th className="py-3 text-end">Amount Paid</th>
+                      <th className="py-3">Payment Mode & Ref</th>
+                      <th className="py-3 text-center">Status</th>
                     </tr>
-                  ) : (
-                    paginatedInvoices.map((inv, index) => (
-                      <tr key={inv.id || inv.invoiceNo}>
-                        <td className="px-3 text-muted small">
-                          {(invoicesPage - 1) * invoicesPerPage + index + 1}
-                        </td>
-
-                        {/* Action 3-Dots Dropdown */}
-                        <td className="px-3 text-center" onClick={(e) => e.stopPropagation()}>
-                          <div className="dropdown position-relative d-inline-block">
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-light border rounded-circle shadow-none p-0 d-inline-flex align-items-center justify-content-center"
-                              style={{ width: "32px", height: "32px", cursor: "pointer" }}
-                              title="Actions"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveActionMenuId(
-                                  activeActionMenuId === (inv.id || inv.invoiceNo)
-                                    ? null
-                                    : (inv.id || inv.invoiceNo)
-                                );
-                              }}
-                            >
-                              <i className="bi bi-three-dots-vertical fs-6 text-dark"></i>
-                            </button>
-
-                            {activeActionMenuId === (inv.id || inv.invoiceNo) && (
-                              <div
-                                className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute start-0 text-start"
-                                style={{
-                                  minWidth: "150px",
-                                  zIndex: 1050,
-                                  top: "100%",
-                                  backgroundColor: "#FFFFFF",
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <button
-                                  type="button"
-                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-primary"
-                                  onClick={() => {
-                                    setActiveActionMenuId(null);
-                                    setSelectedInvoiceForSingleView(inv);
-                                  }}
-                                >
-                                  <i className="bi bi-file-earmark-text"></i> View Bill
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Invoice No */}
-                        <td>
-                          <span
-                            className="badge font-monospace px-2.5 py-1.5"
-                            style={{
-                              background: "#F7F7F5",
-                              color: "#131C27",
-                              border: "1px solid #D9DDCC",
-                              fontWeight: 700,
-                              fontSize: "0.82rem",
-                            }}
-                          >
-                            {inv.invoiceNo}
-                          </span>
-                        </td>
-
-                        {/* Date & Time */}
-                        <td>
-                          <div className="fw-semibold text-dark">{inv.date}</div>
-                          <small className="text-muted">{inv.time}</small>
-                        </td>
-
-                        {/* Deal Number */}
-                        <td>
-                          <span className="badge bg-light text-primary border font-monospace px-2 py-1">
-                            {inv.dealNumber || "N/A"}
-                          </span>
-                        </td>
-
-                        {/* Customer */}
-                        <td>
-                          <div className="fw-bold text-dark">{inv.customerName}</div>
-                          <div className="text-muted small">
-                            <i className="bi bi-telephone me-1"></i>
-                            {inv.mobile}
-                          </div>
-                          {inv.city && (
-                            <div className="small text-secondary" style={{ fontSize: "11px" }}>
-                              <i className="bi bi-geo-alt me-1"></i>{inv.city}
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Vehicle & Spec */}
-                        <td>
-                          <div className="fw-semibold text-dark">{inv.vehicle}</div>
-                          <div className="small text-muted d-flex align-items-center gap-1.5 mt-1">
-                            <span className="badge bg-light text-dark border">
-                              {inv.color || "Standard"}
-                            </span>
-                            {inv.vin && (
-                              <span className="badge bg-light text-secondary border font-monospace">
-                                {inv.vin}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Installment Stage */}
-                        <td>
-                          <span className="badge bg-light text-dark border fw-semibold">
-                            {inv.installmentTitle}
-                          </span>
-                        </td>
-
-                        {/* Amount Paid */}
-                        <td className="text-end fw-bold text-success fs-6">
-                          ₹{formatIndianCurrency(inv.amountPaid)}
-                        </td>
-
-                        {/* Payment Mode & Ref */}
-                        <td>
-                          <div className="fw-semibold text-dark">{inv.paymentMode}</div>
-                          <div className="font-monospace text-muted small">
-                            {inv.paymentMode?.toLowerCase() === "cash" ? "Cash Receipt" : inv.transactionRef}
-                          </div>
-                          {inv.receivedBy && (
-                            <div className="text-muted" style={{ fontSize: "11px" }}>
-                              Rec: {inv.receivedBy}
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Status */}
-                        <td className="text-center">
-                          <span className="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
-                            <i className="bi bi-check2-circle me-1"></i>Paid
-                          </span>
+                  </thead>
+                  <tbody style={{ fontSize: "0.9rem" }}>
+                    {filteredAllInvoices.length === 0 ? (
+                      <tr>
+                        <td colSpan="11" className="text-center py-5 text-muted">
+                          <i className="bi bi-receipt fs-1 d-block mb-2 text-secondary opacity-50"></i>
+                          No invoices found matching criteria.
                         </td>
                       </tr>
-                    ))
+                    ) : (
+                      paginatedInvoices.map((inv, index) => {
+                        const rowKey = inv.id || inv.invoiceNo || index;
+                        return (
+                        <tr key={rowKey}>
+                          <td className="px-3 text-muted small">
+                            {(invoicesPage - 1) * invoicesPerPage + index + 1}
+                          </td>
+
+                          {/* Action 3-Dots Dropdown */}
+                          <td className="px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                            <div className="dropdown position-relative d-inline-block action-menu-container">
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-light border rounded-circle shadow-none p-0 d-inline-flex align-items-center justify-content-center"
+                                style={{ width: "32px", height: "32px", cursor: "pointer" }}
+                                title="Actions"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setActiveActionMenuId((prev) => (prev === rowKey ? null : rowKey));
+                                }}
+                              >
+                                <i className="bi bi-three-dots-vertical fs-6 text-dark"></i>
+                              </button>
+
+                              {activeActionMenuId === rowKey && (
+                                <div
+                                  className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute start-0 text-start"
+                                  style={{
+                                    minWidth: "170px",
+                                    zIndex: 1055,
+                                    top: "100%",
+                                    backgroundColor: "#FFFFFF",
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <button
+                                    type="button"
+                                    className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-primary"
+                                    onClick={() => {
+                                      setActiveActionMenuId(null);
+                                      setSelectedInvoiceForSingleView(inv);
+                                    }}
+                                  >
+                                    <i className="bi bi-file-earmark-text"></i>
+                                    <span>View Bill</span>
+                                  </button>
+
+                                  {inv.parentDeal && (
+                                    <button
+                                      type="button"
+                                      className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-secondary"
+                                      onClick={() => {
+                                        setActiveActionMenuId(null);
+                                        setSelectedDealForMultiView(inv.parentDeal);
+                                      }}
+                                    >
+                                      <i className="bi bi-receipt"></i>
+                                      <span>View Deal Ledger</span>
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Invoice No */}
+                          <td>
+                            <span
+                              className="badge font-monospace px-2.5 py-1.5"
+                              style={{
+                                background: "#F7F7F5",
+                                color: "#131C27",
+                                border: "1px solid #D9DDCC",
+                                fontWeight: 700,
+                                fontSize: "0.82rem",
+                              }}
+                            >
+                              {inv.invoiceNo}
+                            </span>
+                          </td>
+
+                          {/* Date & Time */}
+                          <td>
+                            <div className="fw-semibold text-dark">{inv.date}</div>
+                            <small className="text-muted">{inv.time}</small>
+                          </td>
+
+                          {/* Deal Number */}
+                          <td>
+                            <span className="badge bg-light text-primary border font-monospace px-2 py-1">
+                              {inv.dealNumber || "N/A"}
+                            </span>
+                          </td>
+
+                          {/* Customer */}
+                          <td>
+                            <div className="fw-bold text-dark">{inv.customerName}</div>
+                            <div className="text-muted small">
+                              <i className="bi bi-telephone me-1"></i>
+                              {inv.mobile}
+                            </div>
+                            {inv.city && (
+                              <div className="small text-secondary" style={{ fontSize: "11px" }}>
+                                <i className="bi bi-geo-alt me-1"></i>{inv.city}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Vehicle & Spec */}
+                          <td>
+                            <div className="fw-semibold text-dark">{inv.vehicle}</div>
+                            <div className="small text-muted d-flex align-items-center gap-1.5 mt-1">
+                              <span className="badge bg-light text-dark border">
+                                {inv.color || "Standard"}
+                              </span>
+                              {inv.vin && (
+                                <span className="badge bg-light text-secondary border font-monospace">
+                                  {inv.vin}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Installment Stage */}
+                          <td>
+                            <span className="badge bg-light text-dark border fw-semibold">
+                              {inv.installmentTitle}
+                            </span>
+                          </td>
+
+                          {/* Amount Paid */}
+                          <td className="text-end fw-bold text-success fs-6">
+                            ₹{formatIndianCurrency(inv.amountPaid)}
+                          </td>
+
+                          {/* Payment Mode & Ref */}
+                          <td>
+                            <div className="fw-semibold text-dark">{inv.paymentMode}</div>
+                            <div className="font-monospace text-muted small">
+                              {inv.paymentMode?.toLowerCase() === "cash" ? "Cash Receipt" : inv.transactionRef}
+                            </div>
+                            {inv.receivedBy && (
+                              <div className="text-muted" style={{ fontSize: "11px" }}>
+                                Rec: {inv.receivedBy}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Status */}
+                          <td className="text-center">
+                            <span className="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
+                              <i className="bi bi-check2-circle me-1"></i>Paid
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
-                </tbody>
-              </table>
+                  </tbody>
+                </table>
 
-            </div>
+              </div>
 
-            {!isLoadingDeals && filteredAllInvoices.length > 0 && (
-              <Pagination
-                currentPage={invoicesPage}
-                lastPage={Math.max(1, Math.ceil(filteredAllInvoices.length / invoicesPerPage))}
-                total={filteredAllInvoices.length}
-                perPage={invoicesPerPage}
-                onPageChange={(p) => setInvoicesPage(p)}
-                onPerPageChange={(newPerPage) => {
-                  setInvoicesPerPage(newPerPage);
-                  setInvoicesPage(1);
-                }}
-                perPageOptions={[10, 20, 50, 100]}
-                itemName="invoices"
-              />
-            )}
-          </>
+              {!isLoadingDeals && filteredAllInvoices.length > 0 && (
+                <Pagination
+                  currentPage={invoicesPage}
+                  lastPage={Math.max(1, Math.ceil(filteredAllInvoices.length / invoicesPerPage))}
+                  total={filteredAllInvoices.length}
+                  perPage={invoicesPerPage}
+                  onPageChange={(p) => setInvoicesPage(p)}
+                  onPerPageChange={(newPerPage) => {
+                    setInvoicesPerPage(newPerPage);
+                    setInvoicesPage(1);
+                  }}
+                  perPageOptions={[10, 20, 50, 100]}
+                  itemName="invoices"
+                />
+              )}
+            </>
           )}
         </div>
 
@@ -1596,11 +1628,11 @@ export default function GenerateInvoicePage() {
                             prev.map((item, idx) =>
                               idx === 0
                                 ? {
-                                    ...item,
-                                    desc: selectedDealObject
-                                      ? `${val} for ${selectedDealObject.model_variant || "Vehicle"} (${selectedDealObject.deal_number})`
-                                      : `${val} Payment`,
-                                  }
+                                  ...item,
+                                  desc: selectedDealObject
+                                    ? `${val} for ${selectedDealObject.model_variant || "Vehicle"} (${selectedDealObject.deal_number})`
+                                    : `${val} Payment`,
+                                }
                                 : item
                             )
                           );

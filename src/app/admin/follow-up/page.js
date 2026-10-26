@@ -8,6 +8,7 @@ import { useToast } from "@/app/components/Toast";
 import { hasPermission, normalizeRole } from "@/utils/auth";
 import Pagination from "@/components/common/Pagination";
 import discountApprovalApi from "@/services/discountApprovalApi";
+import { logActivity } from "@/utils/activityLogger";
 
 export default function FollowUpPage() {
   const { showToast } = useToast();
@@ -88,6 +89,7 @@ export default function FollowUpPage() {
 
   const [activeTab, setActiveTab] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [outcomeFilter, setOutcomeFilter] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -95,6 +97,7 @@ export default function FollowUpPage() {
 
   const [recordView, setRecordView] = useState("active"); // "active" | "trash"
   const [viewHistoryCustomer, setViewHistoryCustomer] = useState(null);
+  const [isCustomerLocked, setIsCustomerLocked] = useState(false);
 
   const getTodayDate = () => {
     const now = new Date();
@@ -121,16 +124,16 @@ export default function FollowUpPage() {
 
   useEffect(() => {
     const handleUpdate = () => {
-      fetchFollowUps(currentPage, perPage, searchTerm, startDate, endDate, activeTab, recordView);
+      fetchFollowUps(currentPage, perPage, searchTerm, startDate, endDate, activeTab, recordView, outcomeFilter);
       axios.get(`${API_URL}/leads`).then((res) => {
         if (res.data?.data && Array.isArray(res.data.data)) {
           setLeadsList(res.data.data);
         }
-      }).catch(() => {});
+      }).catch(() => { });
     };
     window.addEventListener("csd_approvals_updated", handleUpdate);
     return () => window.removeEventListener("csd_approvals_updated", handleUpdate);
-  }, [currentPage, perPage, searchTerm, startDate, endDate, activeTab, recordView]);
+  }, [currentPage, perPage, searchTerm, startDate, endDate, activeTab, recordView, outcomeFilter]);
 
   // Live follow-ups list & KPIs from backend
   const [followUpsList, setFollowUpsList] = useState([]);
@@ -195,7 +198,8 @@ export default function FollowUpPage() {
     from = startDate,
     to = endDate,
     tab = activeTab,
-    viewMode = recordView
+    viewMode = recordView,
+    outcome = outcomeFilter
   ) => {
     try {
       setLoading(true);
@@ -222,6 +226,9 @@ export default function FollowUpPage() {
         params.tab = tab;
         params.due_filter = tab;
       }
+      if (outcome && outcome !== "all") {
+        params.outcome = outcome;
+      }
 
       const res = await axios.get(`${API_URL}/follow-ups`, { params });
       if (res.data && res.data.status && Array.isArray(res.data.data)) {
@@ -243,8 +250,27 @@ export default function FollowUpPage() {
             to: res.data.pagination.to,
           });
         }
+
+        // Task 2 & 3: Filter follow-up records to only show 'Follow-up' and 'Quotation Sent' lead stages
+        let rawList = res.data.data;
+        if (viewMode !== "trash") {
+          rawList = rawList.filter((item) => {
+            const st = (item.lead?.status_name || item.lead?.status?.name || item.status_name || "").toLowerCase();
+            if (!st) return true;
+            return (
+              st.includes("follow") ||
+              st.includes("quotation") ||
+              st.includes("sent") ||
+              st === "in follow-up"
+            );
+          });
+        }
+        if (outcome && outcome !== "all") {
+          rawList = rawList.filter((item) => (item.status || item.outcome) === outcome);
+        }
+
         const todayStr = new Date().toISOString().split("T")[0];
-        const liveItems = res.data.data.map((item, idx) => {
+        const liveItems = rawList.map((item, idx) => {
           const custName = item.lead?.name || item.customer_name || "Customer";
           const phone = item.lead?.phone || item.phone || "-";
           const city = item.lead?.city || "";
@@ -584,6 +610,12 @@ export default function FollowUpPage() {
       URL.revokeObjectURL(url);
 
       showToast(`Exported ${rawList.length} follow-up records to CSV!`, "success");
+
+      // Log follow-up export in Activity Logs
+      logActivity("Follow-up", "export", {
+        count: rawList.length,
+        format: "CSV",
+      });
     } catch (err) {
       console.log("Export error:", err);
       showToast("Failed to export follow-ups to CSV.", "error");
@@ -655,6 +687,7 @@ export default function FollowUpPage() {
                     proposed_price: "",
                     discount_reason: "",
                   });
+                  setIsCustomerLocked(false);
                   setShowLogModal(true);
                 }}
               >
@@ -806,8 +839,29 @@ export default function FollowUpPage() {
                 })}
               </div>
 
-              {/* Right Filter Controls: Date Range (Start & End) + Search */}
+              {/* Right Filter Controls: Outcome Filter + Date Range (Start & End) + Search */}
               <div className="d-flex align-items-center gap-2 flex-wrap">
+                {/* Call Outcome Filter */}
+                <div className="input-group input-group-sm" style={{ width: "190px" }}>
+                  <span className="input-group-text bg-light text-muted px-2" title="Call Outcome">
+                    <i className="bi bi-funnel me-1"></i>
+                    <span style={{ fontSize: "11px", fontWeight: "600" }}>Outcome</span>
+                  </span>
+                  <select
+                    className="form-select form-select-sm px-1"
+                    value={outcomeFilter}
+                    onChange={(e) => setOutcomeFilter(e.target.value)}
+                  >
+                    <option value="">All Outcomes</option>
+                    <option value="Interested / Call Back">Interested / Call Back</option>
+                    <option value="Quotation Requested">Quotation Requested</option>
+                    <option value="Negotiation / Price Discussion">Negotiation / Price Discussion</option>
+                    <option value="Not Reachable / Busy">Not Reachable / Busy</option>
+                    <option value="Lost to Competitor / Lost of Lead">Lost to Competitor / Lost of Lead</option>
+                    <option value="Deal Won / Booking">Deal Won / Booking</option>
+                  </select>
+                </div>
+
                 {/* Start Date */}
                 <div className="input-group input-group-sm" style={{ width: "165px" }}>
                   <span className="input-group-text bg-light text-muted px-2" title="Start Date">
@@ -838,8 +892,8 @@ export default function FollowUpPage() {
                   />
                 </div>
 
-                {/* Clear Date Filter Button */}
-                {(startDate || endDate) && (
+                {/* Clear Filter Button */}
+                {(startDate || endDate || outcomeFilter || searchTerm) && (
                   <button
                     type="button"
                     className="btn btn-sm btn-outline-secondary px-2 d-flex align-items-center gap-1"
@@ -847,8 +901,10 @@ export default function FollowUpPage() {
                     onClick={() => {
                       setStartDate("");
                       setEndDate("");
+                      setOutcomeFilter("");
+                      setSearchTerm("");
                     }}
-                    title="Clear Date Filters"
+                    title="Clear All Filters"
                   >
                     <i className="bi bi-x-circle"></i>
                     <span>Reset</span>
@@ -1015,6 +1071,7 @@ export default function FollowUpPage() {
                                         proposed_price: existingDisc ? String(existingDisc.proposed_price || "") : "",
                                         discount_reason: existingDisc ? existingDisc.reason || "" : "",
                                       });
+                                      setIsCustomerLocked(true);
                                       setShowLogModal(true);
                                     }}
                                   >
@@ -1250,12 +1307,21 @@ export default function FollowUpPage() {
                 <div className="modal-body-custom">
                   <div className="row g-3">
                     <div className="col-12">
-                      <label className="form-label text-dark fw-semibold small">
-                        Choose Existing Customer Lead (Optional)
-                      </label>
+                      <div className="d-flex align-items-center justify-content-between mb-1">
+                        <label className="form-label text-dark fw-semibold small mb-0">
+                          Choose Existing Customer Lead (Optional)
+                        </label>
+                        {isCustomerLocked && (
+                          <span className="badge bg-secondary-subtle text-dark border small" style={{ fontSize: "11px" }}>
+                            <i className="bi bi-lock-fill text-primary me-1"></i>
+                            Locked to Current Customer Lead
+                          </span>
+                        )}
+                      </div>
                       <select
                         className="form-select"
                         value={callLog.lead_id || ""}
+                        disabled={isCustomerLocked}
                         onChange={(e) => {
                           const lid = e.target.value;
                           const selected = leadsList.find((l) => String(l.id) === String(lid));
@@ -1287,6 +1353,7 @@ export default function FollowUpPage() {
                         type="text"
                         className="form-control"
                         value={callLog.customer}
+                        readOnly={isCustomerLocked}
                         onChange={(e) => setCallLog({ ...callLog, customer: e.target.value })}
                         required
                       />
@@ -1298,6 +1365,7 @@ export default function FollowUpPage() {
                         type="tel"
                         className="form-control"
                         value={callLog.phone}
+                        readOnly={isCustomerLocked}
                         onChange={(e) => setCallLog({ ...callLog, phone: e.target.value })}
                         required
                       />
@@ -1326,11 +1394,10 @@ export default function FollowUpPage() {
                       >
                         <option value="Interested / Call Back">Interested / Call Back</option>
                         <option value="Quotation Requested">Quotation Requested</option>
-                        <option value="Ready for Booking">Ready for Booking</option>
-                        <option value="Not Answering / Busy">Not Answering / Busy</option>
-                        <option value="Price Too High">Price Too High</option>
-                        <option value="Bought Competitor Car">Bought Competitor Car</option>
-                        <option value="Showroom Visit Done">Showroom Visit Done</option>
+                        <option value="Negotiation / Price Discussion">Negotiation / Price Discussion</option>
+                        <option value="Not Reachable / Busy">Not Reachable / Busy</option>
+                        <option value="Lost to Competitor / Lost of Lead">Lost to Competitor / Lost of Lead</option>
+                        <option value="Deal Won / Booking">Deal Won / Booking</option>
                       </select>
                     </div>
 
@@ -1371,7 +1438,7 @@ export default function FollowUpPage() {
                         onClick={(e) => {
                           try {
                             e.target.showPicker?.();
-                          } catch (err) {}
+                          } catch (err) { }
                         }}
                         value={callLog.nextDate}
                         onChange={(e) => {

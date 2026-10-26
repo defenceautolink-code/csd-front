@@ -6,6 +6,7 @@ import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
 import Pagination from "@/components/common/Pagination";
 import expenseApi from "@/services/expenseApi";
+import { logActivity } from "@/utils/activityLogger";
 
 export default function ExpenseDetailPage() {
   const { showToast } = useToast();
@@ -386,9 +387,9 @@ export default function ExpenseDetailPage() {
   const paginatedExpenses = isServerPaginated
     ? expenseList
     : filteredExpenses.slice(
-        (currentPage - 1) * perPage,
-        currentPage * perPage
-      );
+      (currentPage - 1) * perPage,
+      currentPage * perPage
+    );
 
   // Aggregate Metrics
   const metrics = useMemo(() => {
@@ -451,6 +452,12 @@ export default function ExpenseDetailPage() {
     link.click();
     document.body.removeChild(link);
     showToast("Expense records exported as CSV successfully!", "success");
+
+    // Log export in Activity Logs
+    logActivity("Expense", "export", {
+      count: filteredExpenses.length,
+      format: "CSV",
+    });
   };
 
   return (
@@ -590,33 +597,30 @@ export default function ExpenseDetailPage() {
                 <div className="btn-group btn-group-sm" role="group">
                   <button
                     type="button"
-                    className={`btn ${
-                      paymentTypeFilter === "All"
+                    className={`btn ${paymentTypeFilter === "All"
                         ? "btn-primary"
                         : "btn-outline-secondary"
-                    }`}
+                      }`}
                     onClick={() => setPaymentTypeFilter("All")}
                   >
                     All
                   </button>
                   <button
                     type="button"
-                    className={`btn ${
-                      paymentTypeFilter === "Online"
+                    className={`btn ${paymentTypeFilter === "Online"
                         ? "btn-primary"
                         : "btn-outline-secondary"
-                    }`}
+                      }`}
                     onClick={() => setPaymentTypeFilter("Online")}
                   >
                     <i className="bi bi-globe me-1"></i> Online
                   </button>
                   <button
                     type="button"
-                    className={`btn ${
-                      paymentTypeFilter === "Offline"
+                    className={`btn ${paymentTypeFilter === "Offline"
                         ? "btn-primary"
                         : "btn-outline-secondary"
-                    }`}
+                      }`}
                     onClick={() => setPaymentTypeFilter("Offline")}
                   >
                     <i className="bi bi-wallet2 me-1"></i> Offline
@@ -839,10 +843,10 @@ export default function ExpenseDetailPage() {
                             <i className="bi bi-calendar3 me-1"></i>
                             {item.date
                               ? new Date(item.date).toLocaleDateString("en-IN", {
-                                  day: "2-digit",
-                                  month: "short",
-                                  year: "numeric",
-                                })
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                              })
                               : "N/A"}
                           </span>
                         </div>
@@ -958,7 +962,7 @@ export default function ExpenseDetailPage() {
                         <label className="form-label text-dark fw-bold small mb-0">
                           Expense Title <span className="text-danger">*</span>
                         </label>
-                        
+
                       </div>
                       <select
                         className="form-select"
@@ -1447,11 +1451,10 @@ export default function ExpenseDetailPage() {
                     ₹{Number(viewItem.amount).toLocaleString("en-IN")}
                   </h2>
                   <span
-                    className={`badge mt-2 ${
-                      viewItem.payment_type === "Online"
+                    className={`badge mt-2 ${viewItem.payment_type === "Online"
                         ? "bg-success-subtle text-success border border-success-subtle"
                         : "bg-warning-subtle text-warning border border-warning-subtle"
-                    }`}
+                      }`}
                   >
                     {viewItem.payment_type} Payment
                   </span>
@@ -1467,10 +1470,10 @@ export default function ExpenseDetailPage() {
                     <span className="fw-semibold">
                       {viewItem.date
                         ? new Date(viewItem.date).toLocaleDateString("en-IN", {
-                            day: "2-digit",
-                            month: "long",
-                            year: "numeric",
-                          })
+                          day: "2-digit",
+                          month: "long",
+                          year: "numeric",
+                        })
                         : "N/A"}
                     </span>
                   </div>

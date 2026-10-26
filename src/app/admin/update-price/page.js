@@ -7,6 +7,7 @@ import { useToast } from "@/app/components/Toast";
 import priceMasterApi from "@/services/priceMasterApi";
 import api from "@/lib/axios";
 import Pagination from "@/components/common/Pagination";
+import { logActivity } from "@/utils/activityLogger";
 
 // Currency formatter
 const formatCurrency = (val) => {
@@ -108,7 +109,7 @@ export default function UpdatePricePage() {
     } finally {
       setLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -398,6 +399,12 @@ export default function UpdatePricePage() {
       link.click();
       document.body.removeChild(link);
       showToast("Price master exported successfully!", "success");
+
+      // Log export in Activity Logs
+      logActivity("Vehicle Pricing", "export", {
+        count: filteredVariants.length,
+        format: "CSV",
+      });
     } catch (err) {
       console.error(err);
       showToast("Export failed", "error");
@@ -529,16 +536,16 @@ export default function UpdatePricePage() {
                     {selectedModelId
                       ? `All Variants (${filteredVariantsForDropdown.length})`
                       : selectedBrandId
-                      ? `All Variants (${filteredVariantsForDropdown.length})`
-                      : `All Variants (${variants.length})`}
+                        ? `All Variants (${filteredVariantsForDropdown.length})`
+                        : `All Variants (${variants.length})`}
                   </option>
                   {filteredVariantsForDropdown.map((v) => (
                     <option key={v.id} value={v.id}>
                       {selectedModelId
                         ? v.name
                         : v.model?.name
-                        ? `${v.model.name} - ${v.name}`
-                        : v.name}
+                          ? `${v.model.name} - ${v.name}`
+                          : v.name}
                     </option>
                   ))}
                 </select>

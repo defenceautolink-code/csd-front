@@ -485,7 +485,7 @@ function SendQuotationPageContent() {
   // ----------------------------------------------------
   // SAVE QUOTATION TO BACKEND DATABASE
   // ----------------------------------------------------
-  const saveQuotationToBackend = async (status = "pending") => {
+  const saveQuotationToBackend = async (status = "sent") => {
     if (!clientName.trim()) {
       showToast("Please enter client full name.", "warning");
       return null;
@@ -611,7 +611,10 @@ function SendQuotationPageContent() {
           }
         }
 
-        showToast(`Quotation #${res.data.quotation_number} saved successfully!`, "success");
+        showToast(`Quotation #${res.data.quotation_number} saved and added to Quotations!`, "success");
+        setTimeout(() => {
+          router.push("/admin/quotation");
+        }, 400);
         return res.data;
       }
     } catch (err) {
@@ -1108,7 +1111,7 @@ function SendQuotationPageContent() {
                   <button
                     type="button"
                     className="btn btn-primary flex-fill d-flex align-items-center justify-content-center gap-2"
-                    onClick={() => saveQuotationToBackend("pending")}
+                    onClick={() => saveQuotationToBackend("sent")}
                     disabled={isSaving}
                   >
                     {isSaving ? (
@@ -1198,9 +1201,9 @@ function SendQuotationPageContent() {
                       lineHeight: "1.3",
                     }}
                   >
-                    D-601, 6TH FLOOR, S.G BUSINESS HUB, NEAR UMIYA CAMPUS,
+                    D-601, S G BUSINESS HUB, S G HIGHWAY,
                     <br />
-                    Ahmedabad - 380060
+                    Ahmedabad, Gujarat - 382470
                   </div>
                 </div>
               </div>
