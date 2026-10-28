@@ -97,6 +97,7 @@ export default function FollowUpPage() {
 
   const [recordView, setRecordView] = useState("active"); // "active" | "trash"
   const [viewHistoryCustomer, setViewHistoryCustomer] = useState(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [isCustomerLocked, setIsCustomerLocked] = useState(false);
 
   const getTodayDate = () => {
@@ -342,40 +343,13 @@ export default function FollowUpPage() {
             urgency: isHot ? "High Urgency" : "Medium",
             urgencyClass: isHot ? "bg-danger-subtle text-danger" : "bg-warning-subtle text-warning",
             urgencyIcon: isHot ? "bi bi-fire" : null,
+            followUpsCount: item.follow_ups_count || 1,
             avatar: `/image/avatar-${avatarNum}.svg`,
             tab: itemTab,
           };
         });
 
-        // Task 4: Group records by customer so that on the outside table each customer is displayed only once
-        // showing their latest follow-up information, with all history accessible inside.
-        const customerGroups = [];
-        const customerMap = new Map();
-
-        liveItems.forEach((item) => {
-          const phoneClean = (item.phone || "").replace(/\D/g, "");
-          const groupKey = item.lead_id
-            ? `lead_${item.lead_id}`
-            : (phoneClean && phoneClean.length >= 7
-              ? `phone_${phoneClean}`
-              : `name_${(item.customer || "").toLowerCase().trim()}`);
-
-          if (!customerMap.has(groupKey)) {
-            const groupRecord = {
-              ...item,
-              allFollowUps: [item],
-              followUpsCount: 1,
-            };
-            customerMap.set(groupKey, groupRecord);
-            customerGroups.push(groupRecord);
-          } else {
-            const existing = customerMap.get(groupKey);
-            existing.allFollowUps.push(item);
-            existing.followUpsCount += 1;
-          }
-        });
-
-        setFollowUpsList(customerGroups);
+        setFollowUpsList(liveItems);
       }
     } catch (err) {
       console.log("Follow-ups fetch error:", err);
@@ -516,6 +490,67 @@ export default function FollowUpPage() {
     }
   };
 
+  // Open & load full customer follow-up interaction history dynamically from backend
+  const handleOpenHistory = async (item) => {
+    setViewHistoryCustomer({
+      ...item,
+      allFollowUps: [item],
+    });
+    setHistoryLoading(true);
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("auth_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+      const leadId = item.lead_id;
+      let url = `${API_URL}/follow-ups?grouped=false&per_page=all`;
+      if (leadId) {
+        url += `&lead_id=${leadId}`;
+      } else if (item.phone) {
+        url += `&search=${encodeURIComponent(item.phone)}`;
+      }
+
+      const res = await axios.get(url, { headers });
+      const rawData = res.data?.data && Array.isArray(res.data.data) ? res.data.data : [];
+
+      if (rawData.length > 0) {
+        const formattedHistory = rawData.map((f, idx) => {
+          const rawDate = f.follow_up_date || (f.created_at ? f.created_at.slice(0, 10) : "");
+          const formattedDate = rawDate
+            ? new Date(rawDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+            : "-";
+          const nextFormatted = f.next_follow_up_date
+            ? new Date(f.next_follow_up_date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+            : null;
+          return {
+            id: f.id,
+            type: f.type || "Phone Call",
+            outcome: f.status || f.type || "Follow-up Logged",
+            outcomeDesc: f.notes || "",
+            notes: f.notes || "",
+            follow_up_date: f.follow_up_date || "",
+            follow_up_time: f.follow_up_time || "",
+            followUpDateFormatted: formattedDate,
+            next_follow_up_date: f.next_follow_up_date || "",
+            next_follow_up_time: f.next_follow_up_time || "",
+            nextDueDateFormatted: nextFormatted,
+            rep: f.user_name || f.user?.name || item.rep || "Representative",
+            badgeClass: (f.status || "").toLowerCase() === "completed" ? "bg-success-subtle text-success" : "bg-warning-subtle text-warning",
+            badgeIcon: (f.status || "").toLowerCase() === "completed" ? "bi bi-check2-circle" : "bi bi-telephone-outbound",
+          };
+        });
+
+        setViewHistoryCustomer((prev) => ({
+          ...prev,
+          allFollowUps: formattedHistory,
+        }));
+      }
+    } catch (err) {
+      console.log("Error loading customer follow-up history:", err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   useEffect(() => {
     axios
       .get(`${API_URL}/leads`)
@@ -531,7 +566,7 @@ export default function FollowUpPage() {
   const handleExportCSV = async () => {
     try {
       showToast("Preparing follow-up export...", "info");
-      const exportParams = { per_page: 5000 };
+      const exportParams = { per_page: 5000, grouped: "false" };
       if (startDate) {
         exportParams.from_date = startDate;
         exportParams.start_date = startDate;
@@ -1031,13 +1066,13 @@ export default function FollowUpPage() {
                                 }}
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                {/* Task 4: View Follow-Up History */}
+                                {/* View Follow-Up History */}
                                 <button
                                   type="button"
                                   className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-dark"
                                   onClick={() => {
                                     setActiveActionMenuId(null);
-                                    setViewHistoryCustomer(item);
+                                    handleOpenHistory(item);
                                   }}
                                 >
                                   <i className="bi bi-clock-history text-info"></i>
@@ -1146,13 +1181,13 @@ export default function FollowUpPage() {
                               ) : (
                                 <span className="text-dark fw-bold small">{item.customer}</span>
                               )}
-                              {item.followUpsCount > 1 && (
+                              {item.followUpsCount > 0 && (
                                 <span
                                   className="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill ms-1"
                                   style={{ cursor: "pointer", fontSize: "10px", padding: "2px 6px" }}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setViewHistoryCustomer(item);
+                                    handleOpenHistory(item);
                                   }}
                                   title="Click to view all interactions for this customer"
                                 >
@@ -1571,8 +1606,14 @@ export default function FollowUpPage() {
               </div>
 
               <div className="modal-body-custom p-3" style={{ maxHeight: "70vh", overflowY: "auto" }}>
-                <div className="timeline-custom">
-                  {(viewHistoryCustomer.allFollowUps || []).map((follow, idx) => (
+                {historyLoading ? (
+                  <div className="text-center py-5">
+                    <div className="spinner-border text-primary spinner-border-sm me-2" role="status"></div>
+                    <span className="text-muted small">Loading complete interaction history...</span>
+                  </div>
+                ) : (
+                  <div className="timeline-custom">
+                    {(viewHistoryCustomer.allFollowUps || []).map((follow, idx) => (
                     <div key={follow.id || idx} className="card mb-3 border shadow-xs rounded-3">
                       <div className="card-body p-3">
                         <div className="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-2">
@@ -1638,7 +1679,8 @@ export default function FollowUpPage() {
                       </div>
                     </div>
                   ))}
-                </div>
+                  </div>
+                )}
               </div>
 
               <div className="modal-footer-custom d-flex justify-content-between">
