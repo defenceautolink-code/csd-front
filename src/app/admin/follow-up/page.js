@@ -753,7 +753,7 @@ export default function FollowUpPage() {
                   <i className="bi bi-check2-all"></i>
                 </div>
               </div>
-              <div className="stat-card-value">{kpis.total ?? 0} Calls</div>
+              <div className="stat-card-value">{kpis.total ?? 0}</div>
               <span className="text-success small fw-semibold">Active follow-up interactions</span>
             </div>
           </div>
@@ -776,7 +776,7 @@ export default function FollowUpPage() {
                   <i className="bi bi-exclamation-triangle-fill"></i>
                 </div>
               </div>
-              <div className="stat-card-value">{kpis.overdue ?? 0} Overdue</div>
+              <div className="stat-card-value">{kpis.overdue ?? 0}</div>
               <span className="text-danger small fw-semibold">Action required urgently</span>
             </div>
           </div>
@@ -799,7 +799,7 @@ export default function FollowUpPage() {
                   <i className="bi bi-calendar-check-fill"></i>
                 </div>
               </div>
-              <div className="stat-card-value">{kpis.due_today ?? 0} Calls</div>
+              <div className="stat-card-value">{kpis.due_today ?? 0}</div>
               <span className="text-warning small fw-semibold">Scheduled for today</span>
             </div>
           </div>
@@ -822,7 +822,7 @@ export default function FollowUpPage() {
                   <i className="bi bi-clock-history"></i>
                 </div>
               </div>
-              <div className="stat-card-value">{kpis.upcoming ?? 0} Calls</div>
+              <div className="stat-card-value">{kpis.upcoming ?? 0}</div>
               <span className="text-info small fw-semibold">Pipeline nurturing</span>
             </div>
           </div>

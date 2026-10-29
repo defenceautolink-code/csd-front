@@ -2,36 +2,39 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import axios from "axios";
 import { useToast } from "@/app/components/Toast";
 import discountApprovalApi from "@/services/discountApprovalApi";
 
 export default function SuperAdminDashboard({ onAddLead }) {
   const { showToast } = useToast();
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 
-  // Modals state
-  const [showCustomerModal, setShowCustomerModal] = useState(false);
-  const [showReqModal, setShowReqModal] = useState(false);
-
-  // Quick Customer Form
-  const [custForm, setCustForm] = useState({
-    name: "",
-    phone: "",
-    email: "",
-    city: "Ahmedabad",
-  });
-
-  // Quick Requirement Form
-  const [reqForm, setReqForm] = useState({
-    customerName: "",
-    model: "Hyundai Creta",
-    budget: "₹15 - 20 Lakhs",
-    priority: "Hot",
-  });
+  // Dashboard Live Stats State
+  const [stats, setStats] = useState(null);
+  const [isLoadingStats, setIsLoadingStats] = useState(true);
 
   // Approvals State (Dynamic from discountApprovalApi)
   const [approvals, setApprovals] = useState([]);
   const [isLoadingApprovals, setIsLoadingApprovals] = useState(true);
 
+  // Fetch Live Dashboard Statistics (KPIs, Pipeline, Deliveries, Activities)
+  const fetchDashboardStats = async () => {
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("auth_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await axios.get(`${API_URL}/dashboard/stats`, { headers });
+      if (res.data?.status && res.data?.data) {
+        setStats(res.data.data);
+      }
+    } catch (e) {
+      console.error("Failed to fetch dashboard stats:", e);
+    } finally {
+      setIsLoadingStats(false);
+    }
+  };
+
+  // Fetch Pending Approvals
   const fetchApprovals = async () => {
     try {
       const data = await discountApprovalApi.getPendingApprovals();
@@ -59,9 +62,16 @@ export default function SuperAdminDashboard({ onAddLead }) {
   };
 
   useEffect(() => {
+    fetchDashboardStats();
     fetchApprovals();
-    window.addEventListener("csd_approvals_updated", fetchApprovals);
-    return () => window.removeEventListener("csd_approvals_updated", fetchApprovals);
+
+    const handleUpdate = () => {
+      fetchDashboardStats();
+      fetchApprovals();
+    };
+
+    window.addEventListener("csd_approvals_updated", handleUpdate);
+    return () => window.removeEventListener("csd_approvals_updated", handleUpdate);
   }, []);
 
   // Handle Approve / Reject
@@ -77,21 +87,19 @@ export default function SuperAdminDashboard({ onAddLead }) {
     }
 
     setApprovals((prev) => prev.filter((a) => a.id !== id));
+    fetchDashboardStats();
   };
 
-  const handleSaveCustomer = (e) => {
-    e.preventDefault();
-    showToast(`Customer ${custForm.name} registered successfully!`, "success");
-    setShowCustomerModal(false);
-    setCustForm({ name: "", phone: "", email: "", city: "Ahmedabad" });
-  };
+  const currentDateDisplay = stats?.date_display || new Date().toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 
-  const handleSaveRequirement = (e) => {
-    e.preventDefault();
-    showToast(`Requirement added for ${reqForm.customerName} (${reqForm.model})!`, "success");
-    setShowReqModal(false);
-    setReqForm({ customerName: "", model: "Hyundai Creta", budget: "₹15 - 20 Lakhs", priority: "Hot" });
-  };
+  const kpis = stats?.kpis || {};
+  const pipeline = stats?.pipeline || {};
+  const upcomingDeliveries = stats?.upcoming_deliveries || [];
+  const recentActivities = stats?.recent_activities || [];
 
   return (
     <div className="container-fluid px-0 pb-5">
@@ -106,10 +114,10 @@ export default function SuperAdminDashboard({ onAddLead }) {
           >
             Business Overview
           </h1>
-          <p className="text-secondary small mb-0">Here&apos;s your business overview for today</p>
+          <p className="text-secondary small mb-0">Here&apos;s your live business overview for today</p>
         </div>
 
-        {/* Date Pill */}
+        {/* Dynamic Date Pill */}
         <div>
           <span
             className="badge fw-semibold px-3 py-2 border text-dark"
@@ -120,19 +128,19 @@ export default function SuperAdminDashboard({ onAddLead }) {
               fontSize: "0.82rem",
             }}
           >
-            25 Aug 2026
+            {currentDateDisplay}
           </span>
         </div>
       </div>
 
       {/* ----------------------------------------------------
-          2. QUICK ACTION BUTTONS ROW
+          2. QUICK ACTION BUTTONS ROW (Direct Page Navigation)
           ---------------------------------------------------- */}
       <div className="d-flex align-items-center gap-2 overflow-auto pb-2 mb-4" style={{ whiteSpace: "nowrap" }}>
-        {/* + Lead (Solid Navy Button) */}
-        <button
-          type="button"
-          className="btn text-white d-inline-flex align-items-center justify-content-center gap-2 px-3 py-2 fw-semibold shadow-sm"
+        {/* Lead (Solid Navy Button) - Redirects to Leads Page */}
+        <Link
+          href="/admin/leads"
+          className="btn text-white d-inline-flex align-items-center justify-content-center gap-2 px-3 py-2 fw-semibold shadow-sm text-decoration-none"
           style={{
             backgroundColor: "#0D1554",
             borderRadius: "14px",
@@ -141,49 +149,14 @@ export default function SuperAdminDashboard({ onAddLead }) {
             fontSize: "0.86rem",
             border: "none",
           }}
-          onClick={onAddLead}
         >
-          <i className="bi bi-plus-lg fs-6"></i>
-          <span>+ Lead</span>
-        </button>
+          <i className="bi bi-funnel fs-6"></i>
+          <span>Lead</span>
+        </Link>
 
-        {/* + Customer */}
-        <button
-          type="button"
-          className="btn bg-white border d-inline-flex align-items-center justify-content-center gap-2 px-3 py-2 fw-semibold text-dark shadow-sm"
-          style={{
-            borderColor: "#E5E7EB",
-            borderRadius: "14px",
-            minWidth: "125px",
-            height: "44px",
-            fontSize: "0.86rem",
-          }}
-          onClick={() => setShowCustomerModal(true)}
-        >
-          <i className="bi bi-person-plus text-secondary fs-6"></i>
-          <span>+ Customer</span>
-        </button>
-
-        {/* + Req */}
-        <button
-          type="button"
-          className="btn bg-white border d-inline-flex align-items-center justify-content-center gap-2 px-3 py-2 fw-semibold text-dark shadow-sm"
-          style={{
-            borderColor: "#E5E7EB",
-            borderRadius: "14px",
-            minWidth: "105px",
-            height: "44px",
-            fontSize: "0.86rem",
-          }}
-          onClick={() => setShowReqModal(true)}
-        >
-          <i className="bi bi-card-checklist text-secondary fs-6"></i>
-          <span>+ Req</span>
-        </button>
-
-        {/* + Quote */}
+        {/* Quote - Redirects to Quotation Page */}
         <Link
-          href="/admin/quotation/create"
+          href="/admin/quotation"
           className="btn bg-white border d-inline-flex align-items-center justify-content-center gap-2 px-3 py-2 fw-semibold text-dark shadow-sm text-decoration-none"
           style={{
             borderColor: "#E5E7EB",
@@ -194,12 +167,28 @@ export default function SuperAdminDashboard({ onAddLead }) {
           }}
         >
           <i className="bi bi-file-earmark-text text-secondary fs-6"></i>
-          <span>+ Quote</span>
+          <span>Quote</span>
         </Link>
 
-        {/* Booking */}
+        {/* Follow-Ups Hub - Redirects to Follow-Up Page */}
         <Link
-          href="/admin/quotation"
+          href="/admin/follow-up"
+          className="btn bg-white border d-inline-flex align-items-center justify-content-center gap-2 px-3 py-2 fw-semibold text-dark shadow-sm text-decoration-none"
+          style={{
+            borderColor: "#E5E7EB",
+            borderRadius: "14px",
+            minWidth: "125px",
+            height: "44px",
+            fontSize: "0.86rem",
+          }}
+        >
+          <i className="bi bi-telephone-outbound text-secondary fs-6"></i>
+          <span>Follow-Ups</span>
+        </Link>
+
+        {/* Booking & Deals - Redirects to Booking & Deals Page */}
+        <Link
+          href="/admin/deals"
           className="btn bg-white border d-inline-flex align-items-center justify-content-center gap-2 px-3 py-2 fw-semibold text-dark shadow-sm text-decoration-none"
           style={{
             borderColor: "#E5E7EB",
@@ -210,21 +199,26 @@ export default function SuperAdminDashboard({ onAddLead }) {
           }}
         >
           <i className="bi bi-car-front text-secondary fs-6"></i>
-          <span>Booking</span>
+          <span>Bookings</span>
         </Link>
       </div>
 
       {/* ----------------------------------------------------
-          3. 8 KPI STAT CARDS 
+          3. 5 CORE KPI STAT CARDS (Filtered Navigation on Click)
           ---------------------------------------------------- */}
-      <div className="row g-3 mb-4">
+      <div className="row g-3 mb-4 row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-5">
         {/* Card 1: TOTAL LEADS */}
-        <div className="col-6 col-md-3">
-          <div className="card h-100 border rounded-4 p-3 bg-white shadow-sm">
+        <div className="col">
+          <Link
+            href="/admin/leads?status=all"
+            className="card h-100 border rounded-4 p-3 bg-white shadow-sm text-decoration-none text-dark"
+            style={{ transition: "transform 0.15s ease, box-shadow 0.15s ease", cursor: "pointer" }}
+            title="Click to view all leads"
+          >
             <div className="d-flex align-items-center justify-content-between mb-2">
               <span
                 className="text-muted fw-bold text-uppercase small"
-                style={{ fontSize: "0.7rem", letterSpacing: "0.6px" }}
+                style={{ fontSize: "0.72rem", letterSpacing: "0.5px" }}
               >
                 TOTAL LEADS
               </span>
@@ -232,259 +226,297 @@ export default function SuperAdminDashboard({ onAddLead }) {
                 className="badge fw-bold px-2 py-1 rounded-pill"
                 style={{ backgroundColor: "#DCFCE7", color: "#16A34A", fontSize: "0.7rem" }}
               >
-                ↑ 12%
+                {kpis.lead_growth || "↑ 0%"}
               </span>
             </div>
             <div className="fw-bolder text-dark" style={{ fontSize: "1.9rem", lineHeight: "1" }}>
-              248
+              {isLoadingStats ? "..." : (kpis.total_leads ?? 0)}
             </div>
-          </div>
+            <div className="text-muted small mt-2 d-flex align-items-center gap-1" style={{ fontSize: "0.75rem" }}>
+              <i className="bi bi-funnel text-primary"></i> All Inquiries
+            </div>
+          </Link>
         </div>
 
-        {/* Card 2: ACTIVE REQ */}
-        <div className="col-6 col-md-3">
-          <div className="card h-100 border rounded-4 p-3 bg-white shadow-sm">
-            <div
-              className="text-muted fw-bold text-uppercase small mb-2"
-              style={{ fontSize: "0.7rem", letterSpacing: "0.6px" }}
-            >
-              ACTIVE REQ
+        {/* Card 2: TOTAL FOLLOW-UP */}
+        <div className="col">
+          <Link
+            href="/admin/leads?status=Follow-up"
+            className="card h-100 border rounded-4 p-3 bg-white shadow-sm text-decoration-none text-dark"
+            style={{ transition: "transform 0.15s ease, box-shadow 0.15s ease", cursor: "pointer" }}
+            title="Click to view leads in follow-up"
+          >
+            <div className="d-flex align-items-center justify-content-between mb-2">
+              <span
+                className="text-muted fw-bold text-uppercase small"
+                style={{ fontSize: "0.72rem", letterSpacing: "0.5px" }}
+              >
+                TOTAL FOLLOW-UP
+              </span>
+              <span
+                className="badge fw-bold px-2 py-1 rounded-pill"
+                style={{ backgroundColor: "#FEF3C7", color: "#D97706", fontSize: "0.7rem" }}
+              >
+                Active
+              </span>
             </div>
             <div className="fw-bolder text-dark" style={{ fontSize: "1.9rem", lineHeight: "1" }}>
-              86
+              {isLoadingStats ? "..." : (kpis.total_follow_up ?? kpis.in_follow_up ?? 0)}
             </div>
-          </div>
+            <div className="text-muted small mt-2 d-flex align-items-center gap-1" style={{ fontSize: "0.75rem" }}>
+              <i className="bi bi-telephone text-warning"></i> Call Pipeline
+            </div>
+          </Link>
         </div>
 
-        {/* Card 3: ACTIVE QUOTES */}
-        <div className="col-6 col-md-3">
-          <div className="card h-100 border rounded-4 p-3 bg-white shadow-sm">
-            <div
-              className="text-muted fw-bold text-uppercase small mb-2"
-              style={{ fontSize: "0.7rem", letterSpacing: "0.6px" }}
-            >
-              ACTIVE QUOTES
+        {/* Card 3: TOTAL QUOTATION */}
+        <div className="col">
+          <Link
+            href="/admin/leads?status=Quotation Sent"
+            className="card h-100 border rounded-4 p-3 bg-white shadow-sm text-decoration-none text-dark"
+            style={{ transition: "transform 0.15s ease, box-shadow 0.15s ease", cursor: "pointer" }}
+            title="Click to view quotation sent leads"
+          >
+            <div className="d-flex align-items-center justify-content-between mb-2">
+              <span
+                className="text-muted fw-bold text-uppercase small"
+                style={{ fontSize: "0.72rem", letterSpacing: "0.5px" }}
+              >
+                TOTAL QUOTATION
+              </span>
+              <span
+                className="badge fw-bold px-2 py-1 rounded-pill"
+                style={{ backgroundColor: "#E0E7FF", color: "#4F46E5", fontSize: "0.7rem" }}
+              >
+                Sent
+              </span>
             </div>
             <div className="fw-bolder text-dark" style={{ fontSize: "1.9rem", lineHeight: "1" }}>
-              34
+              {isLoadingStats ? "..." : (kpis.total_quotation ?? kpis.active_quotes ?? 0)}
             </div>
-          </div>
+            <div className="text-muted small mt-2 d-flex align-items-center gap-1" style={{ fontSize: "0.75rem" }}>
+              <i className="bi bi-file-earmark-text text-primary"></i> Proposals
+            </div>
+          </Link>
         </div>
 
-        {/* Card 4: CONFIRMED */}
-        <div className="col-6 col-md-3">
-          <div className="card h-100 border rounded-4 p-3 bg-white shadow-sm">
-            <div
-              className="text-muted fw-bold text-uppercase small mb-2"
-              style={{ fontSize: "0.7rem", letterSpacing: "0.6px" }}
-            >
-              CONFIRMED
-            </div>
-            <div className="fw-bolder text-dark" style={{ fontSize: "1.9rem", lineHeight: "1" }}>
-              19
-            </div>
-          </div>
-        </div>
-
-        {/* Card 5: PENDING PAY */}
-        <div className="col-6 col-md-3">
-          <div className="card h-100 border rounded-4 p-3 bg-white shadow-sm">
-            <div
-              className="text-muted fw-bold text-uppercase small mb-2"
-              style={{ fontSize: "0.7rem", letterSpacing: "0.6px" }}
-            >
-              PENDING PAY
-            </div>
-            <div className="fw-bolder" style={{ fontSize: "1.9rem", lineHeight: "1", color: "#DC2626" }}>
-              ₹12.4L
-            </div>
-          </div>
-        </div>
-
-        {/* Card 6: IN PROCESS */}
-        <div className="col-6 col-md-3">
-          <div className="card h-100 border rounded-4 p-3 bg-white shadow-sm">
-            <div
-              className="text-muted fw-bold text-uppercase small mb-2"
-              style={{ fontSize: "0.7rem", letterSpacing: "0.6px" }}
-            >
-              IN PROCESS
-            </div>
-            <div className="fw-bolder text-dark" style={{ fontSize: "1.9rem", lineHeight: "1" }}>
-              27
-            </div>
-          </div>
-        </div>
-
-        {/* Card 7: DELIVERIES */}
-        <div className="col-6 col-md-3">
-          <div className="card h-100 border rounded-4 p-3 bg-white shadow-sm">
-            <div
-              className="text-muted fw-bold text-uppercase small mb-2"
-              style={{ fontSize: "0.7rem", letterSpacing: "0.6px" }}
-            >
-              DELIVERIES
+        {/* Card 4: TOTAL DEAL & BOOKING */}
+        <div className="col">
+          <Link
+            href="/admin/leads?status=Deal & Booking"
+            className="card h-100 border rounded-4 p-3 bg-white shadow-sm text-decoration-none text-dark"
+            style={{ transition: "transform 0.15s ease, box-shadow 0.15s ease", cursor: "pointer" }}
+            title="Click to view deal won & booked leads"
+          >
+            <div className="d-flex align-items-center justify-content-between mb-2">
+              <span
+                className="text-muted fw-bold text-uppercase small"
+                style={{ fontSize: "0.72rem", letterSpacing: "0.5px" }}
+              >
+                TOTAL DEAL & BOOKING
+              </span>
+              <span
+                className="badge fw-bold px-2 py-1 rounded-pill"
+                style={{ backgroundColor: "#DCFCE7", color: "#16A34A", fontSize: "0.7rem" }}
+              >
+                Won
+              </span>
             </div>
             <div className="fw-bolder" style={{ fontSize: "1.9rem", lineHeight: "1", color: "#16A34A" }}>
-              142
+              {isLoadingStats ? "..." : (kpis.total_deal_booking ?? kpis.confirmed ?? 0)}
             </div>
-          </div>
+            <div className="text-muted small mt-2 d-flex align-items-center gap-1" style={{ fontSize: "0.75rem" }}>
+              <i className="bi bi-trophy text-success"></i> Booked
+            </div>
+          </Link>
         </div>
 
-        {/* Card 8: GROSS PROFIT (Subtle tinted card background) */}
-        <div className="col-6 col-md-3">
-          <div
-            className="card h-100 border rounded-4 p-3 shadow-sm"
-            style={{ backgroundColor: "#F3F4F6", borderColor: "#E5E7EB" }}
+        {/* Card 5: TOTAL LOST */}
+        <div className="col">
+          <Link
+            href="/admin/leads?status=Lost"
+            className="card h-100 border rounded-4 p-3 bg-white shadow-sm text-decoration-none text-dark"
+            style={{ transition: "transform 0.15s ease, box-shadow 0.15s ease", cursor: "pointer" }}
+            title="Click to view lost leads"
           >
-            <div
-              className="text-muted fw-bold text-uppercase small mb-2"
-              style={{ fontSize: "0.7rem", letterSpacing: "0.6px" }}
-            >
-              GROSS PROFIT
+            <div className="d-flex align-items-center justify-content-between mb-2">
+              <span
+                className="text-muted fw-bold text-uppercase small"
+                style={{ fontSize: "0.72rem", letterSpacing: "0.5px" }}
+              >
+                TOTAL LOST
+              </span>
+              <span
+                className="badge fw-bold px-2 py-1 rounded-pill"
+                style={{ backgroundColor: "#FEE2E2", color: "#DC2626", fontSize: "0.7rem" }}
+              >
+                Lost
+              </span>
             </div>
-            <div className="fw-bolder text-dark" style={{ fontSize: "1.9rem", lineHeight: "1" }}>
-              ₹28.6L
+            <div className="fw-bolder" style={{ fontSize: "1.9rem", lineHeight: "1", color: "#DC2626" }}>
+              {isLoadingStats ? "..." : (kpis.total_lost ?? 0)}
             </div>
-          </div>
+            <div className="text-muted small mt-2 d-flex align-items-center gap-1" style={{ fontSize: "0.75rem" }}>
+              <i className="bi bi-x-circle text-danger"></i> Closed
+            </div>
+          </Link>
         </div>
       </div>
 
       {/* ----------------------------------------------------
-          4. MAIN SECTION: 2 
+          4. MAIN SECTION: 2 COLUMNS
           ---------------------------------------------------- */}
       <div className="row g-4">
         {/* Left Column (Desktop: col-lg-7, col-xl-8) */}
         <div className="col-12 col-lg-7 col-xl-8">
-          {/* SECTION: SALES PIPELINE */}
+          {/* SECTION: FOLLOW-UP PIPELINE / OUTCOMES (Screenshot 3 Statuses) */}
           <div className="card border rounded-4 p-4 bg-white shadow-sm mb-4">
-            <div className="d-flex align-items-center gap-2 mb-4">
-              <i className="bi bi-graph-up-arrow text-dark fs-5"></i>
-              <h5 className="fw-bold text-dark mb-0 fs-6">Sales Pipeline</h5>
+            <div className="d-flex align-items-center justify-content-between mb-4">
+              <div className="d-flex align-items-center gap-2">
+                <i className="bi bi-graph-up-arrow text-dark fs-5"></i>
+                <h5 className="fw-bold text-dark mb-0 fs-6">Follow-Up Pipeline</h5>
+              </div>
+              <Link href="/admin/follow-up" className="btn btn-sm btn-link text-decoration-none p-0 text-muted small">
+                View All <i className="bi bi-arrow-right"></i>
+              </Link>
             </div>
 
-            {/* Pipeline Stage Pills */}
-            <div className="row g-3 text-center">
-              {/* Stage 1: Lead */}
+            {/* Pipeline Stage Pills (6 Follow-Up Outcome Statuses from Screenshot 3 with Short Names) */}
+            <div className="row g-2 text-center">
+              {/* 1: Interested / Call Back -> Interested */}
               <div className="col-4 col-sm-4 col-md-2">
-                <div
-                  className="d-flex align-items-center justify-content-center mx-auto mb-2 text-white fw-bold shadow-sm"
-                  style={{
-                    width: "56px",
-                    height: "56px",
-                    backgroundColor: "#0D1554",
-                    borderRadius: "14px",
-                    fontSize: "1.15rem",
-                  }}
-                >
-                  120
-                </div>
-                <span className="fw-bold small text-dark d-block" style={{ fontSize: "0.82rem" }}>
-                  Lead
-                </span>
+                <Link href="/admin/follow-up?outcome=Interested" className="text-decoration-none text-dark d-block">
+                  <div
+                    className="d-flex align-items-center justify-content-center mx-auto mb-2 text-white fw-bold shadow-sm"
+                    style={{
+                      width: "54px",
+                      height: "54px",
+                      backgroundColor: "#0D1554",
+                      borderRadius: "14px",
+                      fontSize: "1.15rem",
+                    }}
+                  >
+                    {isLoadingStats ? "..." : (pipeline.interested ?? 0)}
+                  </div>
+                  <span className="fw-bold small text-dark d-block text-truncate" style={{ fontSize: "0.8rem" }} title="Interested / Call Back">
+                    Interested
+                  </span>
+                </Link>
               </div>
 
-              {/* Stage 2: Requirement */}
+              {/* 2: Quotation Requested -> Quote Req. */}
               <div className="col-4 col-sm-4 col-md-2">
-                <div
-                  className="d-flex align-items-center justify-content-center mx-auto mb-2 text-white fw-bold shadow-sm"
-                  style={{
-                    width: "56px",
-                    height: "56px",
-                    backgroundColor: "#0D1554",
-                    borderRadius: "14px",
-                    fontSize: "1.15rem",
-                  }}
-                >
-                  85
-                </div>
-                <span className="fw-bold small text-dark d-block" style={{ fontSize: "0.82rem" }}>
-                  Requirement
-                </span>
+                <Link href="/admin/follow-up?outcome=Quotation" className="text-decoration-none text-dark d-block">
+                  <div
+                    className="d-flex align-items-center justify-content-center mx-auto mb-2 border fw-bold shadow-sm"
+                    style={{
+                      width: "54px",
+                      height: "54px",
+                      backgroundColor: "#F3F4F6",
+                      borderColor: "#E5E7EB",
+                      color: "#1E293B",
+                      borderRadius: "14px",
+                      fontSize: "1.15rem",
+                    }}
+                  >
+                    {isLoadingStats ? "..." : (pipeline.quotation_requested ?? 0)}
+                  </div>
+                  <span className="fw-bold small text-secondary d-block text-truncate" style={{ fontSize: "0.8rem" }} title="Quotation Requested">
+                    Quote Req.
+                  </span>
+                </Link>
               </div>
 
-              {/* Stage 3: Quotation */}
+              {/* 3: Negotiation / Price Discussion -> Negotiation */}
               <div className="col-4 col-sm-4 col-md-2">
-                <div
-                  className="d-flex align-items-center justify-content-center mx-auto mb-2 border fw-bold shadow-sm"
-                  style={{
-                    width: "56px",
-                    height: "56px",
-                    backgroundColor: "#F3F4F6",
-                    borderColor: "#E5E7EB",
-                    color: "#1E293B",
-                    borderRadius: "14px",
-                    fontSize: "1.15rem",
-                  }}
-                >
-                  60
-                </div>
-                <span className="fw-bold small text-secondary d-block" style={{ fontSize: "0.82rem" }}>
-                  Quotation
-                </span>
+                <Link href="/admin/follow-up?outcome=Negotiation" className="text-decoration-none text-dark d-block">
+                  <div
+                    className="d-flex align-items-center justify-content-center mx-auto mb-2 border fw-bold shadow-sm"
+                    style={{
+                      width: "54px",
+                      height: "54px",
+                      backgroundColor: "#F3F4F6",
+                      borderColor: "#E5E7EB",
+                      color: "#1E293B",
+                      borderRadius: "14px",
+                      fontSize: "1.15rem",
+                    }}
+                  >
+                    {isLoadingStats ? "..." : (pipeline.negotiation ?? 0)}
+                  </div>
+                  <span className="fw-bold small text-secondary d-block text-truncate" style={{ fontSize: "0.8rem" }} title="Negotiation / Price Discussion">
+                    Negotiation
+                  </span>
+                </Link>
               </div>
 
-              {/* Stage 4: Negotiation */}
+              {/* 4: Not Reachable / Busy -> Not Reachable */}
               <div className="col-4 col-sm-4 col-md-2">
-                <div
-                  className="d-flex align-items-center justify-content-center mx-auto mb-2 border fw-bold shadow-sm"
-                  style={{
-                    width: "56px",
-                    height: "56px",
-                    backgroundColor: "#F3F4F6",
-                    borderColor: "#E5E7EB",
-                    color: "#1E293B",
-                    borderRadius: "14px",
-                    fontSize: "1.15rem",
-                  }}
-                >
-                  45
-                </div>
-                <span className="fw-bold small text-secondary d-block" style={{ fontSize: "0.82rem" }}>
-                  Negotiation
-                </span>
+                <Link href="/admin/follow-up?outcome=Not Reachable" className="text-decoration-none text-dark d-block">
+                  <div
+                    className="d-flex align-items-center justify-content-center mx-auto mb-2 border fw-bold shadow-sm"
+                    style={{
+                      width: "54px",
+                      height: "54px",
+                      backgroundColor: "#FEF3C7",
+                      borderColor: "#FDE68A",
+                      color: "#D97706",
+                      borderRadius: "14px",
+                      fontSize: "1.15rem",
+                    }}
+                  >
+                    {isLoadingStats ? "..." : (pipeline.not_reachable ?? 0)}
+                  </div>
+                  <span className="fw-bold small text-secondary d-block text-truncate" style={{ fontSize: "0.8rem" }} title="Not Reachable / Busy">
+                    Not Reachable
+                  </span>
+                </Link>
               </div>
 
-              {/* Stage 5: Booking */}
+              {/* 5: Lost to Competitor / Lost of Lead -> Lost Lead */}
               <div className="col-4 col-sm-4 col-md-2">
-                <div
-                  className="d-flex align-items-center justify-content-center mx-auto mb-2 border fw-bold shadow-sm"
-                  style={{
-                    width: "56px",
-                    height: "56px",
-                    backgroundColor: "#F3F4F6",
-                    borderColor: "#E5E7EB",
-                    color: "#1E293B",
-                    borderRadius: "14px",
-                    fontSize: "1.15rem",
-                  }}
-                >
-                  30
-                </div>
-                <span className="fw-bold small text-secondary d-block" style={{ fontSize: "0.82rem" }}>
-                  Booking
-                </span>
+                <Link href="/admin/follow-up?outcome=Lost" className="text-decoration-none text-dark d-block">
+                  <div
+                    className="d-flex align-items-center justify-content-center mx-auto mb-2 border fw-bold shadow-sm"
+                    style={{
+                      width: "54px",
+                      height: "54px",
+                      backgroundColor: "#FEE2E2",
+                      borderColor: "#FECACA",
+                      color: "#DC2626",
+                      borderRadius: "14px",
+                      fontSize: "1.15rem",
+                    }}
+                  >
+                    {isLoadingStats ? "..." : (pipeline.lost ?? 0)}
+                  </div>
+                  <span className="fw-bold small text-danger d-block text-truncate" style={{ fontSize: "0.8rem" }} title="Lost to Competitor / Lost of Lead">
+                    Lost Lead
+                  </span>
+                </Link>
               </div>
 
-              {/* Stage 6: Delivered (Light Green) */}
+              {/* 6: Deal Won / Booking -> Deal Won */}
               <div className="col-4 col-sm-4 col-md-2">
-                <div
-                  className="d-flex align-items-center justify-content-center mx-auto mb-2 border fw-bold shadow-sm"
-                  style={{
-                    width: "56px",
-                    height: "56px",
-                    backgroundColor: "#DCFCE7",
-                    borderColor: "#BBF7D0",
-                    color: "#16A34A",
-                    borderRadius: "14px",
-                    fontSize: "1.15rem",
-                  }}
-                >
-                  24
-                </div>
-                <span className="fw-bold small d-block" style={{ fontSize: "0.82rem", color: "#16A34A" }}>
-                  Delivered
-                </span>
+                <Link href="/admin/follow-up?outcome=Deal Won" className="text-decoration-none text-dark d-block">
+                  <div
+                    className="d-flex align-items-center justify-content-center mx-auto mb-2 border fw-bold shadow-sm"
+                    style={{
+                      width: "54px",
+                      height: "54px",
+                      backgroundColor: "#DCFCE7",
+                      borderColor: "#BBF7D0",
+                      color: "#16A34A",
+                      borderRadius: "14px",
+                      fontSize: "1.15rem",
+                    }}
+                  >
+                    {isLoadingStats ? "..." : (pipeline.deal_won ?? 0)}
+                  </div>
+                  <span className="fw-bold small d-block text-truncate" style={{ fontSize: "0.8rem", color: "#16A34A" }} title="Deal Won / Booking">
+                    Deal Won
+                  </span>
+                </Link>
               </div>
             </div>
           </div>
@@ -506,7 +538,12 @@ export default function SuperAdminDashboard({ onAddLead }) {
               )}
             </div>
 
-            {approvals.length === 0 ? (
+            {isLoadingApprovals ? (
+              <div className="card border rounded-4 p-4 text-center text-muted bg-white">
+                <div className="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                <span>Loading pending approval requests...</span>
+              </div>
+            ) : approvals.length === 0 ? (
               <div className="card border rounded-4 p-4 text-center text-muted bg-white">
                 <i className="bi bi-check-circle-fill text-success fs-3 mb-2"></i>
                 <p className="mb-0 fw-semibold">All pending discount and sourcing approvals cleared!</p>
@@ -579,7 +616,7 @@ export default function SuperAdminDashboard({ onAddLead }) {
 
         {/* Right Column (Desktop: col-lg-5, col-xl-4) */}
         <div className="col-12 col-lg-5 col-xl-4">
-          {/* SECTION: UPCOMING DELIVERIES */}
+          {/* SECTION: UPCOMING DELIVERIES (Dynamic from Deals) */}
           <div className="card border rounded-4 p-3 bg-white shadow-sm mb-4">
             <div className="d-flex align-items-center gap-2 mb-3">
               <i className="bi bi-truck text-dark fs-5"></i>
@@ -587,59 +624,46 @@ export default function SuperAdminDashboard({ onAddLead }) {
             </div>
 
             <div className="d-flex flex-column">
-              {/* Delivery Item 1 */}
-              <div className="py-2 d-flex align-items-center justify-content-between">
-                <div>
-                  <h6 className="fw-bold text-dark mb-0 small">Rajesh Patel</h6>
-                  <span className="text-secondary small" style={{ fontSize: "0.78rem" }}>
-                    Tomorrow • Ahmedabad
-                  </span>
+              {isLoadingStats ? (
+                <div className="text-center py-3 text-muted small">
+                  <div className="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                  Loading deliveries...
                 </div>
-                <span
-                  className="badge fw-bold px-2 py-1 rounded-2"
-                  style={{ backgroundColor: "#DCFCE7", color: "#16A34A", fontSize: "0.72rem" }}
-                >
-                  Ready for Delivery
-                </span>
-              </div>
-              <hr className="my-2" style={{ borderColor: "#F1F5F9" }} />
-
-              {/* Delivery Item 2 */}
-              <div className="py-2 d-flex align-items-center justify-content-between">
-                <div>
-                  <h6 className="fw-bold text-dark mb-0 small">Neha Sharma</h6>
-                  <span className="text-secondary small" style={{ fontSize: "0.78rem" }}>
-                    28 Aug • Surat
-                  </span>
+              ) : upcomingDeliveries.length === 0 ? (
+                <div className="text-center py-3 text-muted small">
+                  No upcoming deliveries scheduled.
                 </div>
-                <span
-                  className="badge fw-bold px-2 py-1 rounded-2"
-                  style={{ backgroundColor: "#FEF3C7", color: "#D97706", fontSize: "0.72rem" }}
-                >
-                  PDI Pending
-                </span>
-              </div>
-              <hr className="my-2" style={{ borderColor: "#F1F5F9" }} />
-
-              {/* Delivery Item 3 */}
-              <div className="py-2 d-flex align-items-center justify-content-between">
-                <div>
-                  <h6 className="fw-bold text-dark mb-0 small">Vikram Desai</h6>
-                  <span className="text-secondary small" style={{ fontSize: "0.78rem" }}>
-                    30 Aug • Vadodara
-                  </span>
-                </div>
-                <span
-                  className="badge fw-bold px-2 py-1 rounded-2"
-                  style={{ backgroundColor: "#E0E7FF", color: "#4F46E5", fontSize: "0.72rem" }}
-                >
-                  In Transit
-                </span>
-              </div>
+              ) : (
+                upcomingDeliveries.map((item, idx) => (
+                  <React.Fragment key={item.id || idx}>
+                    <div className="py-2 d-flex align-items-center justify-content-between">
+                      <div>
+                        <h6 className="fw-bold text-dark mb-0 small">{item.customer_name}</h6>
+                        <span className="text-secondary small" style={{ fontSize: "0.78rem" }}>
+                          {item.detail} {item.vehicle ? `• ${item.vehicle}` : ""}
+                        </span>
+                      </div>
+                      <span
+                        className="badge fw-bold px-2 py-1 rounded-2"
+                        style={{
+                          backgroundColor: item.badge_bg || "#DCFCE7",
+                          color: item.badge_color || "#16A34A",
+                          fontSize: "0.72rem",
+                        }}
+                      >
+                        {item.status_label || "Scheduled"}
+                      </span>
+                    </div>
+                    {idx < upcomingDeliveries.length - 1 && (
+                      <hr className="my-2" style={{ borderColor: "#F1F5F9" }} />
+                    )}
+                  </React.Fragment>
+                ))
+              )}
             </div>
           </div>
 
-          {/* SECTION: RECENT ACTIVITY */}
+          {/* SECTION: RECENT ACTIVITY (Dynamic from Activity Logs) */}
           <div className="card border rounded-4 p-3 bg-white shadow-sm mb-4">
             <div className="d-flex align-items-center gap-2 mb-3">
               <i className="bi bi-clock-history text-dark fs-5"></i>
@@ -648,254 +672,53 @@ export default function SuperAdminDashboard({ onAddLead }) {
 
             {/* Vertical Activity Timeline */}
             <div className="position-relative ps-3">
-              {/* Activity 1 */}
-              <div className="position-relative mb-4">
-                <span
-                  className="position-absolute rounded-circle"
-                  style={{
-                    width: "10px",
-                    height: "10px",
-                    backgroundColor: "#2563EB",
-                    left: "-18px",
-                    top: "4px",
-                  }}
-                ></span>
-                {/* Connecting Line */}
-                <div
-                  className="position-absolute"
-                  style={{
-                    width: "2px",
-                    backgroundColor: "#E2E8F0",
-                    left: "-14px",
-                    top: "16px",
-                    bottom: "-16px",
-                  }}
-                ></div>
-                <div className="fw-semibold text-dark small">New lead created Rahul Patel</div>
-                <span className="text-muted" style={{ fontSize: "0.74rem" }}>
-                  10 min ago
-                </span>
-              </div>
+              {isLoadingStats ? (
+                <div className="text-muted small py-2">
+                  <div className="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                  Loading activity...
+                </div>
+              ) : recentActivities.length === 0 ? (
+                <div className="text-muted small py-2">No recent activities recorded.</div>
+              ) : (
+                recentActivities.map((act, idx) => (
+                  <div key={act.id || idx} className={`position-relative ${idx < recentActivities.length - 1 ? "mb-4" : ""}`}>
+                    {/* Circle Bullet */}
+                    <span
+                      className="position-absolute rounded-circle"
+                      style={{
+                        width: "10px",
+                        height: "10px",
+                        backgroundColor: act.dot_color || "#2563EB",
+                        left: "-18px",
+                        top: "4px",
+                      }}
+                    ></span>
 
-              {/* Activity 2 */}
-              <div className="position-relative mb-4">
-                <span
-                  className="position-absolute rounded-circle"
-                  style={{
-                    width: "10px",
-                    height: "10px",
-                    backgroundColor: "#16A34A",
-                    left: "-18px",
-                    top: "4px",
-                  }}
-                ></span>
-                {/* Connecting Line */}
-                <div
-                  className="position-absolute"
-                  style={{
-                    width: "2px",
-                    backgroundColor: "#E2E8F0",
-                    left: "-14px",
-                    top: "16px",
-                    bottom: "-16px",
-                  }}
-                ></div>
-                <div className="fw-semibold text-dark small">Payment received ₹50,000 for BKG-042</div>
-                <span className="text-muted" style={{ fontSize: "0.74rem" }}>
-                  45 min ago
-                </span>
-              </div>
+                    {/* Connecting Line */}
+                    {idx < recentActivities.length - 1 && (
+                      <div
+                        className="position-absolute"
+                        style={{
+                          width: "2px",
+                          backgroundColor: "#E2E8F0",
+                          left: "-14px",
+                          top: "16px",
+                          bottom: "-16px",
+                        }}
+                      ></div>
+                    )}
 
-              {/* Activity 3 */}
-              <div className="position-relative">
-                <span
-                  className="position-absolute rounded-circle"
-                  style={{
-                    width: "10px",
-                    height: "10px",
-                    backgroundColor: "#F59E0B",
-                    left: "-18px",
-                    top: "4px",
-                  }}
-                ></span>
-                <div className="fw-semibold text-dark small">Quotation sent to Amit Kumar (Creta SX)</div>
-                <span className="text-muted" style={{ fontSize: "0.74rem" }}>
-                  2 hours ago
-                </span>
-              </div>
+                    <div className="fw-semibold text-dark small">{act.text}</div>
+                    <span className="text-muted" style={{ fontSize: "0.74rem" }}>
+                      {act.time_ago}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
       </div>
-
-      {/* ----------------------------------------------------
-          5. MODALS (Quick Customer & Requirement)
-          ---------------------------------------------------- */}
-      {/* Quick Add Customer Modal */}
-      {showCustomerModal && (
-        <div className="modal-backdrop-custom">
-          <div className="modal-dialog-custom modal-md" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-custom" style={{ backgroundColor: "#0D1554", color: "#fff" }}>
-              <h5 className="modal-title-custom text-white mb-0 fs-6">
-                <i className="bi bi-person-plus-fill me-2"></i> Add New Customer
-              </h5>
-              <button
-                type="button"
-                className="btn-close btn-close-white"
-                onClick={() => setShowCustomerModal(false)}
-              ></button>
-            </div>
-
-            <form onSubmit={handleSaveCustomer}>
-              <div className="modal-body-custom">
-                <div className="row g-3">
-                  <div className="col-12">
-                    <label className="form-label fw-semibold small">Customer Full Name *</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="e.g. Ramesh Chandra"
-                      required
-                      value={custForm.name}
-                      onChange={(e) => setCustForm({ ...custForm, name: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="col-md-6">
-                    <label className="form-label fw-semibold small">Phone Number *</label>
-                    <input
-                      type="tel"
-                      className="form-control"
-                      placeholder="+91 98765 43210"
-                      required
-                      value={custForm.phone}
-                      onChange={(e) => setCustForm({ ...custForm, phone: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="col-md-6">
-                    <label className="form-label fw-semibold small">Email Address</label>
-                    <input
-                      type="email"
-                      className="form-control"
-                      placeholder="customer@email.com"
-                      value={custForm.email}
-                      onChange={(e) => setCustForm({ ...custForm, email: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="col-12">
-                    <label className="form-label fw-semibold small">City / Location</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="e.g. Ahmedabad, Surat"
-                      value={custForm.city}
-                      onChange={(e) => setCustForm({ ...custForm, city: e.target.value })}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="modal-footer-custom">
-                <button
-                  type="button"
-                  className="btn btn-light border px-3"
-                  onClick={() => setShowCustomerModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn text-white px-4 fw-semibold"
-                  style={{ backgroundColor: "#0D1554" }}
-                >
-                  Save Customer
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Quick Add Requirement Modal */}
-      {showReqModal && (
-        <div className="modal-backdrop-custom">
-          <div className="modal-dialog-custom modal-md" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-custom" style={{ backgroundColor: "#0D1554", color: "#fff" }}>
-              <h5 className="modal-title-custom text-white mb-0 fs-6">
-                <i className="bi bi-card-checklist me-2"></i> Add Customer Requirement
-              </h5>
-              <button
-                type="button"
-                className="btn-close btn-close-white"
-                onClick={() => setShowReqModal(false)}
-              ></button>
-            </div>
-
-            <form onSubmit={handleSaveRequirement}>
-              <div className="modal-body-custom">
-                <div className="row g-3">
-                  <div className="col-12">
-                    <label className="form-label fw-semibold small">Customer Name *</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="e.g. Anand Sharma"
-                      required
-                      value={reqForm.customerName}
-                      onChange={(e) => setReqForm({ ...reqForm, customerName: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="col-md-6">
-                    <label className="form-label fw-semibold small">Vehicle Model *</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="e.g. Creta SX Opt"
-                      required
-                      value={reqForm.model}
-                      onChange={(e) => setReqForm({ ...reqForm, model: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="col-md-6">
-                    <label className="form-label fw-semibold small">Budget Range</label>
-                    <select
-                      className="form-select"
-                      value={reqForm.budget}
-                      onChange={(e) => setReqForm({ ...reqForm, budget: e.target.value })}
-                    >
-                      <option value="₹10 - 15 Lakhs">₹10 - 15 Lakhs</option>
-                      <option value="₹15 - 20 Lakhs">₹15 - 20 Lakhs</option>
-                      <option value="₹20 - 25 Lakhs">₹20 - 25 Lakhs</option>
-                      <option value="Above ₹25 Lakhs">Above ₹25 Lakhs</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div className="modal-footer-custom">
-                <button
-                  type="button"
-                  className="btn btn-light border px-3"
-                  onClick={() => setShowReqModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn text-white px-4 fw-semibold"
-                  style={{ backgroundColor: "#0D1554" }}
-                >
-                  Save Requirement
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

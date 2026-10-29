@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import axios from "axios";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
 
@@ -14,9 +15,11 @@ import AccountantDashboard from "./components/AccountantDashboard";
 
 export default function DashboardPage() {
   const { showToast } = useToast();
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
   const [currentUser, setCurrentUser] = useState(null);
   const [selectedRole, setSelectedRole] = useState("Super Admin");
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
+  const [isSubmittingLead, setIsSubmittingLead] = useState(false);
 
   // New Lead Form state
   const [newLead, setNewLead] = useState({
@@ -55,27 +58,59 @@ export default function DashboardPage() {
     showToast(`Switched view to "${role}" Dashboard`, "info");
   };
 
-  const handleAddLeadSubmit = (e) => {
+  const handleAddLeadSubmit = async (e) => {
     e.preventDefault();
     const cleanPhone = newLead.phone ? newLead.phone.trim().replace(/\D/g, "") : "";
     if (!cleanPhone || cleanPhone.length !== 10 || !/^[6-9]\d{9}$/.test(cleanPhone)) {
       showToast("Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9.", "error");
       return;
     }
-    showToast(
-      `New Lead created for ${newLead.name} (${newLead.brand} ${newLead.model}) with ${newLead.priority} priority!`,
-      "success"
-    );
-    setShowAddLeadModal(false);
-    setNewLead({
-      name: "",
-      phone: "",
-      brand: "Maruti Suzuki",
-      model: "Grand Vitara",
-      budget: "₹20 - 25 Lakhs",
-      priority: "Hot",
-      source: "Website",
-    });
+
+    setIsSubmittingLead(true);
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("auth_token") : null;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+      await axios.post(
+        `${API_URL}/leads`,
+        {
+          name: newLead.name,
+          phone: cleanPhone,
+          brand_name: newLead.brand,
+          model_variant: newLead.model,
+          source_name: newLead.source,
+          priority: newLead.priority,
+          purchase_timeline: newLead.budget,
+          status_name: "Follow-up",
+        },
+        { headers }
+      );
+
+      showToast(
+        `New Lead created for ${newLead.name} (${newLead.brand} ${newLead.model}) successfully!`,
+        "success"
+      );
+      setShowAddLeadModal(false);
+      setNewLead({
+        name: "",
+        phone: "",
+        brand: "Maruti Suzuki",
+        model: "Grand Vitara",
+        budget: "₹20 - 25 Lakhs",
+        priority: "Hot",
+        source: "Website",
+      });
+      window.dispatchEvent(new Event("csd_approvals_updated"));
+    } catch (err) {
+      console.error("Create lead error:", err);
+      const errMsg =
+        err.response?.data?.message ||
+        (err.response?.data?.errors ? Object.values(err.response.data.errors).flat().join(", ") : null) ||
+        "Failed to create lead. Please check the details and try again.";
+      showToast(errMsg, "error");
+    } finally {
+      setIsSubmittingLead(false);
+    }
   };
 
   const getDashboardTitle = () => {
@@ -290,8 +325,17 @@ export default function DashboardPage() {
                   >
                     Cancel
                   </button>
-                  <button type="submit" className="btn btn-primary">
-                    <i className="bi bi-check-circle me-1"></i> Create Lead
+                  <button type="submit" className="btn btn-primary" disabled={isSubmittingLead}>
+                    {isSubmittingLead ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                        Creating Lead...
+                      </>
+                    ) : (
+                      <>
+                        <i className="bi bi-check-circle me-1"></i> Create Lead
+                      </>
+                    )}
                   </button>
                 </div>
               </form>

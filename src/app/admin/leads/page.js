@@ -127,6 +127,34 @@ export default function LeadsPage() {
     window.addEventListener("csd_approvals_updated", handleApprovalsUpdated);
     return () => window.removeEventListener("csd_approvals_updated", handleApprovalsUpdated);
   }, []);
+
+  // Sync statusFilter from URL query parameters (e.g. /admin/leads?status=Follow-up)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const urlStatus = params.get("status");
+      if (urlStatus !== null) {
+        if (urlStatus === "all" || urlStatus === "" || urlStatus === "All") {
+          setStatusFilter("");
+        } else {
+          const sLower = urlStatus.toLowerCase();
+          if (sLower.includes("follow")) {
+            setStatusFilter("Follow-up");
+          } else if (sLower.includes("quote") || sLower.includes("quotation")) {
+            setStatusFilter("Quotation Sent");
+          } else if (sLower.includes("deal") || sLower.includes("booking") || sLower.includes("won")) {
+            setStatusFilter("Deal & Booking");
+          } else if (sLower.includes("lost")) {
+            setStatusFilter("Lost");
+          } else if (sLower.includes("new")) {
+            setStatusFilter("New");
+          } else {
+            setStatusFilter(urlStatus);
+          }
+        }
+      }
+    }
+  }, [pathname]);
   const can = (permission) => hasPermission(permission, currentUser);
   const isSalesManager =
     hasRole(["sales_manager", "manager"], currentUser) ||
@@ -424,7 +452,17 @@ export default function LeadsPage() {
       if (brandRes.data?.data) setBrands(brandRes.data.data);
       if (sourceRes.data?.data) setSources(sourceRes.data.data);
       if (statusRes.data?.data) setStatuses(statusRes.data.data);
-      if (userRes.data?.data) setUsersList(userRes.data.data);
+      if (userRes.data?.data) {
+        const rawUsers = Array.isArray(userRes.data.data) ? userRes.data.data : [];
+        const seen = new Set();
+        const uniqueUsers = rawUsers.filter((u) => {
+          const key = u.id ? `id_${u.id}` : `name_${u.name}_${u.role}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        setUsersList(uniqueUsers);
+      }
     } catch (error) {
       console.log("Error fetching master dropdowns:", error);
     }
@@ -1359,10 +1397,16 @@ export default function LeadsPage() {
     "Alexander Vance (Sales Director)",
     "Rajesh Kumar (Sales Executive)",
   ];
-  const userExecList = usersList
-    .filter((u) => u.status === "Active" || !u.status)
-    .map((u) => `${u.name} (${u.role || "Executive"})`);
-  const executiveOptions = userExecList.length > 0 ? userExecList : defaultExecutives;
+  const userExecList = Array.from(
+    new Set(
+      usersList
+        .filter((u) => (u.status === "Active" || !u.status) && u.name)
+        .map((u) => `${u.name} (${u.role || "Executive"})`)
+    )
+  );
+  const executiveOptions = Array.from(
+    new Set(userExecList.length > 0 ? userExecList : defaultExecutives)
+  );
 
   return (
     <AdminLayout>
@@ -2683,8 +2727,8 @@ export default function LeadsPage() {
                         onChange={(e) => setFormData({ ...formData, assigned_user_name: e.target.value })}
                       >
                         <option value="">Choose Executive</option>
-                        {executiveOptions.map((opt) => (
-                          <option key={opt} value={opt}>
+                        {executiveOptions.map((opt, idx) => (
+                          <option key={`${opt}-${idx}`} value={opt}>
                             {opt}
                           </option>
                         ))}
@@ -3102,8 +3146,8 @@ export default function LeadsPage() {
                         value={editLead.assigned_user_name}
                         onChange={(e) => setEditLead({ ...editLead, assigned_user_name: e.target.value })}
                       >
-                        {executiveOptions.map((opt) => (
-                          <option key={opt} value={opt}>
+                        {executiveOptions.map((opt, idx) => (
+                          <option key={`${opt}-${idx}`} value={opt}>
                             {opt}
                           </option>
                         ))}
@@ -3533,8 +3577,8 @@ export default function LeadsPage() {
                   >
                     <option value="">-- Choose Sales Executive --</option>
                     {usersList.length > 0 ? (
-                      usersList.map((user) => (
-                        <option key={user.id} value={user.id}>
+                      usersList.map((user, idx) => (
+                        <option key={user.id ? `${user.id}-${idx}` : `user-${idx}`} value={user.id}>
                           {user.name} {user.role ? `(${user.role})` : ""}
                         </option>
                       ))

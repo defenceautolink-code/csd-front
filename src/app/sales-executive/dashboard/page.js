@@ -61,6 +61,7 @@ export default function SalesExecutiveDashboardPage() {
           `New Lead created for ${newLead.name} (${newLead.brand} ${newLead.model})!`,
           "success"
         );
+        window.dispatchEvent(new Event("csd_approvals_updated"));
         setShowAddLeadModal(false);
         setNewLead({
           name: "",

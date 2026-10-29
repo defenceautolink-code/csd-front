@@ -1038,7 +1038,7 @@ export default function QuotationMainPage() {
                   <span>Print / PDF</span>
                 </button>
               )
-              
+
             ) : (
               <button
                 type="button"
@@ -1063,19 +1063,19 @@ export default function QuotationMainPage() {
               </button>
             )}
 
-             <button
-                  type="button"
-                  className={`btn btn-sm ${recordView === "trash" ? "btn-danger text-white shadow-sm" : "btn-outline-custom"} ms-2`}
-                  onClick={() => {
-                    const next = recordView === "trash" ? "active" : "trash";
-                    setRecordView(next);
-                    setPagination((prev) => ({ ...prev, current_page: 1 }));
-                  }}
-                  title={recordView === "trash" ? "Back to Active Quotations" : "View Deleted Quotations"}
-                >
-                  <i className={`bi ${recordView === "trash" ? "bi-arrow-left" : "bi-trash text-danger"} me-1`}></i>
-                  <span>{recordView === "trash" ? "Active Quotations" : "Trash"}</span>
-                </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${recordView === "trash" ? "btn-danger text-white shadow-sm" : "btn-outline-custom"} ms-2`}
+              onClick={() => {
+                const next = recordView === "trash" ? "active" : "trash";
+                setRecordView(next);
+                setPagination((prev) => ({ ...prev, current_page: 1 }));
+              }}
+              title={recordView === "trash" ? "Back to Active Quotations" : "View Deleted Quotations"}
+            >
+              <i className={`bi ${recordView === "trash" ? "bi-arrow-left" : "bi-trash text-danger"} me-1`}></i>
+              <span>{recordView === "trash" ? "Active Quotations" : "Trash"}</span>
+            </button>
             {/* Tab switch between Live Generator and All Saved Quotes */}
             {can("quotation.saved_view") && (
               <button
