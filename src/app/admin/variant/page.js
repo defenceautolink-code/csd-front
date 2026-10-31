@@ -56,6 +56,8 @@ export default function VariantPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editVariant, setEditVariant] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteError, setDeleteError] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form State for Adding Variant (matches user screenshot)
@@ -242,18 +244,27 @@ export default function VariantPage() {
   // 5. Delete Variant
   const handleDeleteSubmit = async () => {
     if (!deleteTarget) return;
+    setIsDeleting(true);
+    setDeleteError(null);
 
     try {
       const response = await axios.delete(`${API_URL}/variants/${deleteTarget.id}`);
       if (response.data && response.data.status) {
         showToast(`Variant "${deleteTarget.name}" deleted!`, "success");
         setDeleteTarget(null);
+        setDeleteError(null);
         fetchVariants(); // Refresh list
       }
     } catch (error) {
       console.log("Delete Error:", error);
       const msg = error.response?.data?.message || "Failed to delete variant.";
+      setDeleteError(msg);
       showToast(msg, "error");
+      if (typeof window !== "undefined") {
+        window.alert(msg);
+      }
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -462,7 +473,7 @@ export default function VariantPage() {
                           {can("variant.delete") && <button
                             className="btn-action btn-delete"
                             title="Delete Variant"
-                            onClick={() => setDeleteTarget(item)}
+                            onClick={() => { setDeleteTarget(item); setDeleteError(null); }}
                           >
                             <i className="bi bi-trash"></i>
                           </button>}
@@ -821,35 +832,59 @@ export default function VariantPage() {
             ------------------------------------------------------------------ */}
         {deleteTarget && (
           <div className="modal-backdrop-custom">
-            <div className="modal-dialog-custom" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "450px" }}>
+            <div className="modal-dialog-custom" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "460px" }}>
               <div className="modal-header-custom">
-                <h5 className="modal-title-custom text-danger">
-                  <i className="bi bi-exclamation-triangle-fill text-danger me-1"></i> Delete Variant
+                <h5 className="modal-title-custom text-danger d-flex align-items-center gap-2">
+                  <i className="bi bi-exclamation-triangle-fill text-danger"></i> Delete Variant
                 </h5>
                 <button
                   type="button"
                   className="btn-close btn-close-white"
-                  onClick={() => setDeleteTarget(null)}
+                  onClick={() => { setDeleteTarget(null); setDeleteError(null); }}
                 ></button>
               </div>
 
               <div className="modal-body-custom">
-                <p className="text-dark mb-0">
-                  Are you sure you want to delete vehicle variant <strong>"{deleteTarget.name}"</strong>?
-                </p>
+                {deleteError ? (
+                  <div className="alert alert-danger d-flex align-items-start gap-3 mb-0 py-3 px-3 border-0 rounded-3 shadow-sm" style={{ backgroundColor: "#FEF2F2", color: "#991B1B" }}>
+                    <i className="bi bi-shield-slash-fill text-danger fs-4 mt-0 flex-shrink-0"></i>
+                    <div>
+                      <div className="fw-bolder mb-1 fs-6">Deletion Restricted</div>
+                      <div className="small" style={{ lineHeight: "1.45" }}>{deleteError}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-dark mb-0">
+                    Are you sure you want to delete vehicle variant <strong>&quot;{deleteTarget.name}&quot;</strong>?
+                  </p>
+                )}
               </div>
 
-              <div className="modal-footer-custom">
+              <div className="modal-footer-custom d-flex justify-content-end gap-2 pt-3">
                 <button
                   type="button"
                   className="btn btn-outline-custom"
-                  onClick={() => setDeleteTarget(null)}
+                  onClick={() => { setDeleteTarget(null); setDeleteError(null); }}
                 >
-                  Cancel
+                  {deleteError ? "Close" : "Cancel"}
                 </button>
-                <button type="button" className="btn btn-danger" onClick={handleDeleteSubmit}>
-                  Delete Variant
-                </button>
+                {!deleteError && (
+                  <button
+                    type="button"
+                    className="btn btn-danger d-inline-flex align-items-center gap-1"
+                    onClick={handleDeleteSubmit}
+                    disabled={isDeleting}
+                  >
+                    {isDeleting ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                        <span>Checking...</span>
+                      </>
+                    ) : (
+                      "Delete Variant"
+                    )}
+                  </button>
+                )}
               </div>
             </div>
           </div>

@@ -252,22 +252,31 @@ export default function FollowUpPage() {
           });
         }
 
-        // Task 2 & 3: Filter follow-up records to only show 'Follow-up' and 'Quotation Sent' lead stages
         let rawList = res.data.data;
-        if (viewMode !== "trash") {
-          rawList = rawList.filter((item) => {
-            const st = (item.lead?.status_name || item.lead?.status?.name || item.status_name || "").toLowerCase();
-            if (!st) return true;
-            return (
-              st.includes("follow") ||
-              st.includes("quotation") ||
-              st.includes("sent") ||
-              st === "in follow-up"
-            );
-          });
-        }
         if (outcome && outcome !== "all") {
-          rawList = rawList.filter((item) => (item.status || item.outcome) === outcome);
+          const lowerOut = outcome.toLowerCase();
+          rawList = rawList.filter((item) => {
+            const st = (item.status || item.outcome || "").toLowerCase();
+            if (lowerOut.includes("deal") || lowerOut.includes("won") || lowerOut.includes("booking")) {
+              return st.includes("deal") || st.includes("won") || st.includes("booking") || st.includes("completed");
+            }
+            if (lowerOut.includes("quotation") || lowerOut.includes("quote")) {
+              return st.includes("quotation") || st.includes("quote") || st.includes("sent");
+            }
+            if (lowerOut.includes("interested") || lowerOut.includes("call back")) {
+              return st.includes("interested") || st.includes("call back");
+            }
+            if (lowerOut.includes("negotiation") || lowerOut.includes("price")) {
+              return st.includes("negotiation") || st.includes("price");
+            }
+            if (lowerOut.includes("reachable") || lowerOut.includes("busy")) {
+              return st.includes("reachable") || st.includes("busy");
+            }
+            if (lowerOut.includes("lost")) {
+              return st.includes("lost");
+            }
+            return st === lowerOut;
+          });
         }
 
         const todayStr = new Date().toISOString().split("T")[0];
@@ -361,24 +370,24 @@ export default function FollowUpPage() {
   // Debounced fetch on search and filter change
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchFollowUps(1, perPage, searchTerm, startDate, endDate, activeTab, recordView);
+      fetchFollowUps(1, perPage, searchTerm, startDate, endDate, activeTab, recordView, outcomeFilter);
       setCurrentPage(1);
     }, 300);
     return () => clearTimeout(timer);
-  }, [startDate, endDate, searchTerm, activeTab, recordView]);
+  }, [startDate, endDate, searchTerm, activeTab, recordView, outcomeFilter]);
 
   const handlePageChange = (newPage) => {
     setCurrentPage(newPage);
-    fetchFollowUps(newPage, perPage, searchTerm, startDate, endDate, activeTab, recordView);
+    fetchFollowUps(newPage, perPage, searchTerm, startDate, endDate, activeTab, recordView, outcomeFilter);
   };
 
   const handlePerPageChange = (newPerPage) => {
     setPerPage(newPerPage);
     setCurrentPage(1);
-    fetchFollowUps(1, newPerPage, searchTerm, startDate, endDate, activeTab, recordView);
+    fetchFollowUps(1, newPerPage, searchTerm, startDate, endDate, activeTab, recordView, outcomeFilter);
   };
 
-  // Task 3: Submit with explicit Interaction Date & Interaction Time
+  //  Submit with explicit Interaction Date & Interaction Time
   const handleLogSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -410,7 +419,7 @@ export default function FollowUpPage() {
         "success"
       );
       setShowLogModal(false);
-      fetchFollowUps(currentPage, perPage, searchTerm, startDate, endDate, activeTab, recordView);
+      fetchFollowUps(currentPage, perPage, searchTerm, startDate, endDate, activeTab, recordView, outcomeFilter);
     } catch (err) {
       console.log("Submit error:", err);
       if (callLog.request_discount && callLog.discount_amount) {
@@ -440,7 +449,7 @@ export default function FollowUpPage() {
       const res = await axios.delete(`${API_URL}/follow-ups/${id}`, { headers });
       if (res.data?.status) {
         showToast("Follow-up interaction deleted successfully!", "success");
-        fetchFollowUps(currentPage, perPage, searchTerm, startDate, endDate, activeTab, recordView);
+        fetchFollowUps(currentPage, perPage, searchTerm, startDate, endDate, activeTab, recordView, outcomeFilter);
       } else {
         showToast(res.data?.message || "Failed to delete follow-up.", "error");
       }
@@ -458,7 +467,7 @@ export default function FollowUpPage() {
       const res = await axios.post(`${API_URL}/follow-ups/${id}/restore`, {}, { headers });
       if (res.data?.status) {
         showToast("Follow-up interaction restored successfully!", "success");
-        fetchFollowUps(currentPage, perPage, searchTerm, startDate, endDate, activeTab, recordView);
+        fetchFollowUps(currentPage, perPage, searchTerm, startDate, endDate, activeTab, recordView, outcomeFilter);
       } else {
         showToast(res.data?.message || "Failed to restore follow-up.", "error");
       }
@@ -478,7 +487,7 @@ export default function FollowUpPage() {
       if (res.data?.status) {
         showToast("Follow-up interaction permanently deleted forever.", "success");
         setPermanentDeleteTarget(null);
-        fetchFollowUps(currentPage, perPage, searchTerm, startDate, endDate, activeTab, recordView);
+        fetchFollowUps(currentPage, perPage, searchTerm, startDate, endDate, activeTab, recordView, outcomeFilter);
       } else {
         showToast(res.data?.message || "Failed to permanently delete follow-up.", "error");
       }
@@ -892,8 +901,6 @@ export default function FollowUpPage() {
                     <option value="Quotation Requested">Quotation Requested</option>
                     <option value="Negotiation / Price Discussion">Negotiation / Price Discussion</option>
                     <option value="Not Reachable / Busy">Not Reachable / Busy</option>
-                    <option value="Lost to Competitor / Lost of Lead">Lost to Competitor / Lost of Lead</option>
-                    <option value="Deal Won / Booking">Deal Won / Booking</option>
                   </select>
                 </div>
 

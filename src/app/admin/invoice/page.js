@@ -628,20 +628,14 @@ export default function GenerateInvoicePage() {
         <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
           <div>
             <div className="d-flex align-items-center gap-2 mb-1">
-              <span className="badge bg-primary-subtle text-primary fw-bold px-2 py-1" style={{ fontSize: "0.75rem" }}>
-                <i className="bi bi-shield-check me-1"></i>Official CSD AFD Billing
-              </span>
-              <span className="badge bg-success-subtle text-success fw-bold px-2 py-1" style={{ fontSize: "0.75rem" }}>
-                <i className="bi bi-link-45deg me-1"></i>Live Deal Sync Active
-              </span>
+              
+              
             </div>
             <h3 className="fw-bold text-dark mb-0 d-flex align-items-center gap-2">
               <i className="bi bi-receipt-cutoff text-primary"></i>
               Vehicle Deals & Invoices Register
             </h3>
-            <p className="text-muted small mb-0">
-              Manage locked deals, generate sequential tax invoices (`DAL-/YYYY/MM/XXXX`), and track payment receipts.
-            </p>
+            
           </div>
 
           <div className="d-flex flex-wrap align-items-center gap-2">

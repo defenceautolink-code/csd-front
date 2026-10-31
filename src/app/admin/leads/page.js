@@ -1645,33 +1645,37 @@ export default function LeadsPage() {
                         onClick={(e) => e.stopPropagation()}
                       >
                         <h6 className="dropdown-header text-muted px-2 py-1 small fw-bold">Change Status To:</h6>
-                        {statuses.length > 0 ? (
-                          statuses.map((st) => (
+                        {STATIC_LEAD_STATUSES.map((stName) => {
+                          const matchedStatus = statuses.find(
+                            (s) =>
+                              s.name?.toLowerCase().trim() === stName.toLowerCase().trim() ||
+                              (stName === "Follow-up" && (s.name?.toLowerCase().includes("follow") || s.name === "In Follow-Up")) ||
+                              (stName === "Deal & Booking" && (s.name?.toLowerCase().includes("deal") || s.name?.toLowerCase().includes("won"))) ||
+                              (stName === "Lost" && s.name?.toLowerCase().includes("lost"))
+                          );
+                          const iconClass =
+                            stName === "New"
+                              ? "bi-stars text-primary"
+                              : stName === "Follow-up"
+                              ? "bi-telephone-forward text-warning"
+                              : stName === "Quotation Sent"
+                              ? "bi-file-earmark-spreadsheet text-info"
+                              : stName === "Deal & Booking"
+                              ? "bi-trophy-fill text-success"
+                              : "bi-x-circle-fill text-danger";
+
+                          return (
                             <button
-                              key={st.id}
+                              key={stName}
                               type="button"
-                              className="dropdown-item"
-                              onClick={() => handleBulkStatusUpdate(st.id, st.name)}
+                              className="dropdown-item d-flex align-items-center gap-2 py-2"
+                              onClick={() => handleBulkStatusUpdate(matchedStatus?.id || null, stName)}
                             >
-                              <i className="bi bi-arrow-right-circle text-primary"></i>
-                              <span>{st.name}</span>
+                              <i className={`bi ${iconClass}`}></i>
+                              <span className="fw-semibold">{stName}</span>
                             </button>
-                          ))
-                        ) : (
-                          ["New", "Contacted", "Qualified", "In Negotiation", "Deal Won", "Deal Lost"].map(
-                            (stName) => (
-                              <button
-                                key={stName}
-                                type="button"
-                                className="dropdown-item"
-                                onClick={() => handleBulkStatusUpdate(null, stName)}
-                              >
-                                <i className="bi bi-arrow-right-circle text-primary"></i>
-                                <span>{stName}</span>
-                              </button>
-                            )
-                          )
-                        )}
+                          );
+                        })}
                       </div>
                     )}
                   </div>}
@@ -2406,6 +2410,7 @@ export default function LeadsPage() {
                       <input
                         type="date"
                         className="form-control"
+                        max={new Date().toISOString().split("T")[0]}
                         value={formData.birth_date || ""}
                         onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
                       />
@@ -2418,6 +2423,7 @@ export default function LeadsPage() {
                       <input
                         type="date"
                         className="form-control"
+                        max={new Date().toISOString().split("T")[0]}
                         value={formData.anniversary_date || ""}
                         onChange={(e) => setFormData({ ...formData, anniversary_date: e.target.value })}
                       />
@@ -2876,6 +2882,7 @@ export default function LeadsPage() {
                       <input
                         type="date"
                         className="form-control"
+                        max={new Date().toISOString().split("T")[0]}
                         value={editLead.birth_date ? (editLead.birth_date.split('T')[0] || editLead.birth_date) : ""}
                         onChange={(e) => setEditLead({ ...editLead, birth_date: e.target.value })}
                       />
@@ -2888,6 +2895,7 @@ export default function LeadsPage() {
                       <input
                         type="date"
                         className="form-control"
+                        max={new Date().toISOString().split("T")[0]}
                         value={editLead.anniversary_date ? (editLead.anniversary_date.split('T')[0] || editLead.anniversary_date) : ""}
                         onChange={(e) => setEditLead({ ...editLead, anniversary_date: e.target.value })}
                       />
@@ -4003,3 +4011,6 @@ export default function LeadsPage() {
     </AdminLayout>
   );
 }
+
+
+

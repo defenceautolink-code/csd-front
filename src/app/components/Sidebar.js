@@ -150,6 +150,16 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                   <span>My Assigned Leads</span>
                 </Link>
               </li>}
+              {canNavigate("/sales-executive/pipeline") && <li className="nav-item">
+                <Link
+                  href="/sales-executive/pipeline"
+                  className={`nav-link ${isLinkActive("/sales-executive/pipeline") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-funnel"></i>
+                  <span>Leads Pipeline</span>
+                </Link>
+              </li>}
               {canNavigate("/sales-executive/follow-up") && <li className="nav-item">
                 <Link
                   href="/sales-executive/follow-up"
@@ -180,16 +190,6 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                   <span>Deals & Bookings</span>
                 </Link>
               </li>
-              {canNavigate("/sales-executive/pipeline") && <li className="nav-item">
-                <Link
-                  href="/sales-executive/pipeline"
-                  className={`nav-link ${isLinkActive("/sales-executive/pipeline") ? "active" : ""}`}
-                  onClick={onCloseMobile}
-                >
-                  <i className="bi bi-funnel"></i>
-                  <span>Leads Pipeline</span>
-                </Link>
-              </li>}
               <li className="nav-item">
                 <Link
                   href="/sales-executive/insurance"
@@ -479,16 +479,6 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                 >
                   <i className="bi bi-bar-chart-line-fill"></i>
                   <span>Financial Reports</span>
-                </Link>
-              </li>
-              <li className="nav-item">
-                <Link
-                  href="/accountant/update-price"
-                  className={`nav-link ${isLinkActive("/accountant/update-price") ? "active" : ""}`}
-                  onClick={onCloseMobile}
-                >
-                  <i className="bi bi-currency-rupee"></i>
-                  <span>Update Pricing</span>
                 </Link>
               </li>
               <li className="nav-item">
