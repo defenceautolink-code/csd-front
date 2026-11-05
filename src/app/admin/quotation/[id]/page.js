@@ -7,6 +7,7 @@ import AdminLayout from "@/app/components/AdminLayout";
 import { quotationApi } from "@/lib/quotationApi";
 import api from "@/lib/axios";
 import { useToast } from "@/app/components/Toast";
+import ConvertDealModal from "@/app/admin/leads/ConvertDealModal";
 
 export default function QuotationDetailsPage() {
   const params = useParams();
@@ -33,6 +34,10 @@ export default function QuotationDetailsPage() {
 
   const [quotation, setQuotation] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Convert to Deal State
+  const [showConvertDealModal, setShowConvertDealModal] = useState(false);
+  const [dealConvertLead, setDealConvertLead] = useState(null);
 
   // Send Email Modal State
   const [showSendModal, setShowSendModal] = useState(false);
@@ -135,6 +140,64 @@ export default function QuotationDetailsPage() {
     } finally {
       setIsSendingEmail(false);
     }
+  };
+
+  // Convert to Deal Handler
+  const handleOpenConvertDeal = async () => {
+    if (!quotation) return;
+
+    let leadId = quotation.lead_id || quotation.lead?.id;
+    let baseLead = quotation.lead || {};
+
+    if (!leadId) {
+      try {
+        const phone = (quotation.customer_phone || "").trim();
+        const email = (quotation.customer_email || "").trim();
+        const searchRes = await api.get(`/leads?search=${encodeURIComponent(phone || email || quotation.customer_name || "")}`);
+        const found = searchRes?.data?.data?.find(
+          (l) => (phone && l.phone === phone) || (email && l.email === email) || (quotation.customer_name && l.name?.toLowerCase() === quotation.customer_name.toLowerCase())
+        );
+        if (found) {
+          leadId = found.id;
+          baseLead = found;
+        } else {
+          // Auto create a customer lead record so conversion can link properly
+          const createRes = await api.post("/leads", {
+            name: quotation.customer_name || "Customer",
+            phone: quotation.customer_phone || "9800000000",
+            email: quotation.customer_email || null,
+            model_variant: modelSpec || "Standard",
+            brand_name: carName || "Vehicle",
+            status_name: "Quotation Sent",
+          });
+          const createdLead = createRes?.data?.data || createRes?.data;
+          if (createdLead?.id) {
+            leadId = createdLead.id;
+            baseLead = createdLead;
+          }
+        }
+      } catch (err) {
+        console.error("Auto resolve lead error:", err);
+      }
+    }
+
+    const targetLead = {
+      ...baseLead,
+      id: leadId,
+      name: quotation.customer_name || baseLead.name || "",
+      phone: quotation.customer_phone || baseLead.phone || "",
+      email: quotation.customer_email || baseLead.email || "",
+      model_variant: modelSpec || baseLead.model_variant || "",
+      brand_name: carName || baseLead.brand_name || "",
+      quotation_id: quotation.id,
+      total_deal_amount: quotation.grand_total,
+      budget: quotation.grand_total,
+      assigned_to: baseLead.assigned_to || quotation.created_by,
+      assigned_user_name: baseLead.assigned_user_name || executiveName,
+    };
+
+    setDealConvertLead(targetLead);
+    setShowConvertDealModal(true);
   };
 
   const handleDelete = async () => {
@@ -285,17 +348,21 @@ export default function QuotationDetailsPage() {
     const it = quotation.items?.find((item) =>
       item.item_name && item.item_name.toLowerCase().includes(pattern.toLowerCase())
     );
-    if (!it || !it.unit_price || Number(it.unit_price) === 0) return "N.A";
+    if (!it || it.unit_price === undefined || it.unit_price === null || Number(it.unit_price) <= 0) return "N.A";
     return Number(it.unit_price).toLocaleString("en-IN");
   };
 
   const gjRto = getItemVal("Gujarat State RTO") !== "N.A" ? getItemVal("Gujarat State RTO") : getItemVal("GJ RTO");
-  const bhRto = getItemVal("BH Series") !== "N.A" ? getItemVal("BH Series") : getItemVal("BH RTO");
+  const bhRto = getItemVal("BH Series") !== "N.A"
+    ? getItemVal("BH Series")
+    : (getItemVal("BH RTO") !== "N.A" ? getItemVal("BH RTO") : (getItemVal("BH") !== "N.A" ? getItemVal("BH") : "N.A"));
   const crtm = getItemVal("CRTM");
   const insurance = getItemVal("Insurance");
   const accessories = getItemVal("Accessories");
   const warranty = getItemVal("Warranty");
-  const diffAmtCash = getItemVal("Difference") !== "N.A" ? getItemVal("Difference") : getItemVal("Cash Adjustment");
+  const diffAmtCash = getItemVal("Difference") !== "N.A"
+    ? getItemVal("Difference")
+    : (getItemVal("Cash Adjustment") !== "N.A" ? getItemVal("Cash Adjustment") : (getItemVal("DIFFERENCE AMT CASH") !== "N.A" ? getItemVal("DIFFERENCE AMT CASH") : "N.A"));
 
   const displayDate = formatDisplayDate(quotation.quotation_date);
   const clientName = quotation.customer_name || "";
@@ -392,6 +459,16 @@ export default function QuotationDetailsPage() {
               <i className="bi bi-arrow-left me-1"></i>
               <span>All Quotes</span>
             </Link>
+
+            <button
+              type="button"
+              className="btn btn-success d-flex align-items-center gap-1 shadow-sm"
+              onClick={handleOpenConvertDeal}
+              title="Convert this Quotation to Deal & Booking"
+            >
+              <i className="bi bi-trophy-fill me-1"></i>
+              <span>Convert to Deal</span>
+            </button>
 
             <button type="button" className="btn btn-outline-custom" onClick={handlePrint}>
               <i className="bi bi-printer-fill me-1"></i>
@@ -674,6 +751,23 @@ export default function QuotationDetailsPage() {
           </div>
         </div>
       </div>
+
+      {/* Convert to Deal Modal */}
+      {showConvertDealModal && dealConvertLead && (
+        <ConvertDealModal
+          isOpen={showConvertDealModal}
+          lead={dealConvertLead}
+          onClose={() => {
+            setShowConvertDealModal(false);
+            setDealConvertLead(null);
+          }}
+          onSuccess={() => {
+            showToast("Quotation successfully converted to Deal & Booking!", "success");
+            fetchQuotation();
+          }}
+          showToast={showToast}
+        />
+      )}
     </AdminLayout>
   );
 }

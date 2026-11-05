@@ -621,6 +621,28 @@ function SendQuotationPageContent() {
         });
       }
 
+      if (parseAmount(bhRto) > 0) {
+        itemsArray.push({
+          item_name: "BH Series RTO & Road Tax",
+          description: "Bharat Series 2-Year Road Tax & Registration",
+          quantity: 1,
+          unit_price: parseAmount(bhRto),
+          discount: 0,
+          tax: 0,
+        });
+      }
+
+      if (parseAmount(crtm) > 0) {
+        itemsArray.push({
+          item_name: "CRTM Charges",
+          description: "Temporary permit & transit charges",
+          quantity: 1,
+          unit_price: parseAmount(crtm),
+          discount: 0,
+          tax: 0,
+        });
+      }
+
       if (parseAmount(insurance) > 0) {
         itemsArray.push({
           item_name: "Comprehensive Zero-Dep Insurance (1+3 Yrs)",
@@ -649,6 +671,17 @@ function SendQuotationPageContent() {
           description: "Manufacturer extended coverage",
           quantity: 1,
           unit_price: parseAmount(warranty),
+          discount: 0,
+          tax: 0,
+        });
+      }
+
+      if (parseAmount(diffAmtCash) > 0) {
+        itemsArray.push({
+          item_name: "Difference / Cash Adjustment",
+          description: "Price difference / cash adjustment",
+          quantity: 1,
+          unit_price: parseAmount(diffAmtCash),
           discount: 0,
           tax: 0,
         });
@@ -719,9 +752,11 @@ function SendQuotationPageContent() {
         }
 
         showToast(`Quotation #${res.data.quotation_number} saved and added to Quotations!`, "success");
-        setTimeout(() => {
-          router.push("/admin/quotation");
-        }, 400);
+        if (status !== "sent") {
+          setTimeout(() => {
+            router.push("/admin/quotation");
+          }, 400);
+        }
         return res.data;
       }
     } catch (err) {
