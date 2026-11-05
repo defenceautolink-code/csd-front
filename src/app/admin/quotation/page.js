@@ -12,8 +12,49 @@ import { hasPermission } from "@/utils/auth";
 import Pagination from "@/components/common/Pagination";
 import * as XLSX from "xlsx";
 import { logActivity } from "@/utils/activityLogger";
+import ConvertDealModal from "@/app/admin/leads/ConvertDealModal";
+import discountApprovalApi from "@/services/discountApprovalApi";
 
 export default function QuotationMainPage() {
+  const [selectedQuoteForDeal, setSelectedQuoteForDeal] = useState(null);
+  const [showConvertDealModal, setShowConvertDealModal] = useState(false);
+  const [activeActionMenuId, setActiveActionMenuId] = useState(null);
+
+  // Searchable lead selector state (Task 10)
+  const [leadSearchText, setLeadSearchText] = useState("");
+  const [showLeadDropdown, setShowLeadDropdown] = useState(false);
+
+  // Comparable variants (Task 6) - Range: +/- 1,00,000
+  const [comparableVariants, setComparableVariants] = useState([]);
+  const [isLoadingComparable, setIsLoadingComparable] = useState(false);
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handleOutsideClick = () => {
+      setActiveActionMenuId(null);
+      setShowLeadDropdown(false);
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("click", handleOutsideClick);
+      return () => window.removeEventListener("click", handleOutsideClick);
+    }
+  }, []);
+
+  const getLeadProfileHref = (leadId) => {
+    if (!leadId) return "#";
+    let userObj = currentUser;
+    if (!userObj && typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("user");
+        if (stored) userObj = JSON.parse(stored);
+      } catch (e) { }
+    }
+    const r = userObj?.role ? String(userObj.role).toLowerCase() : "";
+    if (r.includes("executive")) return `/sales-executive/leads/${leadId}`;
+    if (r.includes("manager")) return `/sales-manager/leads/${leadId}`;
+    return `/admin/leads/${leadId}`;
+  };
+
   const router = useRouter();
   const pathname = usePathname();
   const isReceptionist = pathname ? pathname.startsWith("/receptionist") : false;
@@ -221,6 +262,28 @@ export default function QuotationMainPage() {
       setClientMobile(lead.phone || "");
       setCityJurisdiction(lead.posting || lead.city || lead.home_town || lead.address || "Ahmedabad");
       setClientEmail(lead.email || "");
+      // Auto-fill approved discount from follow-up interaction (Task 11)
+      let approvedDiscAmount = 0;
+      if (lead.approved_discount && Number(lead.approved_discount) > 0) {
+        approvedDiscAmount = Number(lead.approved_discount);
+      } else if (lead.discount_approval_status === "approved" && lead.requested_discount) {
+        approvedDiscAmount = Number(lead.requested_discount);
+      } else {
+        const localDisc = discountApprovalApi.getLeadApprovalStatus(leadId);
+        if (localDisc && localDisc.status === "approved" && localDisc.discount_amount) {
+          approvedDiscAmount = Number(localDisc.discount_amount);
+        }
+      }
+
+      if (approvedDiscAmount > 0) {
+        setMsReward(String(approvedDiscAmount));
+        showToast(`Approved follow-up discount ₹${approvedDiscAmount.toLocaleString("en-IN")} applied to M.S Reword!`, "success");
+      } else {
+        setMsReward("");
+      }
+
+      setLeadSearchText(`${lead.customer_name || lead.name || "Customer"} (${lead.phone || "-"})`);
+
 
       // 1. Identify and select Brand
       let availableBrands = brandsList;
@@ -307,7 +370,9 @@ export default function QuotationMainPage() {
           setInsurance("");
           setAccessories("");
           setWarranty("");
-          setMsReward("");
+          if (approvedDiscAmount > 0) {
+            setMsReward(String(approvedDiscAmount));
+          }
           setDiffAmtCash("");
         }
       } else if (lead.model_variant) {
@@ -410,7 +475,6 @@ export default function QuotationMainPage() {
         setInsurance("");
         setAccessories("");
         setWarranty("");
-        setMsReward("");
         setDiffAmtCash("");
       }
 
@@ -427,19 +491,92 @@ export default function QuotationMainPage() {
     return parseFloat(clean) || 0;
   };
 
-  const calculateTotal = (csd, rto, ins, acc, warr, ms, diff) => {
+  const calculateTotal = (csd, rto, bhRtoVal, crtmVal, ins, acc, warr, ms, diff) => {
     const base = parseAmount(csd);
     const rtoVal = parseAmount(rto);
+    const bhVal = parseAmount(bhRtoVal);
+    const crtmAmount = parseAmount(crtmVal);
     const insVal = parseAmount(ins);
     const accVal = parseAmount(acc);
     const warrVal = parseAmount(warr);
     const diffVal = parseAmount(diff);
     const discountVal = parseAmount(ms);
 
-    return base + rtoVal + insVal + accVal + warrVal + diffVal - discountVal;
+    return base + rtoVal + bhVal + crtmAmount + insVal + accVal + warrVal + diffVal - discountVal;
   };
 
-  const totalCol1 = calculateTotal(csdPrice, gjRto, insurance, accessories, warranty, msReward, diffAmtCash);
+  const totalCol1 = calculateTotal(csdPrice, gjRto, bhRto, crtm, insurance, accessories, warranty, msReward, diffAmtCash);
+
+  // ----------------------------------------------------
+  // COMPARABLE VARIANTS (Task 6: +/- 1,00,000 Range)
+  // ----------------------------------------------------
+  const fetchComparableVariants = async (price) => {
+    const numPrice = Number(price);
+    if (!numPrice || numPrice <= 0) {
+      setComparableVariants([]);
+      return;
+    }
+    setIsLoadingComparable(true);
+    try {
+      const minPrice = Math.max(0, numPrice - 100000);
+      const maxPrice = numPrice + 100000;
+      const res = await api.get(`/variants?min_price=${minPrice}&max_price=${maxPrice}&per_page=50`);
+      let list = [];
+      if (res && res.data && Array.isArray(res.data.data)) {
+        list = res.data.data;
+      } else if (res && Array.isArray(res.data)) {
+        list = res.data;
+      }
+      setComparableVariants(list);
+    } catch (err) {
+      console.error("Error fetching comparable variants:", err);
+      setComparableVariants([]);
+    } finally {
+      setIsLoadingComparable(false);
+    }
+  };
+
+  useEffect(() => {
+    if (csdPrice && Number(csdPrice) > 0) {
+      const timer = setTimeout(() => {
+        fetchComparableVariants(csdPrice);
+      }, 350);
+      return () => clearTimeout(timer);
+    } else {
+      setComparableVariants([]);
+    }
+  }, [csdPrice]);
+
+  const handleSelectComparableVariant = async (v) => {
+    if (!v) return;
+    if (v.brand_id) {
+      setSelectedBrandId(String(v.brand_id));
+      await fetchModelsForBrand(v.brand_id);
+    }
+    if (v.model_id) {
+      setSelectedModelId(String(v.model_id));
+      await fetchVariantsForModel(v.model_id);
+    }
+    setSelectedVariantId(String(v.id));
+
+    const brandName = v.brand?.name || "";
+    const modelName = v.model?.name || "";
+    setCarName(`${brandName} ${modelName}`.trim().toUpperCase());
+    setModelSpec(v.name ? v.name.toUpperCase() : "");
+
+    if (v.price && Number(v.price) > 0) {
+      setCsdPrice(String(v.price));
+      setGjRto("");
+      setBhRto("");
+      setCrtm("");
+      setInsurance("");
+      setAccessories("");
+      setWarranty("");
+      setDiffAmtCash("");
+    }
+    showToast(`Selected Comparable Variant: ${v.name} (₹${Number(v.price || 0).toLocaleString("en-IN")})`, "success");
+  };
+
 
   // ----------------------------------------------------
   // 5. RESET & PRINT ACTIONS
@@ -555,7 +692,7 @@ export default function QuotationMainPage() {
   // ----------------------------------------------------
   // 6. SAVE QUOTATION TO BACKEND DATABASE
   // ----------------------------------------------------
-  const saveQuotationToBackend = async (status = "sent") => {
+  const saveQuotationToBackend = async (status = "pending") => {
     if (!clientName.trim()) {
       showToast("Please enter client full name.", "warning");
       return null;
@@ -707,7 +844,8 @@ export default function QuotationMainPage() {
             );
             await api.post(`/leads/${selectedLeadId}/follow-ups`, {
               type: "Quotation Sent",
-              outcome: "Sent",
+              outcome: "Quotation Sent",
+              status: "Quotation Sent",
               status: "Sent",
               notes: `Official Quotation #${res.data.quotation_number} generated for ${carName || "Vehicle"
                 } (${modelSpec || ""}). Total Amount: ₹${calculatedTotal.toLocaleString("en-IN")}`,
@@ -755,7 +893,7 @@ export default function QuotationMainPage() {
 
     setIsSendingEmail(true);
     try {
-      const quoteObj = await saveQuotationToBackend("sent");
+      const quoteObj = await saveQuotationToBackend("email_sent");
       if (quoteObj && quoteObj.id) {
         const mailRes = await quotationApi.sendQuotationEmail(quoteObj.id, {
           recipient_email: clientEmail.trim(),
@@ -894,44 +1032,25 @@ export default function QuotationMainPage() {
 
   const renderStatusBadge = (status) => {
     const s = (status || "pending").toLowerCase();
-    switch (s) {
-      case "sent":
-      case "send":
-        return (
-          <span className="badge bg-info text-dark px-2 py-1">
-            <i className="bi bi-send-check-fill me-1"></i>Sent
-          </span>
-        );
-      case "print":
-      case "printed":
-        return (
-          <span className="badge text-white px-2 py-1" style={{ backgroundColor: "#6366f1" }}>
-            <i className="bi bi-printer-fill me-1"></i>Print
-          </span>
-        );
-      case "accepted":
-        return (
-          <span className="badge bg-success text-white px-2 py-1">
-            <i className="bi bi-check-circle-fill me-1"></i>Accepted
-          </span>
-        );
-      case "rejected":
-        return (
-          <span className="badge bg-danger text-white px-2 py-1">
-            <i className="bi bi-x-circle-fill me-1"></i>Rejected
-          </span>
-        );
-      case "expired":
-        return <span className="badge bg-secondary px-2 py-1">Expired</span>;
-      case "pending":
-      case "draft":
-      default:
-        return (
-          <span className="badge bg-warning text-dark px-2 py-1">
-            <i className="bi bi-clock-history me-1"></i>Pending
-          </span>
-        );
+    if (s === "email_sent" || s === "sent" || s === "email sent") {
+      return (
+        <span className="badge bg-info-subtle text-info-emphasis border border-info-subtle px-2 py-1">
+          <i className="bi bi-envelope-check-fill me-1"></i>Email Sent
+        </span>
+      );
     }
+    if (s === "print" || s === "printed") {
+      return (
+        <span className="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
+          <i className="bi bi-printer-fill me-1"></i>Printed / PDF
+        </span>
+      );
+    }
+    return (
+      <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1">
+        <i className="bi bi-hourglass-split me-1"></i>Pending
+      </span>
+    );
   };
 
   return (
@@ -1114,27 +1233,92 @@ export default function QuotationMainPage() {
                     <label className="form-label text-dark small fw-medium mb-1">
                       Auto-Fill from Leads Pipeline
                     </label>
-                    <select
-                      className="form-select"
-                      value={selectedLeadId}
-                      onChange={(e) => handleSelectLead(e.target.value)}
-                      disabled={isLoadingLeads}
-                    >
-                      <option value="">-- Choose Lead from Pipeline --</option>
-                      {leadsList.map((lead) => {
-                        const priorityEmoji =
-                          lead.priority?.toLowerCase() === "hot"
-                            ? "🔥"
-                            : lead.priority?.toLowerCase() === "warm"
-                              ? "☀️"
-                              : "❄️";
-                        return (
-                          <option key={lead.id} value={lead.id}>
-                            {lead.name} ({lead.model_variant || lead.brand_name || "Lead"} - {lead.priority || "Standard"} {priorityEmoji})
-                          </option>
-                        );
-                      })}
-                    </select>
+                    <div className="position-relative" onClick={(e) => e.stopPropagation()}>
+                      <div className="input-group">
+                        <span className="input-group-text bg-white text-muted">
+                          <i className="bi bi-search"></i>
+                        </span>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="Type customer name or mobile number to search lead..."
+                          value={leadSearchText}
+                          onChange={(e) => {
+                            setLeadSearchText(e.target.value);
+                            setShowLeadDropdown(true);
+                          }}
+                          onFocus={() => setShowLeadDropdown(true)}
+                        />
+                        {selectedLeadId && (
+                          <button
+                            type="button"
+                            className="btn btn-outline-secondary"
+                            onClick={() => {
+                              setSelectedLeadId("");
+                              setLeadSearchText("");
+                              handleResetSheet();
+                            }}
+                            title="Clear lead"
+                          >
+                            <i className="bi bi-x"></i>
+                          </button>
+                        )}
+                      </div>
+
+                      {showLeadDropdown && (
+                        <div
+                          className="position-absolute start-0 end-0 mt-1 shadow-lg border rounded-3 p-1 bg-white"
+                          style={{ zIndex: 1050, maxHeight: "250px", overflowY: "auto" }}
+                        >
+                          {(() => {
+                            const q = (leadSearchText || "").toLowerCase().trim();
+                            const matches = (leadsList || []).filter((l) => {
+                              if (!q) return true;
+                              const nameMatch = (l.name || l.customer_name || "").toLowerCase().includes(q);
+                              const phoneMatch = (l.phone || "").toLowerCase().includes(q);
+                              const modelMatch = (l.model_variant || l.brand_name || "").toLowerCase().includes(q);
+                              return nameMatch || phoneMatch || modelMatch;
+                            });
+
+                            if (matches.length === 0) {
+                              return (
+                                <div className="p-3 text-center text-muted small">
+                                  No matching leads found for "{leadSearchText}"
+                                </div>
+                              );
+                            }
+
+                            return matches.slice(0, 40).map((l) => {
+                              const isSelected = selectedLeadId === String(l.id);
+                              return (
+                                <div
+                                  key={l.id}
+                                  className={`p-2 rounded-2 d-flex align-items-center justify-content-between border-bottom border-light ${isSelected ? "bg-primary-subtle" : ""
+                                    }`}
+                                  style={{ cursor: "pointer" }}
+                                  onClick={() => {
+                                    setLeadSearchText(`${l.name || "Lead"} (${l.phone || "-"})`);
+                                    setShowLeadDropdown(false);
+                                    handleSelectLead(l.id);
+                                  }}
+                                >
+                                  <div>
+                                    <div className="fw-bold text-dark small">{l.name || "Customer"}</div>
+                                    <div className="text-muted" style={{ fontSize: "0.75rem" }}>
+                                      <i className="bi bi-telephone me-1"></i>
+                                      {l.phone || "-"} • {l.model_variant || l.brand_name || "Vehicle"}
+                                    </div>
+                                  </div>
+                                  <span className="badge bg-light text-secondary border small">
+                                    #{l.id}
+                                  </span>
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+                      )}
+                    </div>
                   </div>}
 
                   {/* Client Name & Mobile */}
@@ -1401,7 +1585,7 @@ export default function QuotationMainPage() {
                         onChange={(e) => setMsReward(e.target.value)}
                       />
                     </div>
-                    <div className="col-12">
+                    <div className="col-md-6">
                       <label className="form-label text-dark small fw-medium mb-1">DIFFERENCE AMT CASH</label>
                       <input
                         type="text"
@@ -1410,13 +1594,22 @@ export default function QuotationMainPage() {
                         onChange={(e) => setDiffAmtCash(e.target.value)}
                       />
                     </div>
+                    <div className="col-md-6">
+                      <label className="form-label text-dark small fw-medium mb-1">
+                        ESTIMATED TOTAL (₹) <span className="text-muted fw-normal" style={{ fontSize: "10px" }}>(Net After M.S Reword Disc)</span>
+                      </label>
+                      <div className="form-control form-control-sm bg-light fw-bold text-success d-flex align-items-center justify-content-between">
+                        <span>₹{totalCol1.toLocaleString("en-IN")}</span>
+                        <span className="badge bg-success-subtle text-success border border-success-subtle" style={{ fontSize: "10px" }}>Live Total</span>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="d-flex gap-2 mt-4">
                     <button
                       type="button"
-                      className="btn btn-primary flex-fill d-flex align-items-center justify-content-center gap-2"
-                      onClick={() => saveQuotationToBackend("sent")}
+                      className="btn btn-primary flex-fill d-flex align-items-center justify-content-center gap-2 py-2"
+                      onClick={() => saveQuotationToBackend("pending")}
                       disabled={isSaving}
                     >
                       {isSaving ? (
@@ -1427,7 +1620,7 @@ export default function QuotationMainPage() {
                       ) : (
                         <>
                           <i className="bi bi-cloud-check-fill"></i>
-                          <span>Save to CRM Pipeline</span>
+                          <span>Save to CRM Pipeline (Total: ₹{totalCol1.toLocaleString("en-IN")})</span>
                         </>
                       )}
                     </button>
@@ -1437,254 +1630,142 @@ export default function QuotationMainPage() {
             </div>
 
             {/* ----------------------------------------------------
-                RIGHT PANEL: OFFICIAL LIVE QUOTATION SHEET (EXACT UI MATCH)
+                RIGHT PANEL: COMPARABLE & ALTERNATIVE VARIANTS (+/- 1,00,000)
+                Task 6: Replaces static Defence Autolink preview letterhead
                 ---------------------------------------------------- */}
             <div className="col-xl-7 col-lg-7">
               <div
-                className="quotation-print-sheet p-4 shadow-lg"
-                id="printableQuoteCard"
-                style={{
-                  background: "#ffffff",
-                  borderRadius: "12px",
-                  color: "#1e293b",
-                  fontFamily: "'Inter', sans-serif",
-                  border: "1px solid #e2e8f0",
-                  minHeight: "750px",
-                }}
+                className="card h-100 border shadow-sm rounded-3 p-4 bg-white"
+                style={{ minHeight: "750px" }}
               >
-                {/* Header with Dealership Brand & Address Box */}
-                <div className="d-flex align-items-center justify-content-between mb-3 pb-2">
-                  {/* Brand Logo & Name */}
-                  <div className="d-flex align-items-center gap-2" style={{ maxWidth: "35%" }}>
-                    <div
-                      style={{
-                        width: 50,
-                        height: 50,
-                        borderRadius: "8px",
-                        background: "#1e3a8a",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: "#fff",
-                        fontWeight: "bold",
-                        fontSize: "1.2rem",
-                        flexShrink: 0,
-                      }}
-                    >
-                      DA
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 800, fontSize: "1.1rem", color: "#1e3a8a", lineHeight: "1.1" }}>
-                        DEFENCE
-                      </div>
-                      <div style={{ fontWeight: 800, fontSize: "1.1rem", color: "#2563eb", lineHeight: "1.1" }}>
-                        AUTOLINK
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Main Red Heading & Grey Address Box */}
-                  <div className="text-center" style={{ width: "65%" }}>
-                    <h3
-                      className="mb-1 text-uppercase fw-bold"
-                      style={{
-                        color: "#b91c1c",
-                        fontSize: "1.6rem",
-                        letterSpacing: "1.5px",
-                        fontFamily: "inherit",
-                      }}
-                    >
-                      DEFENCE AUTOLINK
-                    </h3>
-                    <div
-                      className="p-2 rounded-2"
-                      style={{
-                        background: "#e2e8f0",
-                        fontSize: "0.74rem",
-                        fontWeight: "600",
-                        color: "#1e293b",
-                        lineHeight: "1.3",
-                      }}
-                    >
-                      D-601, S G BUSINESS HUB, S G HIGHWAY,
-                      <br />
-                      Ahmedabad, Gujarat - 382470
-                    </div>
-                  </div>
-                </div>
-
-                {/* Date & QUOTATION Center Badge */}
-                <div className="d-flex align-items-center justify-content-between mb-3 mt-4">
-                  <div className="fw-bold" style={{ fontSize: "0.92rem", color: "#0f172a" }}>
-                    DATE : {quotationDate}
-                  </div>
-
-                  <div
-                    className="px-4 py-1 text-center"
-                    style={{
-                      border: "2px solid #0f172a",
-                      color: "#b91c1c",
-                      fontWeight: 700,
-                      fontSize: "0.95rem",
-                      letterSpacing: "1px",
-                    }}
-                  >
-                    QUOTATION
-                  </div>
-
-                  <div className="fw-bold" style={{ fontSize: "0.85rem", color: "#0f172a" }}>
-                    {clientName ? (
-                      <>
-                        CLIENT: <span className="text-primary text-uppercase">{clientName.toUpperCase()}</span>
-                      </>
-                    ) : (
-                      <span style={{ display: "inline-block", minWidth: "10px" }}></span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Dealership Spreadsheet Grid Table */}
-                <div className="table-responsive">
-                  <table
-                    className="table mb-0"
-                    style={{
-                      border: "2px solid #334155",
-                      fontSize: "0.86rem",
-                      fontWeight: 600,
-                    }}
-                  >
-                    <thead>
-                      <tr style={{ background: "#94a3b8", color: "#0f172a" }}>
-                        <th
-                          style={{
-                            width: "55%",
-                            border: "1px solid #334155",
-                            padding: "10px 12px",
-                            fontWeight: "800",
-                            textTransform: "uppercase",
-                          }}
-                        >
-                          CAR: {carName}
-                        </th>
-                        <th
-                          style={{
-                            width: "45%",
-                            border: "1px solid #334155",
-                            padding: "10px 12px",
-                            textAlign: "center",
-                            fontWeight: "800",
-                            textTransform: "uppercase",
-                          }}
-                        >
-                          MODEL: {modelSpec}
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {/* CSD PRICE */}
-                      <tr>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>CSD PRICE</td>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center", fontWeight: "700" }}>
-                          {csdPrice}
-                        </td>
-                      </tr>
-
-                      {/* GJ RTO */}
-                      <tr>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>GJ RTO</td>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                          {gjRto}
-                        </td>
-                      </tr>
-
-                      {/* BH RTO * APPOROX */}
-                      <tr>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>BH RTO * APPOROX</td>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                          {bhRto}
-                        </td>
-                      </tr>
-
-                      {/* CRTM */}
-                      <tr>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>CRTM</td>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                          {crtm}
-                        </td>
-                      </tr>
-
-                      {/* INSURANCE */}
-                      <tr>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>INSURANCE</td>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                          {insurance}
-                        </td>
-                      </tr>
-
-                      {/* ACCESSORIES */}
-                      <tr>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>ACCESSORIES</td>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center", fontWeight: "700" }}>
-                          {accessories}
-                        </td>
-                      </tr>
-
-                      {/* WARRANTY */}
-                      <tr>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>WARRANTY</td>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                          {warranty}
-                        </td>
-                      </tr>
-
-                      {/* M.S REWORD */}
-                      <tr>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>M.S REWORD</td>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                          {msReward}
-                        </td>
-                      </tr>
-
-                      {/* DIFFERENCE AMT CASH */}
-                      <tr>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px" }}>DIFFERENCE AMT CASH</td>
-                        <td style={{ border: "1px solid #334155", padding: "8px 12px", textAlign: "center" }}>
-                          {diffAmtCash}
-                        </td>
-                      </tr>
-
-                      {/* NET ON-ROAD ESTIMATE */}
-                      <tr style={{ background: "#fef3c7" }}>
-                        <td style={{ border: "1px solid #334155", padding: "10px 12px", fontWeight: "800", color: "#92400e" }}>
-                          ESTIMATED ON-ROAD PRICE
-                        </td>
-                        <td style={{ border: "1px solid #334155", padding: "10px 12px", textAlign: "center", fontWeight: "800", color: "#b91c1c", fontSize: "1.05rem" }}>
-                          ₹ {totalCol1.toLocaleString("en-IN")}/-
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Dealership Executive & Signature Footer */}
-                <div className="mt-4 pt-3 border-top d-flex justify-content-between align-items-end" style={{ fontSize: "0.8rem" }}>
+                <div className="d-flex align-items-center justify-content-between pb-3 border-bottom mb-3 flex-wrap gap-2">
                   <div>
-                    <div className="fw-bold text-dark">
-                      Executive: <span className="text-primary">{executiveName}</span>
-                    </div>
-                    <div className="text-muted">Contact: +91 {executivePhone}</div>
-                    <div className="text-secondary small mt-1" style={{ fontSize: "0.72rem" }}>
-                      * Prices prevailing at the time of delivery will be applicable. Road tax as per RTO norms.
+                    <h5 className="fw-bold text-dark mb-1 d-flex align-items-center gap-2">
+                      <i className="bi bi-shuffle text-primary"></i>
+                      <span>Comparable & Alternative Models</span>
+                      <span className="badge bg-primary-subtle text-primary border border-primary-subtle fw-semibold rounded-pill px-2 py-0.5" style={{ fontSize: "11px" }}>
+                        ± ₹1,00,000 Range
+                      </span>
+                    </h5>
+                    <div className="text-muted small">
+                      {csdPrice && Number(csdPrice) > 0 ? (
+                        <span>
+                          Selected Variant Price: <strong>₹{Number(csdPrice).toLocaleString("en-IN")}</strong> •
+                          Matching Range: <strong>₹{Math.max(0, Number(csdPrice) - 100000).toLocaleString("en-IN")}</strong> to <strong>₹{(Number(csdPrice) + 100000).toLocaleString("en-IN")}</strong>
+                        </span>
+                      ) : (
+                        <span>Select any vehicle variant on the left to discover matching models in price range.</span>
+                      )}
                     </div>
                   </div>
 
-                  <div className="text-end">
-                    <div className="fw-bold text-dark">For DEFENCE AUTOLINK</div>
-                    <div className="text-muted" style={{ fontSize: "0.72rem" }}>
-                      (Authorized Multi-Brand Dealership Signatory)
-                    </div>
-                  </div>
+                  {csdPrice && Number(csdPrice) > 0 && (
+                    <span className="badge bg-light text-secondary border px-2 py-1 fw-semibold">
+                      {comparableVariants.length} Alternative(s) Found
+                    </span>
+                  )}
                 </div>
+
+                {/* Comparable Variants Content */}
+                {isLoadingComparable ? (
+                  <div className="text-center py-5">
+                    <div className="spinner-border text-primary mb-2" role="status"></div>
+                    <div className="text-muted small">Searching comparable vehicles within ± ₹1,00,000...</div>
+                  </div>
+                ) : !csdPrice || Number(csdPrice) <= 0 ? (
+                  <div className="text-center py-5 my-auto">
+                    <div
+                      className="mx-auto rounded-circle d-flex align-items-center justify-content-center mb-3"
+                      style={{ width: "64px", height: "64px", backgroundColor: "#EFF6FF" }}
+                    >
+                      <i className="bi bi-car-front fs-2 text-primary"></i>
+                    </div>
+                    <h6 className="fw-bold text-dark">No Vehicle Variant Selected</h6>
+                    <p className="text-muted small mx-auto" style={{ maxWidth: "340px" }}>
+                      Choose Brand, Model and Variant from the left form to automatically view all matching alternative vehicle models within <strong>± ₹1,00,000</strong> price range.
+                    </p>
+                  </div>
+                ) : comparableVariants.length === 0 ? (
+                  <div className="text-center py-5 my-auto">
+                    <i className="bi bi-inbox fs-1 text-secondary mb-2 d-block"></i>
+                    <h6 className="fw-bold text-dark">No Other Alternatives in this Exact Range</h6>
+                    <p className="text-muted small">
+                      No other vehicle variants found between ₹{Math.max(0, Number(csdPrice) - 100000).toLocaleString("en-IN")} and ₹{(Number(csdPrice) + 100000).toLocaleString("en-IN")}.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="row g-3" style={{ maxHeight: "700px", overflowY: "auto" }}>
+                    {comparableVariants.map((v) => {
+                      const vPrice = Number(v.price || 0);
+                      const currentP = Number(csdPrice);
+                      const diff = vPrice - currentP;
+                      const isCurrentlySelected = selectedVariantId === String(v.id);
+
+                      return (
+                        <div key={v.id} className="col-12 col-md-6">
+                          <div
+                            className={`card h-100 p-3 rounded-3 border ${isCurrentlySelected ? "border-primary bg-primary-subtle shadow-sm" : "hover-shadow-sm bg-light"
+                              }`}
+                            style={{ transition: "all 0.15s ease" }}
+                          >
+                            <div className="d-flex align-items-center justify-content-between mb-2">
+                              <span className="badge bg-dark text-white text-uppercase px-2 py-0.5 rounded" style={{ fontSize: "10px" }}>
+                                {v.brand?.name || "Brand"}
+                              </span>
+                              {diff === 0 ? (
+                                <span className="badge bg-secondary text-white" style={{ fontSize: "10px" }}>Current Match</span>
+                              ) : diff > 0 ? (
+                                <span className="badge bg-danger-subtle text-danger border border-danger-subtle fw-bold" style={{ fontSize: "10px" }}>
+                                  + ₹{diff.toLocaleString("en-IN")}
+                                </span>
+                              ) : (
+                                <span className="badge bg-success-subtle text-success border border-success-subtle fw-bold" style={{ fontSize: "10px" }}>
+                                  - ₹{Math.abs(diff).toLocaleString("en-IN")}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="fw-bold text-dark text-truncate" title={v.name}>
+                              {v.name}
+                            </div>
+                            <div className="text-muted small text-truncate mb-2" style={{ fontSize: "0.75rem" }}>
+                              Model: {v.model?.name || "-"}
+                            </div>
+
+                            <div className="d-flex align-items-center justify-content-between mt-auto pt-2 border-top">
+                              <div>
+                                <span className="text-muted small d-block" style={{ fontSize: "10px" }}>CSD PRICE</span>
+                                <span className="fw-bolder text-success" style={{ fontSize: "1.05rem" }}>
+                                  ₹{vPrice.toLocaleString("en-IN")}
+                                </span>
+                              </div>
+
+                              <button
+                                type="button"
+                                className={`btn btn-sm ${isCurrentlySelected ? "btn-primary disabled" : "btn-outline-primary"
+                                  } rounded-pill px-3 py-1 fw-semibold shadow-xs d-flex align-items-center gap-1`}
+                                onClick={() => handleSelectComparableVariant(v)}
+                                disabled={isCurrentlySelected}
+                              >
+                                {isCurrentlySelected ? (
+                                  <>
+                                    <i className="bi bi-check2"></i>
+                                    <span>Selected</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <i className="bi bi-plus-lg"></i>
+                                    <span>Select Variant</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1819,7 +1900,7 @@ export default function QuotationMainPage() {
               </div>
             </div>
 
-            <div className="table-responsive">
+            <div className="table-responsive" style={{ minHeight: "360px" }}>
               <table className="table table-custom align-middle mb-0">
                 <thead className="border-bottom border-secondary border-opacity-25 text-secondary small text-uppercase">
                   <tr>
@@ -1857,63 +1938,112 @@ export default function QuotationMainPage() {
                           </span>
                         </td>
 
-                        {/* 1. Actions First Column */}
-                        <td className="py-3 px-3 text-center">
-                          <div className="d-flex align-items-center justify-content-center gap-1">
-                            {recordView === "trash" ? (
-                              <>
-                                <button
-                                  type="button"
-                                  className="btn btn-outline-success btn-sm px-2.5 py-1 d-inline-flex align-items-center gap-1 rounded-pill shadow-xs fw-semibold"
-                                  title="Restore Quotation"
-                                  onClick={() => handleRestoreQuotation(quote.id)}
+                        {/* 1. Actions First Column - 3-Dots Menu with Convert to Deal (Task 3) */}
+                        <td className="py-3 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          {recordView === "trash" ? (
+                            <div className="d-flex align-items-center justify-content-center gap-1">
+                              <button
+                                type="button"
+                                className="btn btn-outline-success btn-sm px-2.5 py-1 d-inline-flex align-items-center gap-1 rounded-pill shadow-xs fw-semibold"
+                                title="Restore Quotation"
+                                onClick={() => handleRestoreQuotation(quote.id)}
+                              >
+                                <i className="bi bi-arrow-counterclockwise"></i>
+                                <span>Restore</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-outline-danger btn-sm px-2.5 py-1 d-inline-flex align-items-center gap-1 rounded-pill shadow-xs fw-semibold"
+                                title="Permanently Delete Quotation Forever"
+                                onClick={() => setPermanentDeleteTarget(quote)}
+                              >
+                                <i className="bi bi-trash3"></i>
+                                <span>Delete</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="dropdown position-relative d-inline-block">
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-light border rounded-circle shadow-none p-0 d-inline-flex align-items-center justify-content-center"
+                                style={{ width: "32px", height: "32px", cursor: "pointer" }}
+                                title="Quotation Actions"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveActionMenuId(activeActionMenuId === quote.id ? null : quote.id);
+                                }}
+                              >
+                                <i className="bi bi-three-dots-vertical fs-6 text-dark"></i>
+                              </button>
+
+                              {activeActionMenuId === quote.id && (
+                                <div
+                                  className="dropdown-menu show shadow-lg border rounded-3 p-1 position-absolute start-0 text-start"
+                                  style={{
+                                    minWidth: "195px",
+                                    zIndex: 1050,
+                                    top: index >= Math.max(1, quotations.length - 4) ? "auto" : "100%",
+                                    bottom: index >= Math.max(1, quotations.length - 4) ? "calc(100% + 4px)" : "auto",
+                                    backgroundColor: "#FFFFFF",
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
                                 >
-                                  <i className="bi bi-arrow-counterclockwise"></i>
-                                  <span>Restore</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn btn-outline-danger btn-sm px-2.5 py-1 d-inline-flex align-items-center gap-1 rounded-pill shadow-xs fw-semibold"
-                                  title="Permanently Delete Quotation Forever"
-                                  onClick={() => setPermanentDeleteTarget(quote)}
-                                >
-                                  <i className="bi bi-trash3"></i>
-                                  <span>Delete</span>
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                {(can("quotation.view") || isReceptionist) && (
-                                  <Link
-                                    href={`${baseQuotationPath}/${quote.id}`}
-                                    className="btn btn-outline-custom btn-sm p-1 px-2"
-                                    title="View Quotation"
-                                  >
-                                    <i className="bi bi-eye"></i>
-                                  </Link>
-                                )}
-                                {(can("quotation.print_pdf") || isReceptionist) && (
-                                  <Link
-                                    href={`${baseQuotationPath}/${quote.id}`}
-                                    className="btn btn-outline-custom btn-sm p-1 px-2"
-                                    title="Print Dealership Quotation"
-                                  >
-                                    <i className="bi bi-printer-fill"></i>
-                                  </Link>
-                                )}
-                                {can("quotation.delete") && (
+                                  {(can("quotation.view") || isReceptionist) && (
+                                    <Link
+                                      href={`${baseQuotationPath}/${quote.id}`}
+                                      className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-dark"
+                                      onClick={() => setActiveActionMenuId(null)}
+                                    >
+                                      <i className="bi bi-eye text-primary"></i>
+                                      <span>View Quotation</span>
+                                    </Link>
+                                  )}
+
+                                  {(can("quotation.print_pdf") || isReceptionist) && (
+                                    <Link
+                                      href={`${baseQuotationPath}/${quote.id}`}
+                                      className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-dark"
+                                      onClick={() => setActiveActionMenuId(null)}
+                                    >
+                                      <i className="bi bi-printer-fill text-secondary"></i>
+                                      <span>Print Dealership Quotation</span>
+                                    </Link>
+                                  )}
+
+                                  {/* Task 3: Convert to Deal Action */}
                                   <button
                                     type="button"
-                                    className="btn btn-outline-danger btn-sm p-1 px-2"
-                                    title="Delete Quotation"
-                                    onClick={() => handleDeleteQuotation(quote.id)}
+                                    className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-success fw-semibold"
+                                    onClick={() => {
+                                      setActiveActionMenuId(null);
+                                      setSelectedQuoteForDeal(quote);
+                                      setShowConvertDealModal(true);
+                                    }}
                                   >
-                                    <i className="bi bi-trash3-fill"></i>
+                                    <i className="bi bi-trophy-fill text-success"></i>
+                                    <span>Convert to Deal</span>
                                   </button>
-                                )}
-                              </>
-                            )}
-                          </div>
+
+                                  {can("quotation.delete") && (
+                                    <>
+                                      <hr className="dropdown-divider my-1" />
+                                      <button
+                                        type="button"
+                                        className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-danger"
+                                        onClick={() => {
+                                          setActiveActionMenuId(null);
+                                          handleDeleteQuotation(quote.id);
+                                        }}
+                                      >
+                                        <i className="bi bi-trash3-fill text-danger"></i>
+                                        <span>Delete Quotation</span>
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </td>
 
                         {/* 2. Quotation # */}
@@ -1929,8 +2059,26 @@ export default function QuotationMainPage() {
 
                         {/* 3. Customer */}
                         <td className="py-3 px-3">
-                          <div className="text-dark fw-semibold">{quote.customer_name}</div>
-                          <span className="text-secondary small">{quote.customer_phone || quote.customer_email || "-"}</span>
+                          {quote.lead_id ? (
+                            <Link
+                              href={getLeadProfileHref(quote.lead_id)}
+                              className="text-primary fw-semibold text-decoration-none d-inline-flex align-items-center gap-1 hover-underline"
+                              title="View Customer 360 Profile"
+                            >
+                              <span>{quote.customer_name}</span>
+                              <i className="bi bi-box-arrow-up-right" style={{ fontSize: "10px" }}></i>
+                            </Link>
+                          ) : (
+                            <Link
+                              href={`/admin/leads?search=${encodeURIComponent(quote.customer_name || "")}`}
+                              className="text-primary fw-semibold text-decoration-none d-inline-flex align-items-center gap-1 hover-underline"
+                              title="Search Customer in Leads Pipeline"
+                            >
+                              <span>{quote.customer_name}</span>
+                              <i className="bi bi-box-arrow-up-right" style={{ fontSize: "10px" }}></i>
+                            </Link>
+                          )}
+                          <div className="text-secondary small">{quote.customer_phone || quote.customer_email || "-"}</div>
                         </td>
 
                         {/* 4. Subject / Vehicle */}
@@ -2120,6 +2268,31 @@ export default function QuotationMainPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Convert to Deal Modal for Quotations (Task 3) */}
+        {showConvertDealModal && selectedQuoteForDeal && (
+          <ConvertDealModal
+            isOpen={showConvertDealModal}
+            lead={
+              selectedQuoteForDeal.lead || {
+                id: selectedQuoteForDeal.lead_id,
+                name: selectedQuoteForDeal.customer_name,
+                phone: selectedQuoteForDeal.customer_phone,
+                email: selectedQuoteForDeal.customer_email,
+                model_variant: selectedQuoteForDeal.subject,
+              }
+            }
+            onClose={() => {
+              setShowConvertDealModal(false);
+              setSelectedQuoteForDeal(null);
+            }}
+            onSuccess={() => {
+              showToast("Quotation successfully converted to Deal!", "success");
+              loadQuotationsList(currentPage, searchTerm, statusFilter, startDate, endDate);
+            }}
+            showToast={showToast}
+          />
         )}
       </div>
     </AdminLayout>

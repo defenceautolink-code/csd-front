@@ -81,9 +81,18 @@ export default function DealsPage() {
   });
   const [isSubmittingUpdate, setIsSubmittingUpdate] = useState(false);
 
+  // Record View: active vs trash
+  const [recordView, setRecordView] = useState("active"); // "active" | "trash"
+
   // Delete Deal Modal State
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Trash & Restore States
+  const [restoreTarget, setRestoreTarget] = useState(null);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [forceDeleteTarget, setForceDeleteTarget] = useState(null);
+  const [isForceDeleting, setIsForceDeleting] = useState(false);
 
   const getTodayDate = () => {
     const now = new Date();
@@ -132,14 +141,19 @@ export default function DealsPage() {
     stage = stageFilter,
     from = startDate,
     to = endDate,
-    customPerPage = pagination.per_page || 10
+    customPerPage = pagination.per_page || 10,
+    viewMode = recordView
   ) => {
     setIsLoading(true);
     try {
       const params = {
         page,
         per_page: customPerPage,
+        view: viewMode,
       };
+      if (viewMode === "trash") {
+        params.trash = 1;
+      }
 
       if (search && search.trim()) {
         params.search = search.trim();
@@ -426,21 +440,57 @@ export default function DealsPage() {
     }
   };
 
-  // Delete Deal
+  // Delete Deal (Move to Trash)
   const handleDeleteDeal = async () => {
     if (!deleteTarget) return;
     setIsDeleting(true);
     try {
       const res = await dealApi.deleteDeal(deleteTarget.id);
-      showToast(res.message || "Deal deleted successfully!", "success");
+      showToast(res.message || `Deal #${deleteTarget.deal_number} moved to trash successfully!`, "success");
       setDeleteTarget(null);
       fetchMetrics();
-      fetchDeals(pagination.current_page, searchTerm, stageFilter, startDate, endDate, pagination.per_page);
+      fetchDeals(pagination.current_page, searchTerm, stageFilter, startDate, endDate, pagination.per_page, recordView);
     } catch (err) {
       console.error("Delete deal error:", err);
       showToast(err.response?.data?.message || "Failed to delete deal.", "error");
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  // Restore Deal from Trash
+  const handleRestoreDeal = async () => {
+    if (!restoreTarget) return;
+    setIsRestoring(true);
+    try {
+      const res = await dealApi.restoreDeal(restoreTarget.id);
+      showToast(res.message || `Deal #${restoreTarget.deal_number} restored successfully!`, "success");
+      setRestoreTarget(null);
+      fetchMetrics();
+      fetchDeals(pagination.current_page, searchTerm, stageFilter, startDate, endDate, pagination.per_page, recordView);
+    } catch (err) {
+      console.error("Restore deal error:", err);
+      showToast(err.response?.data?.message || "Failed to restore deal.", "error");
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
+  // Permanently Force Delete Deal
+  const handleForceDeleteDeal = async () => {
+    if (!forceDeleteTarget) return;
+    setIsForceDeleting(true);
+    try {
+      const res = await dealApi.forceDeleteDeal(forceDeleteTarget.id);
+      showToast(res.message || `Deal #${forceDeleteTarget.deal_number} permanently deleted!`, "success");
+      setForceDeleteTarget(null);
+      fetchMetrics();
+      fetchDeals(pagination.current_page, searchTerm, stageFilter, startDate, endDate, pagination.per_page, recordView);
+    } catch (err) {
+      console.error("Force delete deal error:", err);
+      showToast(err.response?.data?.message || "Failed to permanently delete deal.", "error");
+    } finally {
+      setIsForceDeleting(false);
     }
   };
 
@@ -615,7 +665,26 @@ export default function DealsPage() {
             </p>
           </div>
 
-          <div className="page-header-actions d-flex align-items-center gap-2">
+          <div className="page-header-actions d-flex align-items-center gap-2 flex-wrap">
+            {/* Trash View Toggle Button */}
+            <button
+              type="button"
+              className={`btn ${recordView === "trash" ? "btn-danger text-white shadow-sm" : "btn-outline-custom"} d-flex align-items-center gap-1`}
+              onClick={() => {
+                const nextView = recordView === "trash" ? "active" : "trash";
+                setRecordView(nextView);
+                fetchDeals(1, searchTerm, stageFilter, startDate, endDate, pagination.per_page, nextView);
+              }}
+              title={recordView === "trash" ? "Back to Active Deals" : "View Deleted Deals Archive"}
+            >
+              <i className={`bi ${recordView === "trash" ? "bi-arrow-left" : "bi-trash text-danger"}`}></i>
+              <span>{recordView === "trash" ? "Active Deals" : "Trash"}</span>
+            </button>
+
+            <Link href="/admin/deals/pending-insurance" className="btn btn-outline-warning text-dark fw-semibold d-flex align-items-center gap-1 shadow-sm">
+              <i className="bi bi-shield-exclamation text-warning"></i>
+              <span>Pending Insurance</span>
+            </Link>
             <Link href="/admin/leads" className="btn btn-outline-primary d-flex align-items-center gap-1">
               <i className="bi bi-funnel-fill"></i>
               <span>Convert Lead</span>
@@ -692,7 +761,15 @@ export default function DealsPage() {
           <div className="card-header bg-white py-3">
             <div className="d-flex flex-wrap justify-content-between align-items-center gap-3">
               <div className="d-flex align-items-center gap-2">
-                <h5 className="card-title mb-0 fw-bold">Active Vehicle Deals</h5>
+                <h5 className="card-title mb-0 fw-bold">
+                  {recordView === "trash" ? (
+                    <span className="text-danger d-inline-flex align-items-center gap-2">
+                      <i className="bi bi-trash3-fill"></i> Trashed Deals Archive
+                    </span>
+                  ) : (
+                    "Active Vehicle Deals"
+                  )}
+                </h5>
                 <span className="badge bg-success-subtle text-success rounded-pill px-2">
                   {pagination.total || deals.length} Records
                 </span>
@@ -813,7 +890,7 @@ export default function DealsPage() {
             </div>
           </div>
 
-          <div className="table-responsive">
+          <div className="table-responsive" style={{ minHeight: "360px" }}>
             <table className="table table-custom align-middle mb-0">
               <thead className="border-bottom border-secondary border-opacity-25 text-secondary small text-uppercase">
                 <tr>
@@ -883,7 +960,8 @@ export default function DealsPage() {
                                 style={{
                                   minWidth: "210px",
                                   zIndex: 1050,
-                                  top: "100%",
+                                  top: index >= Math.max(1, deals.length - 4) ? "auto" : "100%",
+                                  bottom: index >= Math.max(1, deals.length - 4) ? "calc(100% + 4px)" : "auto",
                                   backgroundColor: "#FFFFFF",
                                 }}
                                 onClick={(e) => e.stopPropagation()}
@@ -944,18 +1022,48 @@ export default function DealsPage() {
 
                                 <div className="dropdown-divider my-1"></div>
 
-                                {/* Delete Deal */}
-                                <button
-                                  type="button"
-                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-danger"
-                                  onClick={() => {
-                                    setActiveActionMenuId(null);
-                                    setDeleteTarget(deal);
-                                  }}
-                                >
-                                  <i className="bi bi-trash-fill text-danger"></i>
-                                  <span>Delete Deal</span>
-                                </button>
+                                {recordView === "trash" ? (
+                                  <>
+                                    {/* Restore Deal */}
+                                    <button
+                                      type="button"
+                                      className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-success fw-semibold"
+                                      onClick={() => {
+                                        setActiveActionMenuId(null);
+                                        setRestoreTarget(deal);
+                                      }}
+                                    >
+                                      <i className="bi bi-arrow-counterclockwise text-success"></i>
+                                      <span>Restore Deal</span>
+                                    </button>
+
+                                    {/* Force Delete Deal */}
+                                    <button
+                                      type="button"
+                                      className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-danger fw-semibold"
+                                      onClick={() => {
+                                        setActiveActionMenuId(null);
+                                        setForceDeleteTarget(deal);
+                                      }}
+                                    >
+                                      <i className="bi bi-trash3-fill text-danger"></i>
+                                      <span>Delete Permanently</span>
+                                    </button>
+                                  </>
+                                ) : (
+                                  /* Delete Deal (Move to Trash) */
+                                  <button
+                                    type="button"
+                                    className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-danger"
+                                    onClick={() => {
+                                      setActiveActionMenuId(null);
+                                      setDeleteTarget(deal);
+                                    }}
+                                  >
+                                    <i className="bi bi-trash text-danger"></i>
+                                    <span>Move to Trash</span>
+                                  </button>
+                                )}
                               </div>
                             )}
                           </div>
@@ -968,10 +1076,21 @@ export default function DealsPage() {
                           </span>
                         </td>
 
-                        {/* 3. Customer */}
+                        {/* 3. Customer (Clickable to Lead 360) */}
                         <td>
                           <div>
-                            <h6 className="mb-0 text-dark fw-bold">{deal.customer_name}</h6>
+                            {deal.lead_id || deal.lead?.id ? (
+                              <Link
+                                href={`/admin/leads/${deal.lead_id || deal.lead?.id}`}
+                                className="text-primary text-decoration-none fw-bold d-inline-flex align-items-center gap-1 hover-underline"
+                                title="Open Lead 360 Complete Profile"
+                              >
+                                {deal.customer_name}
+                                <i className="bi bi-box-arrow-up-right text-muted" style={{ fontSize: "10px" }}></i>
+                              </Link>
+                            ) : (
+                              <h6 className="mb-0 text-dark fw-bold">{deal.customer_name}</h6>
+                            )}
                             <div className="small text-muted">
                               <i className="bi bi-telephone me-1"></i>
                               {deal.customer_phone || "-"}
@@ -1703,12 +1822,13 @@ export default function DealsPage() {
         {/* ===================================================================
             MODAL 3: DELETE CONFIRMATION
             =================================================================== */}
+        {/* Move to Trash Modal */}
         {deleteTarget && (
           <div className="modal-backdrop-custom">
             <div className="modal-dialog-custom modal-sm" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "420px" }}>
               <div className="modal-header-custom bg-danger text-white">
                 <h5 className="modal-title-custom text-white mb-0 fs-6 fw-bold">
-                  <i className="bi bi-exclamation-triangle-fill me-2"></i> Delete Deal
+                  <i className="bi bi-trash-fill me-2"></i> Move to Trash
                 </h5>
                 <button
                   type="button"
@@ -1719,10 +1839,10 @@ export default function DealsPage() {
               </div>
               <div className="modal-body-custom p-4 text-center">
                 <p className="mb-2 text-dark">
-                  Are you sure you want to delete deal <strong>{deleteTarget.deal_number}</strong>?
+                  Move Deal <strong>{deleteTarget.deal_number}</strong> to trash?
                 </p>
                 <div className="text-secondary small">Customer: {deleteTarget.customer_name}</div>
-                <div className="text-danger small mt-2">This action cannot be undone.</div>
+                <div className="text-muted small mt-2">You can restore this deal anytime from the Trash tab.</div>
               </div>
               <div className="modal-footer-custom d-flex justify-content-between p-3">
                 <button
@@ -1742,12 +1862,121 @@ export default function DealsPage() {
                   {isDeleting ? (
                     <>
                       <span className="spinner-border spinner-border-sm" role="status"></span>
+                      <span>Moving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <i className="bi bi-trash"></i>
+                      <span>Move to Trash</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Restore Deal Modal */}
+        {restoreTarget && (
+          <div className="modal-backdrop-custom">
+            <div className="modal-dialog-custom modal-sm" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "420px" }}>
+              <div className="modal-header-custom bg-success text-white">
+                <h5 className="modal-title-custom text-white mb-0 fs-6 fw-bold">
+                  <i className="bi bi-arrow-counterclockwise me-2"></i> Restore Deal
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close btn-close-white"
+                  onClick={() => !isRestoring && setRestoreTarget(null)}
+                  disabled={isRestoring}
+                ></button>
+              </div>
+              <div className="modal-body-custom p-4 text-center">
+                <p className="mb-2 text-dark">
+                  Restore Deal <strong>{restoreTarget.deal_number}</strong> back to active deals?
+                </p>
+                <div className="text-secondary small">Customer: {restoreTarget.customer_name}</div>
+              </div>
+              <div className="modal-footer-custom d-flex justify-content-between p-3">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary"
+                  onClick={() => setRestoreTarget(null)}
+                  disabled={isRestoring}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-success d-flex align-items-center gap-1"
+                  onClick={handleRestoreDeal}
+                  disabled={isRestoring}
+                >
+                  {isRestoring ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm" role="status"></span>
+                      <span>Restoring...</span>
+                    </>
+                  ) : (
+                    <>
+                      <i className="bi bi-check-circle"></i>
+                      <span>Yes, Restore Deal</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Permanent Force Delete Deal Modal */}
+        {forceDeleteTarget && (
+          <div className="modal-backdrop-custom">
+            <div className="modal-dialog-custom modal-sm" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "420px" }}>
+              <div className="modal-header-custom bg-danger text-white">
+                <h5 className="modal-title-custom text-white mb-0 fs-6 fw-bold">
+                  <i className="bi bi-exclamation-triangle-fill me-2"></i> Permanent Delete
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close btn-close-white"
+                  onClick={() => !isForceDeleting && setForceDeleteTarget(null)}
+                  disabled={isForceDeleting}
+                ></button>
+              </div>
+              <div className="modal-body-custom p-4 text-center">
+                <p className="mb-2 text-dark">
+                  Are you sure you want to permanently delete deal <strong>{forceDeleteTarget.deal_number}</strong>?
+                </p>
+                <div className="text-secondary small">Customer: {forceDeleteTarget.customer_name}</div>
+                <div className="text-danger small mt-2 fw-bold">
+                  ⚠️ This cannot be undone. All linked payment records will also be erased.
+                </div>
+              </div>
+              <div className="modal-footer-custom d-flex justify-content-between p-3">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary"
+                  onClick={() => setForceDeleteTarget(null)}
+                  disabled={isForceDeleting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-danger d-flex align-items-center gap-1"
+                  onClick={handleForceDeleteDeal}
+                  disabled={isForceDeleting}
+                >
+                  {isForceDeleting ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm" role="status"></span>
                       <span>Deleting...</span>
                     </>
                   ) : (
                     <>
-                      <i className="bi bi-trash-fill"></i>
-                      <span>Yes, Delete</span>
+                      <i className="bi bi-trash3-fill"></i>
+                      <span>Delete Forever</span>
                     </>
                   )}
                 </button>
@@ -1884,7 +2113,7 @@ export default function DealsPage() {
                 {(!viewDeal.payments || viewDeal.payments.length === 0) ? (
                   <p className="text-muted small py-2">No payment transactions recorded yet.</p>
                 ) : (
-                  <div className="table-responsive">
+                  <div className="table-responsive" style={{ minHeight: "360px" }}>
                     <table className="table table-sm table-bordered align-middle mb-0">
                       <thead className="table-light small">
                         <tr>

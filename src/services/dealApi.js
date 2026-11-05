@@ -370,6 +370,26 @@ export const dealApi = {
   },
 
   /**
+   * Restore a soft-deleted deal from trash
+   * @param {number|string} id
+   */
+  restoreDeal: async (id) => {
+    const response = await api.post(`/deals/${id}/restore`);
+    window.dispatchEvent(new Event("csd_deals_updated"));
+    return response.data;
+  },
+
+  /**
+   * Permanently delete a deal
+   * @param {number|string} id
+   */
+  forceDeleteDeal: async (id) => {
+    const response = await api.delete(`/deals/${id}/force`);
+    window.dispatchEvent(new Event("csd_deals_updated"));
+    return response.data;
+  },
+
+  /**
    * Add a payment for a deal dynamically 
    * @param {Object} payload 
    */
@@ -457,6 +477,18 @@ export const dealApi = {
    * Get all payments dynamically from backend 
    * @param {Object} [params]
    */
+    /**
+   * Add insurance to an existing deal that was converted without insurance
+   * @param {number|string} dealId
+   * @param {Object} payload
+   */
+  addInsurance: async (dealId, payload) => {
+    const response = await api.post(`/deals/${dealId}/insurance`, payload);
+    window.dispatchEvent(new Event("csd_deals_updated"));
+    window.dispatchEvent(new Event("csd_insurances_updated"));
+    return response.data;
+  },
+
   getPayments: async (params = {}) => {
     const response = await api.get("/payments", { params });
     return response.data;

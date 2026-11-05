@@ -345,12 +345,12 @@ export default function AccountantDashboard() {
                 <span className="text-muted fw-bold text-uppercase small" style={{ fontSize: "0.68rem", letterSpacing: "0.6px" }}>
                   ACTIVE INVOICES
                 </span>
-               <div
+                <div
                   className="d-flex align-items-center justify-content-center rounded-3"
                   style={{ width: "32px", height: "32px", backgroundColor: "#F1F5F9", color: "#475569" }}
                 >
                   <i className="bi bi-journal-check fs-6"></i>
-                </div> 
+                </div>
               </div>
               <div className="fw-bolder fs-3 text-dark">{kpis.active_tokens_count ?? 0}</div>
               <span className="text-muted" style={{ fontSize: "0.72rem" }}>

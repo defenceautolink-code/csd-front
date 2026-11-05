@@ -84,12 +84,17 @@ export default function LeadDetailPage() {
 
   const [lead, setLead] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  // Collapsible sections state (All 3 open by default as requested)
+  // Collapsible sections state (All open by default)
   const [openSections, setOpenSections] = useState({
     followups: true,
     quotations: true,
     assignments: true,
+    insurance: true,
   });
+
+  // Insurance history state
+  const [insurances, setInsurances] = useState([]);
+  const [isLoadingInsurance, setIsLoadingInsurance] = useState(false);
 
   const toggleSection = (sectionKey) => {
     setOpenSections((prev) => ({
@@ -255,11 +260,13 @@ export default function LeadDetailPage() {
       const rawLead = res?.data?.data || res?.data;
       if (rawLead) {
         const localPostings = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("csd_lead_postings_cache") || "{}") : {};
-        setLead({
+        const populatedLead = {
           ...rawLead,
           posting: rawLead.posting || localPostings[rawLead.id] || "",
           home_town: rawLead.home_town || rawLead.city || "",
-        });
+        };
+        setLead(populatedLead);
+        fetchInsurances(populatedLead);
       }
     } catch (err) {
       console.error("Error fetching lead detail:", err);
@@ -270,11 +277,13 @@ export default function LeadDetailPage() {
           const found = fallbackRes.data.data.find((item) => String(item.id) === String(leadId));
           if (found) {
             const localPostings = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("csd_lead_postings_cache") || "{}") : {};
-            setLead({
+            const populatedFound = {
               ...found,
               posting: found.posting || localPostings[found.id] || "",
               home_town: found.home_town || found.city || "",
-            });
+            };
+            setLead(populatedFound);
+            fetchInsurances(populatedFound);
             return;
           }
         }
@@ -334,6 +343,75 @@ export default function LeadDetailPage() {
     }
   };
 
+  // 3.5 Fetch Insurances & Policy History
+  const fetchInsurances = async (leadData = null) => {
+    if (!leadId) return;
+    setIsLoadingInsurance(true);
+    try {
+      const currentLead = leadData || lead;
+      // Fetch all insurance records (bypass 15-day expiry restriction with all: 1, status: 'all')
+      const res = await api.get("/insurances", { params: { all: 1, status: "all" } }).catch(() => null);
+      let list = [];
+      if (res && res.data) {
+        list = Array.isArray(res.data) ? res.data : (res.data.data || []);
+      }
+      const leadPhone = currentLead?.phone ? String(currentLead.phone).trim() : "";
+
+      const currentLeadName = currentLead?.name ? String(currentLead.name).trim().toLowerCase() : "";
+
+      const matched = list.filter((ins) => {
+        // 1. Direct lead_id or customer_id matching
+        if (String(ins.customer_id) === String(leadId) || String(ins.lead_id) === String(leadId)) return true;
+        
+        // 2. Deal ID matching with this lead's deals
+        if (currentLead?.deals && Array.isArray(currentLead.deals)) {
+          const matchDeal = currentLead.deals.some(
+            (d) => String(d.id) === String(ins.deal_id) || (d.deal_number && String(d.deal_number) === String(ins.deal_id))
+          );
+          if (matchDeal) return true;
+        }
+
+        // 3. Fallback: Phone matching ONLY if customer name also matches (prevents shared dummy phone leakage)
+        if (
+          leadPhone &&
+          currentLeadName &&
+          (String(ins.customer_number || "").trim() === leadPhone || String(ins.customer_phone || "").trim() === leadPhone) &&
+          String(ins.customer_name || "").trim().toLowerCase() === currentLeadName
+        ) {
+          return true;
+        }
+
+        return false;
+      });
+
+      // Also incorporate any insurances directly attached to lead or deals
+      if (currentLead?.insurances && Array.isArray(currentLead.insurances)) {
+        currentLead.insurances.forEach((di) => {
+          if (!matched.some((m) => String(m.id) === String(di.id))) {
+            matched.push(di);
+          }
+        });
+      }
+      if (currentLead?.deals && Array.isArray(currentLead.deals)) {
+        currentLead.deals.forEach((d) => {
+          if (d.insurances && Array.isArray(d.insurances)) {
+            d.insurances.forEach((di) => {
+              if (!matched.some((m) => String(m.id) === String(di.id))) {
+                matched.push(di);
+              }
+            });
+          }
+        });
+      }
+
+      setInsurances(matched);
+    } catch (err) {
+      console.error("Error fetching insurances:", err);
+    } finally {
+      setIsLoadingInsurance(false);
+    }
+  };
+
   // 4. Fetch Assignments History
   const fetchAssignments = async () => {
     if (!leadId) return;
@@ -366,6 +444,18 @@ export default function LeadDetailPage() {
     fetchFollowUps();
     fetchQuotations();
     fetchAssignments();
+    fetchInsurances();
+
+    const handleInsuranceSync = () => {
+      fetchLeadDetails();
+      fetchInsurances();
+    };
+    window.addEventListener("csd_insurances_updated", handleInsuranceSync);
+    window.addEventListener("csd_deals_updated", handleInsuranceSync);
+    return () => {
+      window.removeEventListener("csd_insurances_updated", handleInsuranceSync);
+      window.removeEventListener("csd_deals_updated", handleInsuranceSync);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leadId]);
 
@@ -1063,6 +1153,177 @@ export default function LeadDetailPage() {
           </div>
         </div>
 
+
+          {/* 4. Insurance Policies & Coverage History Section */}
+          <div className="card shadow-sm border-0" style={{ borderRadius: "16px", overflow: "hidden", background: "#ffffff" }}>
+            <div
+              className="d-flex align-items-center justify-content-between px-4 py-3"
+              style={{
+                backgroundColor: "#F1F3ED",
+                borderBottom: openSections.insurance ? "1px solid #DFE2D6" : "none",
+                cursor: "pointer",
+                userSelect: "none",
+              }}
+              onClick={() => toggleSection("insurance")}
+            >
+              <div className="d-flex align-items-center gap-2">
+                <i className="bi bi-shield-check-fill text-success fs-5"></i>
+                <h6 className="mb-0 fw-bold text-dark fs-6">
+                  Insurance Policies & History ({insurances.length})
+                </h6>
+                {insurances.length > 0 && (
+                  <span className="badge bg-success-subtle text-success border border-success-subtle fw-semibold px-2 py-0.5 ms-2" style={{ fontSize: "11px" }}>
+                    Active Coverage
+                  </span>
+                )}
+              </div>
+
+              <div className="d-flex align-items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                <Link
+                  href="/admin/deals/pending-insurance"
+                  className="btn btn-sm btn-outline-custom d-inline-flex align-items-center gap-1 py-1 px-2.5"
+                  style={{ fontSize: "0.8rem" }}
+                >
+                  <i className="bi bi-shield-plus text-primary"></i>
+                  <span>Pending Insurance Queue</span>
+                </Link>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-light border-0 rounded-circle p-1 d-flex align-items-center justify-content-center"
+                  style={{ width: "32px", height: "32px", background: "rgba(0,0,0,0.05)" }}
+                  onClick={() => toggleSection("insurance")}
+                  title={openSections.insurance ? "Hide / Collapse" : "Show / Expand"}
+                >
+                  <i className={`bi ${openSections.insurance ? "bi-chevron-up" : "bi-chevron-down"} fw-bold text-dark`}></i>
+                </button>
+              </div>
+            </div>
+
+            {openSections.insurance && (
+              <div className="card-body p-4">
+                {isLoadingInsurance ? (
+                  <div className="text-center py-4 text-muted">
+                    <div className="spinner-border spinner-border-sm me-2"></div>
+                    Loading insurance records...
+                  </div>
+                ) : insurances.length === 0 ? (
+                  <div className="text-center py-5 border rounded-3 bg-light">
+                    <i className="bi bi-shield-x text-muted display-6"></i>
+                    <h6 className="fw-bold text-dark mt-2 mb-1">No Insurance Policy Linked Yet</h6>
+                    <p className="text-muted small mb-3">
+                      This customer does not have an active insurance policy on record.
+                    </p>
+                    <Link
+                      href="/admin/deals/pending-insurance"
+                      className="btn btn-sm btn-primary"
+                    >
+                      <i className="bi bi-shield-plus me-1"></i> Check Pending Insurance Deals
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="d-flex flex-column gap-3">
+                    {insurances.map((ins, insIdx) => (
+                      <div
+                        key={ins.id || insIdx}
+                        className="p-3 border rounded-3 bg-white shadow-xs position-relative"
+                        style={{ borderLeft: "4px solid #10B981" }}
+                      >
+                        <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 pb-2 border-bottom">
+                          <div className="d-flex align-items-center gap-2 flex-wrap">
+                            <span className="badge bg-primary font-monospace px-2 py-1">
+                              <i className="bi bi-shield-lock me-1"></i>
+                              {ins.policy_number || "POL-RECORD"}
+                            </span>
+                            <strong className="text-dark fs-6">{ins.insurance_company || "Standard Insurance"}</strong>
+                            <span className="badge bg-info-subtle text-info border border-info px-2 py-0.5 small">
+                              {ins.insurance_type || "Comprehensive"}
+                            </span>
+                          </div>
+
+                          <div className="d-flex align-items-center gap-2">
+                            <span
+                              className={`badge fw-semibold px-2.5 py-1 rounded-pill ${
+                                ins.status === "expired"
+                                  ? "bg-danger-subtle text-danger border border-danger-subtle"
+                                  : ins.status === "expiring_soon"
+                                  ? "bg-warning-subtle text-warning-emphasis border border-warning-subtle"
+                                  : "bg-success-subtle text-success border border-success-subtle"
+                              }`}
+                              style={{ fontSize: "11px" }}
+                            >
+                              <i className={`bi me-1 ${ins.status === "expired" ? "bi-x-circle" : ins.status === "expiring_soon" ? "bi-exclamation-triangle" : "bi-check-circle"}`}></i>
+                              {ins.status === "expired" ? "Expired" : ins.status === "expiring_soon" ? "Expiring Soon" : "Active Policy"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Policy Metrics Grid */}
+                        <div className="row g-2 pt-2 small text-muted">
+                          <div className="col-12 col-sm-6 col-md-3">
+                            <span>Policy Period:</span>{" "}
+                            <strong className="text-dark d-block">
+                              {ins.policy_start_date || ins.start_date || "—"} to {ins.policy_expiry_date || ins.insurance_expire_date || "—"}
+                            </strong>
+                          </div>
+                          <div className="col-12 col-sm-6 col-md-3">
+                            <span>Premium Amount:</span>{" "}
+                            <strong className="text-success d-block fw-bold">
+                              ₹{Number(ins.premium_amount || 0).toLocaleString("en-IN")}
+                            </strong>
+                          </div>
+                          <div className="col-12 col-sm-6 col-md-3">
+                            <span>Vehicle Reg / Chassis:</span>{" "}
+                            <strong className="text-dark d-block font-monospace">
+                              {ins.vehicle_number || ins.registration_number || ins.vin_chassis_number || "—"}
+                            </strong>
+                          </div>
+                          <div className="col-12 col-sm-6 col-md-3">
+                            <span>Reminder Schedule:</span>{" "}
+                            <strong className="text-dark d-block">
+                              {ins.reminder_days_before ? `${ins.reminder_days_before} Days Before` : "15 Days Before"}
+                              {ins.reminder_date ? ` (${ins.reminder_date})` : ""}
+                            </strong>
+                          </div>
+                        </div>
+
+                        {ins.notes && (
+                          <div className="mt-2 p-2 bg-light rounded text-secondary small">
+                            <i className="bi bi-info-circle me-1 text-primary"></i>
+                            <strong>Policy Notes:</strong> {ins.notes}
+                          </div>
+                        )}
+
+                        {/* Renewal History Timeline if available */}
+                        {Array.isArray(ins.renewal_history || ins.renewalHistories) && (ins.renewal_history || ins.renewalHistories).length > 0 && (
+                          <div className="mt-3 pt-2 border-top">
+                            <span className="small fw-bold text-dark text-uppercase d-block mb-2">
+                              <i className="bi bi-clock-history me-1 text-primary"></i> Renewal History Archive:
+                            </span>
+                            <div className="d-flex flex-column gap-1">
+                              {(ins.renewal_history || ins.renewalHistories).map((ren, rIdx) => (
+                                <div key={ren.id || rIdx} className="d-flex justify-content-between align-items-center p-2 rounded bg-light small">
+                                  <div>
+                                    <span className="badge bg-secondary font-monospace me-2">{ren.policy_number}</span>
+                                    <span className="fw-semibold text-dark">{ren.insurance_company}</span>
+                                    <span className="text-muted ms-2">({ren.policy_start_date} to {ren.policy_expiry_date})</span>
+                                  </div>
+                                  <div className="d-flex align-items-center gap-2">
+                                    <strong className="text-success">₹{Number(ren.premium_amount || 0).toLocaleString("en-IN")}</strong>
+                                    <span className="badge bg-success-subtle text-success">Renewed</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
         {/* Modal: Log Follow-Up Call */}
         {showFollowUpModal && (
           <div className="modal-backdrop-custom">
@@ -1100,10 +1361,11 @@ export default function LeadDetailPage() {
                       >
                         <option value="Interested / Call Back">Interested / Call Back</option>
                         <option value="Quotation Requested">Quotation Requested</option>
+                        <option value="Quotation Sent">Quotation Sent</option>
                         <option value="Negotiation / Price Discussion">Negotiation / Price Discussion</option>
                         <option value="Not Reachable / Busy">Not Reachable / Busy</option>
                         <option value="Lost to Competitor / Lost of Lead">Lost to Competitor / Lost of Lead</option>
-                        <option value="Deal Won / Booking">Deal Won / Booking</option>
+                        <option value="Deal Won">Deal Won</option>
                       </select>
                     </div>
 
@@ -1262,6 +1524,7 @@ export default function LeadDetailPage() {
         {/* Modal: Convert Deal */}
         {showConvertModal && lead && (
           <ConvertDealModal
+            isOpen={showConvertModal}
             lead={lead}
             onClose={() => setShowConvertModal(false)}
             onSuccess={() => {
@@ -1269,6 +1532,7 @@ export default function LeadDetailPage() {
               showToast("Lead successfully converted to Deal!", "success");
               fetchLeadDetails();
             }}
+            showToast={showToast}
           />
         )}
       </div>

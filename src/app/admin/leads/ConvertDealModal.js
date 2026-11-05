@@ -174,11 +174,17 @@ export default function ConvertDealModal({
           if (lead.quotation_id) {
             const found = finalQuotes.find((q) => String(q.id) === String(lead.quotation_id));
             if (found) {
-              const quoteTotal = Number(found.grand_total || found.total_amount || 0);
-              if (quoteTotal > 0 && !leadBudget) {
+              const quoteDiscount = Number(found.discount || found.discount_amount || (Array.isArray(found.items) ? found.items.reduce((acc, it) => acc + Number(it.discount || 0), 0) : 0)) || Number(lead?.approved_discount || 0);
+              const quoteGrandTotal = Number(found.grand_total || found.total_amount || 0);
+              const quoteSubtotal = Number(found.subtotal || 0);
+              const baseTotal = quoteSubtotal > 0 ? quoteSubtotal : (quoteGrandTotal + (quoteDiscount > 0 ? quoteDiscount : 0));
+              const finalTotal = baseTotal > 0 ? baseTotal : quoteGrandTotal;
+
+              if (finalTotal > 0 && !leadBudget) {
                 setFormData((prev) => ({
                   ...prev,
-                  total_amount: String(quoteTotal),
+                  total_amount: String(finalTotal),
+                  discount_amount: quoteDiscount > 0 ? String(quoteDiscount) : prev.discount_amount,
                 }));
               }
             }
@@ -200,20 +206,26 @@ export default function ConvertDealModal({
       setFormData((prev) => ({
         ...prev,
         quotation_id: "",
+        discount_amount: "0",
         has_insurance: "No",
       }));
       return;
     }
 
-    const quoteTotal = Number(quote.grand_total || quote.total_amount || quote.final_price || 0);
+    const quoteDiscount = Number(quote.discount || quote.discount_amount || (Array.isArray(quote.items) ? quote.items.reduce((acc, it) => acc + Number(it.discount || 0), 0) : 0)) || Number(lead?.approved_discount || 0);
+    const quoteGrandTotal = Number(quote.grand_total || quote.total_amount || quote.final_price || 0);
+    const quoteSubtotal = Number(quote.subtotal || 0);
+    const baseTotal = quoteSubtotal > 0 ? quoteSubtotal : (quoteGrandTotal + (quoteDiscount > 0 ? quoteDiscount : 0));
+    const finalTotal = baseTotal > 0 ? baseTotal : quoteGrandTotal;
 
     setFormData((prev) => ({
       ...prev,
       quotation_id: quote.id,
-      total_amount: quoteTotal > 0 ? String(quoteTotal) : prev.total_amount,
+      total_amount: finalTotal > 0 ? String(finalTotal) : prev.total_amount,
+      discount_amount: quoteDiscount > 0 ? String(quoteDiscount) : "0",
       has_insurance: "No",
     }));
-    showToast(`Selected Quotation #${quote.quotation_number || quote.id}`, "info");
+    showToast(`Selected Quotation #${quote.quotation_number || quote.id}${quoteDiscount > 0 ? ` (Discount: ₹${quoteDiscount.toLocaleString('en-IN')})` : ''}`, "info");
   };
 
   if (!isOpen || !lead) return null;

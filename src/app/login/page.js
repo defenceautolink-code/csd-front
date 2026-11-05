@@ -10,7 +10,7 @@ export default function LoginPage() {
   const router = useRouter();
 
   // Splash Screen State
-  const [showSplash, setShowSplash] = useState(true);
+  const [showSplash, setShowSplash] = useState(false);
   const [splashProgress, setSplashProgress] = useState(0);
   const [splashStep, setSplashStep] = useState("Initializing encrypted handshake...");
 
@@ -130,35 +130,55 @@ export default function LoginPage() {
     setSuccessMessage("");
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
+      const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
+      const apiUrl = rawApiUrl.replace(/\/+$/, "");
 
-      const response = await axios.post(`${apiUrl}/auth/login`, {
-        email: email,
-        password: password,
-      });
+      const response = await axios.post(
+        `${apiUrl}/auth/login`,
+        {
+          email: email.trim(),
+          password: password,
+        },
+        {
+          timeout: 10000,
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+        }
+      );
 
       if (response.data && response.data.status) {
-        const token = response.data.data.token;
-        const user = response.data.data.user;
+        const token = response.data.data?.token || response.data.token;
+        const user = response.data.data?.user || response.data.user;
 
         setAuthSession(token, user);
-
         setSuccessMessage("Authentication verified! Launching workspace...");
 
+        const targetUrl = getRoleDashboardPath(user?.role);
         setTimeout(() => {
-          const targetUrl = getRoleDashboardPath(user?.role);
-          router.push(targetUrl);
-        }, 500);
+          window.location.href = targetUrl;
+        }, 300);
+      } else {
+        setErrorMessage(response.data?.message || "Login failed. Please check credentials.");
+        setIsLoading(false);
       }
     } catch (error) {
-      console.log("Login Error:", error);
-      if (error.response && error.response.data && error.response.data.message) {
+      console.error("Login Error:", error);
+      setIsLoading(false);
+      if (error.code === "ECONNABORTED" || error.message?.includes("timeout")) {
+        setErrorMessage("Connection timed out. Please check if backend server is running.");
+      } else if (error.response?.data?.errors?.email?.[0]) {
+        setErrorMessage(error.response.data.errors.email[0]);
+      } else if (error.response?.data?.errors?.password?.[0]) {
+        setErrorMessage(error.response.data.errors.password[0]);
+      } else if (error.response?.data?.message) {
         setErrorMessage(error.response.data.message);
+      } else if (error.message?.includes("Network Error")) {
+        setErrorMessage("Cannot connect to backend server. Please verify Laravel server is running.");
       } else {
         setErrorMessage("Server error or invalid credentials. Please try again.");
       }
-    } finally {
-      setIsLoading(false);
     }
   };
 

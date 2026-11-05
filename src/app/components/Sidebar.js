@@ -562,16 +562,26 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                   <span>Send Quotation</span>
                 </Link>
               </li>
-              <li className="nav-item">
-                <Link
-                  href="/admin/deals"
-                  className={`nav-link ${isLinkActive("/admin/deals") ? "active" : ""}`}
-                  onClick={onCloseMobile}
-                >
-                  <i className="bi bi-trophy-fill"></i>
-                  <span>Deals & Bookings</span>
-                </Link>
-              </li>
+                              <li className="nav-item">
+                  <Link
+                    href="/admin/deals"
+                    className={`nav-link ${isLinkActive("/admin/deals") && !isLinkActive("/admin/deals/pending-insurance") ? "active" : ""}`}
+                    onClick={onCloseMobile}
+                  >
+                    <i className="bi bi-trophy-fill"></i>
+                    <span>Deals & Bookings</span>
+                  </Link>
+                </li>
+                <li className="nav-item">
+                  <Link
+                    href="/admin/deals/pending-insurance"
+                    className={`nav-link ${isLinkActive("/admin/deals/pending-insurance") ? "active" : ""}`}
+                    onClick={onCloseMobile}
+                  >
+                    <i className="bi bi-shield-plus"></i>
+                    <span>Pending Insurance</span>
+                  </Link>
+                </li>
               <li className="nav-item">
                 <Link
                   href="/admin/insurance"

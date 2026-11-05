@@ -221,7 +221,7 @@ export default function SalesExecutiveDashboard({ onAddLead }) {
       {/* ----------------------------------------------------
           2. TOP 5 CORE STAT CARDS (Strictly Scoped to Sales Executive)
           ---------------------------------------------------- */}
-      <div className="row g-3 mb-4 row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-5">
+      <div className="row g-3 mb-4 row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-6">
         {/* Card 1: TOTAL LEADS */}
         <div className="col">
           <Link
@@ -249,6 +249,37 @@ export default function SalesExecutiveDashboard({ onAddLead }) {
             </div>
             <div className="text-muted small mt-2 d-flex align-items-center gap-1" style={{ fontSize: "0.75rem" }}>
               <i className="bi bi-funnel text-primary"></i> All Inquiries
+            </div>
+          </Link>
+        </div>
+
+        {/* Card: NEW LEADS */}
+        <div className="col">
+          <Link
+            href={`${basePath}/leads?status=New`}
+            className="card h-100 border rounded-4 p-3 bg-white shadow-sm text-decoration-none text-dark"
+            style={{ transition: "transform 0.15s ease, box-shadow 0.15s ease", cursor: "pointer" }}
+            title="Click to view new leads"
+          >
+            <div className="d-flex align-items-center justify-content-between mb-2">
+              <span
+                className="text-muted fw-bold text-uppercase small"
+                style={{ fontSize: "0.72rem", letterSpacing: "0.5px" }}
+              >
+                NEW LEADS
+              </span>
+              <span
+                className="badge fw-bold px-2 py-1 rounded-pill"
+                style={{ backgroundColor: "#EFF6FF", color: "#2563EB", fontSize: "0.7rem" }}
+              >
+                New
+              </span>
+            </div>
+            <div className="fw-bolder" style={{ fontSize: "1.9rem", lineHeight: "1", color: "#2563EB" }}>
+              {isLoadingStats ? "..." : (kpis.new_leads ?? 0)}
+            </div>
+            <div className="text-muted small mt-2 d-flex align-items-center gap-1" style={{ fontSize: "0.75rem" }}>
+              <i className="bi bi-person-plus text-primary"></i> Fresh Inquiries
             </div>
           </Link>
         </div>
@@ -377,6 +408,8 @@ export default function SalesExecutiveDashboard({ onAddLead }) {
           </Link>
         </div>
       </div>
+
+        
 
       {/* ----------------------------------------------------
           3. MAIN CONTENT: 2 COLUMNS (Left: Follow-ups & Pipeline, Right: Quick Actions, Quotes, Bookings)
@@ -935,10 +968,12 @@ export default function SalesExecutiveDashboard({ onAddLead }) {
                   >
                     <option value="Connected - Interested">Connected - Highly Interested</option>
                     <option value="Connected - Quotation Requested">Connected - Quotation Requested</option>
+                    <option value="Quotation Sent">Quotation Sent</option>
                     <option value="Call Back Later">Call Back Later / Busy</option>
                     <option value="Ringing No Answer">Ringing No Answer</option>
                     <option value="Negotiation / Price Discussion">Negotiation / Price Discussion</option>
                     <option value="Lost to Competitor">Lost to Competitor / Closed</option>
+                    <option value="Deal Won">Deal Won</option>
                   </select>
                 </div>
 

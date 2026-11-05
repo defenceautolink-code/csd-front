@@ -47,6 +47,7 @@ export function setAuthSession(token, user) {
     clientAuthCached = { token, user: userObj };
     // Cookie persists for 1 year (31536000 seconds)
     document.cookie = `auth_token=${encodeURIComponent(token)}; path=/; max-age=31536000; SameSite=Lax`;
+    document.cookie = `token=${encodeURIComponent(token)}; path=/; max-age=31536000; SameSite=Lax`;
   } catch (error) {
     console.error("Error setting auth session:", error);
   }

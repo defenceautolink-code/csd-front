@@ -9,6 +9,7 @@ import { hasPermission, normalizeRole } from "@/utils/auth";
 import Pagination from "@/components/common/Pagination";
 import discountApprovalApi from "@/services/discountApprovalApi";
 import { logActivity } from "@/utils/activityLogger";
+import ConvertDealModal from "@/app/admin/leads/ConvertDealModal";
 
 export default function FollowUpPage() {
   const { showToast } = useToast();
@@ -141,7 +142,37 @@ export default function FollowUpPage() {
   const [loading, setLoading] = useState(true);
   const [permanentDeleteTarget, setPermanentDeleteTarget] = useState(null);
   const [isDeletingPermanent, setIsDeletingPermanent] = useState(false);
-  const [kpis, setKpis] = useState({ overdue: 0, due_today: 0, upcoming: 0, total: 0 });
+  const [dealConvertLead, setDealConvertLead] = useState(null);
+  const [showConvertDealModal, setShowConvertDealModal] = useState(false);
+
+  const handleOpenConvertDeal = (item) => {
+    setActiveActionMenuId(null);
+    const targetLead = item.rawLead || {
+      id: item.lead_id || item.id,
+      name: item.customer,
+      phone: item.phone,
+      email: item.email || "",
+      city: item.city || "",
+      brand_name: item.variant || "",
+      model_variant: item.vehicle || "",
+    };
+    setDealConvertLead(targetLead);
+    setShowConvertDealModal(true);
+  };
+
+  const [kpis, setKpis] = useState({
+    total: 0,
+    interested: 0,
+    quotation_requested: 0,
+    quotation_sent: 0,
+    negotiation: 0,
+    not_reachable: 0,
+    deal_won: 0,
+    lost: 0,
+    overdue: 0,
+    due_today: 0,
+    upcoming: 0,
+  });
   const [pagination, setPagination] = useState({
     current_page: 1,
     last_page: 1,
@@ -180,6 +211,14 @@ export default function FollowUpPage() {
       const res = await axios.get(`${API_URL}/follow-ups/stats`, { params, headers });
       if (res.data && res.data.status && res.data.data) {
         setKpis({
+          total: Number(res.data.data.total) || 0,
+          interested: Number(res.data.data.interested) || 0,
+          quotation_requested: Number(res.data.data.quotation_requested) || 0,
+          quotation_sent: Number(res.data.data.quotation_sent) || 0,
+          negotiation: Number(res.data.data.negotiation) || 0,
+          not_reachable: Number(res.data.data.not_reachable) || 0,
+          deal_won: Number(res.data.data.deal_won) || 0,
+          lost: Number(res.data.data.lost) || 0,
           overdue: Number(res.data.data.overdue) || 0,
           due_today: Number(res.data.data.due_today) || 0,
           upcoming: Number(res.data.data.upcoming) || 0,
@@ -235,6 +274,14 @@ export default function FollowUpPage() {
       if (res.data && res.data.status && Array.isArray(res.data.data)) {
         if (res.data.kpis) {
           setKpis({
+            total: Number(res.data.kpis.total) || 0,
+            interested: Number(res.data.kpis.interested) || 0,
+            quotation_requested: Number(res.data.kpis.quotation_requested) || 0,
+            quotation_sent: Number(res.data.kpis.quotation_sent) || 0,
+            negotiation: Number(res.data.kpis.negotiation) || 0,
+            not_reachable: Number(res.data.kpis.not_reachable) || 0,
+            deal_won: Number(res.data.kpis.deal_won) || 0,
+            lost: Number(res.data.kpis.lost) || 0,
             overdue: Number(res.data.kpis.overdue) || 0,
             due_today: Number(res.data.kpis.due_today) || 0,
             upcoming: Number(res.data.kpis.upcoming) || 0,
@@ -261,7 +308,10 @@ export default function FollowUpPage() {
               return st.includes("deal") || st.includes("won") || st.includes("booking") || st.includes("completed");
             }
             if (lowerOut.includes("quotation") || lowerOut.includes("quote")) {
-              return st.includes("quotation") || st.includes("quote") || st.includes("sent");
+              if (lowerOut.includes("sent") || lowerOut.includes("send")) {
+                return st.includes("sent") || st.includes("send");
+              }
+              return (st.includes("quotation") || st.includes("quote")) && !st.includes("sent") && !st.includes("send");
             }
             if (lowerOut.includes("interested") || lowerOut.includes("call back")) {
               return st.includes("interested") || st.includes("call back");
@@ -330,8 +380,28 @@ export default function FollowUpPage() {
             variant: brand,
             outcome: outcome,
             outcomeDesc: desc,
-            badgeClass: outcome === "Completed" ? "bg-success-subtle text-success" : "bg-warning-subtle text-warning",
-            badgeIcon: outcome === "Completed" ? "bi bi-check2-circle" : "bi bi-telephone-outbound",
+            badgeClass: (() => {
+              const outL = (outcome || "").toLowerCase();
+              if (outL.includes("deal") || outL.includes("won") || outL === "completed") return "bg-success text-white fw-bold shadow-xs";
+              if (outL.includes("quotation sent") || outL.includes("quotation send")) return "bg-success-subtle text-success border border-success-subtle fw-semibold";
+              if (outL.includes("quotation") || outL.includes("quote")) return "bg-info-subtle text-info-emphasis border border-info-subtle fw-semibold";
+              if (outL.includes("interested")) return "bg-primary-subtle text-primary border border-primary-subtle fw-semibold";
+              if (outL.includes("negotiation") || outL.includes("price")) return "bg-warning-subtle text-warning-emphasis border border-warning-subtle fw-semibold";
+              if (outL.includes("reachable") || outL.includes("busy")) return "bg-secondary-subtle text-secondary border border-secondary-subtle fw-semibold";
+              if (outL.includes("lost")) return "bg-danger-subtle text-danger border border-danger-subtle fw-semibold";
+              return "bg-warning-subtle text-warning border border-warning-subtle";
+            })(),
+            badgeIcon: (() => {
+              const outL = (outcome || "").toLowerCase();
+              if (outL.includes("deal") || outL.includes("won") || outL === "completed") return "bi bi-trophy-fill";
+              if (outL.includes("quotation sent") || outL.includes("quotation send")) return "bi bi-file-earmark-check-fill";
+              if (outL.includes("quotation") || outL.includes("quote")) return "bi bi-file-earmark-spreadsheet-fill";
+              if (outL.includes("interested")) return "bi bi-star-fill";
+              if (outL.includes("negotiation") || outL.includes("price")) return "bi bi-cash-coin";
+              if (outL.includes("reachable") || outL.includes("busy")) return "bi bi-telephone-x";
+              if (outL.includes("lost")) return "bi bi-x-circle-fill";
+              return "bi bi-telephone-outbound";
+            })(),
             is_discount_requested: Boolean(item.is_discount_requested),
             discount_amount: item.discount_amount,
             proposed_price: item.proposed_price,
@@ -742,99 +812,134 @@ export default function FollowUpPage() {
           </div>
         </div>
 
-        {/* KPI Counter Cards */}
-        <div className="row g-3 mb-4">
-          <div className="col-xl-3 col-sm-6">
-            <div
-              className={`card stat-card ${activeTab === "all" ? "border-success shadow-sm ring-1" : ""}`}
-              style={{ borderLeft: "4px solid #22c55e", cursor: "pointer" }}
-              onClick={() => {
-                if (activeTab !== "all") {
-                  setActiveTab("all");
-                  setCurrentPage(1);
-                }
-              }}
-              title="Click to view All Follow-Ups"
-            >
-              <div className="stat-card-header">
-                <span className="stat-card-title">Total Follow-Ups</span>
-                <div className="stat-icon-box success">
-                  <i className="bi bi-check2-all"></i>
+        {/* Call Outcome Status Counter Cards */}
+        <div className="row g-3 mb-4 row-cols-2 row-cols-md-4 row-cols-xl-4">
+          {[
+            {
+              id: "all",
+              title: "All Follow-Ups",
+              subtitle: "All interaction pipeline",
+              count: kpis.total ?? 0,
+              icon: "bi bi-check2-all",
+              filterVal: "",
+              borderColor: "#2563eb",
+              textColor: "text-primary",
+              bgSubtle: "rgba(37, 99, 235, 0.1)",
+            },
+            {
+              id: "interested",
+              title: "Interested / Call Back",
+              subtitle: "Positive prospect calls",
+              count: kpis.interested ?? 0,
+              icon: "bi bi-star-fill",
+              filterVal: "Interested / Call Back",
+              borderColor: "#0284c7",
+              textColor: "text-info",
+              bgSubtle: "rgba(2, 132, 199, 0.1)",
+            },
+            {
+              id: "quote_req",
+              title: "Quotation Requested",
+              subtitle: "Awaiting quotation",
+              count: kpis.quotation_requested ?? 0,
+              icon: "bi bi-file-earmark-spreadsheet-fill",
+              filterVal: "Quotation Requested",
+              borderColor: "#0d9488",
+              textColor: "text-teal",
+              bgSubtle: "rgba(13, 148, 136, 0.1)",
+            },
+            {
+              id: "quote_sent",
+              title: "Quotation Sent",
+              subtitle: "Delivered to client",
+              count: kpis.quotation_sent ?? 0,
+              icon: "bi bi-file-earmark-check-fill",
+              filterVal: "Quotation Sent",
+              borderColor: "#10b981",
+              textColor: "text-success",
+              bgSubtle: "rgba(16, 185, 129, 0.1)",
+            },
+            {
+              id: "negotiation",
+              title: "Price Negotiation",
+              subtitle: "Discussion / Discount pending",
+              count: kpis.negotiation ?? 0,
+              icon: "bi bi-cash-coin",
+              filterVal: "Negotiation / Price Discussion",
+              borderColor: "#f59e0b",
+              textColor: "text-warning",
+              bgSubtle: "rgba(245, 158, 11, 0.1)",
+            },
+            {
+              id: "not_reachable",
+              title: "Not Reachable / Busy",
+              subtitle: "Callback retries needed",
+              count: kpis.not_reachable ?? 0,
+              icon: "bi bi-telephone-x-fill",
+              filterVal: "Not Reachable / Busy",
+              borderColor: "#64748b",
+              textColor: "text-secondary",
+              bgSubtle: "rgba(100, 116, 139, 0.1)",
+            },
+            {
+              id: "deal_won",
+              title: "Deal Won",
+              subtitle: "Won conversions",
+              count: kpis.deal_won ?? 0,
+              icon: "bi bi-trophy-fill",
+              filterVal: "Deal Won",
+              borderColor: "#16a34a",
+              textColor: "text-success",
+              bgSubtle: "rgba(22, 163, 74, 0.1)",
+            },
+            {
+              id: "lost",
+              title: "Lost to Competitor",
+              subtitle: "Closed / Lost leads",
+              count: kpis.lost ?? 0,
+              icon: "bi bi-x-circle-fill",
+              filterVal: "Lost to Competitor / Lost of Lead",
+              borderColor: "#ef4444",
+              textColor: "text-danger",
+              bgSubtle: "rgba(239, 68, 68, 0.1)",
+            },
+          ].map((c) => {
+            const isSelected = outcomeFilter === c.filterVal || (c.filterVal === "" && !outcomeFilter);
+            return (
+              <div key={c.id} className="col">
+                <div
+                  className={`card stat-card h-100 ${isSelected ? "shadow-sm border-2" : ""}`}
+                  style={{
+                    borderLeft: `4px solid ${c.borderColor}`,
+                    cursor: "pointer",
+                    borderColor: isSelected ? c.borderColor : undefined,
+                    transition: "transform 0.15s ease, box-shadow 0.15s ease",
+                  }}
+                  onClick={() => {
+                    setOutcomeFilter(c.filterVal);
+                    setCurrentPage(1);
+                  }}
+                  title={`Filter by ${c.title}`}
+                >
+                  <div className="stat-card-header d-flex align-items-center justify-content-between mb-2">
+                    <span className="stat-card-title fw-bold text-dark text-truncate" style={{ fontSize: "0.85rem" }}>
+                      {c.title}
+                    </span>
+                    <div
+                      className="d-flex align-items-center justify-content-center rounded-circle"
+                      style={{ width: "32px", height: "32px", backgroundColor: c.bgSubtle }}
+                    >
+                      <i className={`${c.icon} ${c.textColor}`} style={{ fontSize: "0.95rem" }}></i>
+                    </div>
+                  </div>
+                  <div className="stat-card-value fs-3 fw-bolder text-dark mb-1">{c.count}</div>
+                  <span className="small text-muted text-truncate" style={{ fontSize: "0.74rem" }}>
+                    {c.subtitle}
+                  </span>
                 </div>
               </div>
-              <div className="stat-card-value">{kpis.total ?? 0}</div>
-              <span className="text-success small fw-semibold">Active follow-up interactions</span>
-            </div>
-          </div>
-
-          <div className="col-xl-3 col-sm-6">
-            <div
-              className={`card stat-card ${activeTab === "overdue" ? "border-danger shadow-sm ring-1" : ""}`}
-              style={{ borderLeft: "4px solid #ef4444", cursor: "pointer" }}
-              onClick={() => {
-                if (activeTab !== "overdue") {
-                  setActiveTab("overdue");
-                  setCurrentPage(1);
-                }
-              }}
-              title="Click to view Overdue Calls"
-            >
-              <div className="stat-card-header">
-                <span className="stat-card-title">Overdue Calls</span>
-                <div className="stat-icon-box danger">
-                  <i className="bi bi-exclamation-triangle-fill"></i>
-                </div>
-              </div>
-              <div className="stat-card-value">{kpis.overdue ?? 0}</div>
-              <span className="text-danger small fw-semibold">Action required urgently</span>
-            </div>
-          </div>
-
-          <div className="col-xl-3 col-sm-6">
-            <div
-              className={`card stat-card ${activeTab === "today" ? "border-warning shadow-sm ring-1" : ""}`}
-              style={{ borderLeft: "4px solid #fb923c", cursor: "pointer" }}
-              onClick={() => {
-                if (activeTab !== "today") {
-                  setActiveTab("today");
-                  setCurrentPage(1);
-                }
-              }}
-              title="Click to view Calls Scheduled for Today"
-            >
-              <div className="stat-card-header">
-                <span className="stat-card-title">Due Today</span>
-                <div className="stat-icon-box warning">
-                  <i className="bi bi-calendar-check-fill"></i>
-                </div>
-              </div>
-              <div className="stat-card-value">{kpis.due_today ?? 0}</div>
-              <span className="text-warning small fw-semibold">Scheduled for today</span>
-            </div>
-          </div>
-
-          <div className="col-xl-3 col-sm-6">
-            <div
-              className={`card stat-card ${activeTab === "upcoming" ? "border-info shadow-sm ring-1" : ""}`}
-              style={{ borderLeft: "4px solid #38bdf8", cursor: "pointer" }}
-              onClick={() => {
-                if (activeTab !== "upcoming") {
-                  setActiveTab("upcoming");
-                  setCurrentPage(1);
-                }
-              }}
-              title="Click to view Upcoming Calls"
-            >
-              <div className="stat-card-header">
-                <span className="stat-card-title">Upcoming (7 Days)</span>
-                <div className="stat-icon-box info">
-                  <i className="bi bi-clock-history"></i>
-                </div>
-              </div>
-              <div className="stat-card-value">{kpis.upcoming ?? 0}</div>
-              <span className="text-info small fw-semibold">Pipeline nurturing</span>
-            </div>
-          </div>
+            );
+          })}
         </div>
 
         {/* Tab Selector & Filter Card */}
@@ -899,8 +1004,11 @@ export default function FollowUpPage() {
                     <option value="">All Outcomes</option>
                     <option value="Interested / Call Back">Interested / Call Back</option>
                     <option value="Quotation Requested">Quotation Requested</option>
+                    <option value="Quotation Sent">Quotation Sent</option>
                     <option value="Negotiation / Price Discussion">Negotiation / Price Discussion</option>
                     <option value="Not Reachable / Busy">Not Reachable / Busy</option>
+                    <option value="Lost to Competitor / Lost of Lead">Lost to Competitor / Lost of Lead</option>
+                    <option value="Deal Won">Deal Won</option>
                   </select>
                 </div>
 
@@ -988,7 +1096,7 @@ export default function FollowUpPage() {
             <span className="text-muted small">Real-time interaction queue</span>
           </div>
 
-          <div className="table-responsive">
+          <div className="table-responsive" style={{ minHeight: "360px" }}>
             <table className="table table-custom align-middle mb-0">
               <thead>
                 <tr>
@@ -1068,7 +1176,8 @@ export default function FollowUpPage() {
                                 style={{
                                   minWidth: "210px",
                                   zIndex: 1050,
-                                  top: "100%",
+                                  top: index >= Math.max(1, displayedList.length - 4) ? "auto" : "100%",
+                                  bottom: index >= Math.max(1, displayedList.length - 4) ? "calc(100% + 4px)" : "auto",
                                   backgroundColor: "#FFFFFF",
                                 }}
                                 onClick={(e) => e.stopPropagation()}
@@ -1145,6 +1254,16 @@ export default function FollowUpPage() {
                                     <span>View Lead Profile</span>
                                   </Link>
                                 )}
+
+                                {/* Convert to Deal (Task 4) */}
+                                <button
+                                  type="button"
+                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-success fw-semibold"
+                                  onClick={() => handleOpenConvertDeal(item)}
+                                >
+                                  <i className="bi bi-trophy-fill text-success"></i>
+                                  <span>Convert to Deal</span>
+                                </button>
 
                                 {/* Task 5: Delete Follow-Up */}
                                 <hr className="dropdown-divider my-1" />
@@ -1280,16 +1399,57 @@ export default function FollowUpPage() {
 
                       {/* 5. Follow-up / Created Date and Scheduled Next Due */}
                       <td>
-                        <div className="text-dark fw-bold small d-flex align-items-center gap-1">
+                        <div className="text-dark fw-bold small d-flex align-items-center gap-1 flex-wrap">
                           <i className="bi bi-calendar-check text-primary"></i>
                           <span>{item.followUpDateFormatted}</span>
+                          {item.follow_up_time && (
+                            <span className="text-muted fw-normal ms-1" style={{ fontSize: "0.75rem" }}>
+                              • {item.follow_up_time}
+                            </span>
+                          )}
                         </div>
-                        {item.follow_up_time && (
-                          <div className="text-muted" style={{ fontSize: "0.72rem" }}>
-                            <i className="bi bi-clock me-1"></i>
-                            {item.follow_up_time}
-                          </div>
-                        )}
+
+                        {/* Task 5 Dynamic Quick Triggers based on outcome */}
+                        {(() => {
+                          const outcomeLower = (item.outcome || "").toLowerCase();
+                          const isQuotationReq = (outcomeLower.includes("quotation") || outcomeLower.includes("quote")) &&
+                            !outcomeLower.includes("sent") && !outcomeLower.includes("send");
+                          const isQuotationSent = outcomeLower.includes("quotation sent") || outcomeLower.includes("quotation send");
+
+                          if (isQuotationReq) {
+                            return (
+                              <div className="mt-1">
+                                <Link
+                                  href={item.lead_id ? `/admin/quotation/create?lead_id=${item.lead_id}` : `/admin/quotation`}
+                                  className="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1 py-0 px-2 rounded-pill shadow-xs"
+                                  style={{ fontSize: "11px", fontWeight: "600" }}
+                                  title="Send quotation for this customer"
+                                >
+                                  <i className="bi bi-file-earmark-plus"></i>
+                                  <span>Quotation Send</span>
+                                </Link>
+                              </div>
+                            );
+                          }
+                          if (isQuotationSent) {
+                            return (
+                              <div className="mt-1">
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-outline-success d-inline-flex align-items-center gap-1 py-0 px-2 rounded-pill shadow-xs"
+                                  style={{ fontSize: "11px", fontWeight: "600" }}
+                                  onClick={() => handleOpenConvertDeal(item)}
+                                  title="Convert to Deal"
+                                >
+                                  <i className="bi bi-trophy"></i>
+                                  <span>Deal Won</span>
+                                </button>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
+
                         {item.nextDueDateFormatted && (
                           <div className="text-warning-emphasis small mt-1" style={{ fontSize: "0.72rem" }}>
                             <i className="bi bi-alarm-fill text-warning me-1"></i>
@@ -1436,10 +1596,11 @@ export default function FollowUpPage() {
                       >
                         <option value="Interested / Call Back">Interested / Call Back</option>
                         <option value="Quotation Requested">Quotation Requested</option>
+                        <option value="Quotation Sent">Quotation Sent</option>
                         <option value="Negotiation / Price Discussion">Negotiation / Price Discussion</option>
                         <option value="Not Reachable / Busy">Not Reachable / Busy</option>
                         <option value="Lost to Competitor / Lost of Lead">Lost to Competitor / Lost of Lead</option>
-                        <option value="Deal Won / Booking">Deal Won / Booking</option>
+                        <option value="Deal Won">Deal Won</option>
                       </select>
                     </div>
 
@@ -1769,6 +1930,23 @@ export default function FollowUpPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Convert to Deal Modal (Task 4 & 5) */}
+        {showConvertDealModal && dealConvertLead && (
+          <ConvertDealModal
+            isOpen={showConvertDealModal}
+            lead={dealConvertLead}
+            onClose={() => {
+              setShowConvertDealModal(false);
+              setDealConvertLead(null);
+            }}
+            onSuccess={() => {
+              showToast("Lead successfully converted to Deal!", "success");
+              fetchFollowUps(currentPage, perPage, searchTerm, startDate, endDate, activeTab, recordView, outcomeFilter);
+            }}
+            showToast={showToast}
+          />
         )}
       </div>
     </AdminLayout>

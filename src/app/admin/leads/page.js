@@ -841,7 +841,12 @@ export default function LeadsPage() {
         const cur = (item.status_name || item.status?.name || "New").toLowerCase();
         const filt = statusFilter.toLowerCase();
         if (filt === "new") return cur === "new";
-        if (filt.includes("follow")) return cur.includes("follow");
+        if (filt.includes("follow")) {
+          if (cur.includes("quotation") || cur.includes("quote")) return false;
+          if (cur.includes("deal") || cur.includes("booking") || cur.includes("won")) return false;
+          if (cur.includes("lost")) return false;
+          return cur.includes("follow") || cur.includes("discount");
+        }
         if (filt.includes("quotation") || filt.includes("quote")) return cur.includes("quotation") || cur.includes("quote");
         if (filt.includes("deal") || filt.includes("booking")) return cur.includes("deal") || cur.includes("booking");
         if (filt.includes("lost")) return cur.includes("lost");
@@ -1890,7 +1895,7 @@ export default function LeadsPage() {
             </div>
           </div>
 
-          <div className="table-responsive">
+          <div className="table-responsive" style={{ minHeight: "360px" }}>
             <table className="table table-custom align-middle">
               <thead>
                 <tr>
@@ -2000,7 +2005,8 @@ export default function LeadsPage() {
                                   style={{
                                     minWidth: "205px",
                                     zIndex: 1050,
-                                    top: "100%",
+                                    top: index >= Math.max(1, paginatedLeads.length - 4) ? "auto" : "100%",
+                                    bottom: index >= Math.max(1, paginatedLeads.length - 4) ? "calc(100% + 4px)" : "auto",
                                     backgroundColor: "#FFFFFF",
                                     boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.08)",
                                   }}
@@ -3766,10 +3772,11 @@ export default function LeadsPage() {
                       >
                         <option value="Interested / Call Back">Interested / Call Back</option>
                         <option value="Quotation Requested">Quotation Requested</option>
+                        <option value="Quotation Sent">Quotation Sent</option>
                         <option value="Negotiation / Price Discussion">Negotiation / Price Discussion</option>
                         <option value="Not Reachable / Busy">Not Reachable / Busy</option>
                         <option value="Lost to Competitor / Lost of Lead">Lost to Competitor / Lost of Lead</option>
-                        <option value="Deal Won / Booking">Deal Won / Booking</option>
+                        <option value="Deal Won">Deal Won</option>
                       </select>
                     </div>
 
