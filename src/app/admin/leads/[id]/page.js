@@ -105,7 +105,7 @@ export default function LeadDetailPage() {
       if (typeof window !== "undefined") {
         window.print();
       }
-    }, 200);
+    }, 350);
   };
 
   // Insurance history state
@@ -571,30 +571,44 @@ export default function LeadDetailPage() {
 
   return (
     <AdminLayout>
-            {/* Print Stylesheet for Lead 360 Sheet */}
+      {/* Print Stylesheet for Lead 360 Sheet - Multi-Page Flow */}
       <style jsx global>{`
         @media print {
           @page {
             size: A4 portrait;
-            margin: 8mm 10mm;
+            margin: 10mm 12mm;
           }
-          html, body {
+
+          /* Reset all parent containers so the page paginates across multiple pages */
+          html,
+          body,
+          #__next,
+          .app-wrapper,
+          .app-main-content,
+          main {
             width: 100% !important;
             height: auto !important;
+            min-height: 0 !important;
+            max-height: none !important;
             overflow: visible !important;
+            overflow-x: visible !important;
+            overflow-y: visible !important;
+            position: static !important;
             background: #ffffff !important;
             margin: 0 !important;
             padding: 0 !important;
             color: #0f172a !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
-          body * {
-            visibility: hidden !important;
-          }
+
+          /* Hide sidebar, headers, navigation bars, buttons, and popups */
           .app-sidebar,
           .app-header,
-          aside,
           header,
           nav,
+          aside,
+          .sidebar-backdrop,
           .no-print,
           .btn,
           button,
@@ -604,52 +618,71 @@ export default function LeadDetailPage() {
           .toast-container {
             display: none !important;
           }
-          .lead-detail-page,
-          .lead-detail-page * {
-            visibility: visible !important;
-          }
+
+          /* Keep lead-detail-page in standard document flow for natural multi-page pagination */
           .lead-detail-page {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
+            display: block !important;
+            position: static !important;
             width: 100% !important;
             max-width: 100% !important;
             margin: 0 !important;
             padding: 0 !important;
+            overflow: visible !important;
             background: #ffffff !important;
           }
+
+          /* Allow cards to flow naturally without premature clipping */
           .lead-detail-page .card {
             border: 1px solid #cbd5e1 !important;
             box-shadow: none !important;
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-            margin-bottom: 12px !important;
+            page-break-inside: auto !important;
+            break-inside: auto !important;
+            margin-bottom: 16px !important;
+            background: #ffffff !important;
           }
+
           .lead-detail-page .card-header {
             background: #f8fafc !important;
             border-bottom: 1px solid #cbd5e1 !important;
-            padding: 8px 14px !important;
+            padding: 10px 14px !important;
+            page-break-after: avoid !important;
+            break-after: avoid !important;
           }
+
           .lead-detail-page .card-body {
             padding: 12px 14px !important;
           }
-          .lead-detail-page .collapse {
+
+          /* Ensure all expanded sections display clearly in print */
+          .lead-detail-page .collapse,
+          .lead-detail-page [class*="collapse"] {
             display: block !important;
             height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
             visibility: visible !important;
+            opacity: 1 !important;
           }
+
           .lead-detail-page a {
             text-decoration: none !important;
             color: inherit !important;
           }
+
           .lead-detail-page .table {
             width: 100% !important;
             border-collapse: collapse !important;
           }
+
+          .lead-detail-page .table tr {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+
           .lead-detail-page .table th,
           .lead-detail-page .table td {
             border: 1px solid #e2e8f0 !important;
-            padding: 5px 8px !important;
+            padding: 6px 10px !important;
           }
         }
       `}</style>
