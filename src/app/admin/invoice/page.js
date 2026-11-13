@@ -2383,6 +2383,68 @@ export default function GenerateInvoicePage() {
           </div>
         )}
       </div>
+
+      <style jsx global>{`
+        @media print {
+          /* Hide everything on the page */
+          body * {
+            visibility: hidden !important;
+          }
+
+          /* Show the printable invoice area and its contents */
+          #printableInvoiceArea,
+          #printableInvoiceArea * {
+            visibility: visible !important;
+          }
+
+          /* Position the invoice at the top left of the printed page */
+          #printableInvoiceArea {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 20px !important;
+            background: #ffffff !important;
+            box-shadow: none !important;
+            border: none !important;
+            overflow: visible !important;
+          }
+
+          /* Ensure modal containers do not constrain height or clip overflow */
+          .modal,
+          .modal-dialog,
+          .modal-content,
+          .modal-dialog-scrollable,
+          .modal-body {
+            position: static !important;
+            overflow: visible !important;
+            max-height: none !important;
+            height: auto !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            border: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+
+          /* Hide UI controls and modal elements from print */
+          .no-print,
+          .modal-header,
+          .modal-footer,
+          .btn-close,
+          .modal-backdrop {
+            display: none !important;
+            visibility: hidden !important;
+          }
+
+          @page {
+            size: A4 portrait;
+            margin: 12mm;
+          }
+        }
+      `}</style>
     </AdminLayout>
   );
 }

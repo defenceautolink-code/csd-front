@@ -574,6 +574,16 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                 </li>
                 <li className="nav-item">
                   <Link
+                    href="/admin/invoice"
+                    className={`nav-link ${isLinkActive("/admin/invoice") ? "active" : ""}`}
+                    onClick={onCloseMobile}
+                  >
+                    <i className="bi bi-receipt-cutoff"></i>
+                    <span>Generate Invoice</span>
+                  </Link>
+                </li>
+                <li className="nav-item">
+                  <Link
                     href="/admin/deals/pending-insurance"
                     className={`nav-link ${isLinkActive("/admin/deals/pending-insurance") ? "active" : ""}`}
                     onClick={onCloseMobile}
@@ -678,12 +688,12 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
               </li>
               <li className="nav-item">
                 <Link
-                  href="/admin/invoice"
-                  className={`nav-link ${isLinkActive("/admin/invoice") ? "active" : ""}`}
+                  href="/admin/insurance-companies"
+                  className={`nav-link ${isLinkActive("/admin/insurance-companies") ? "active" : ""}`}
                   onClick={onCloseMobile}
                 >
-                  <i className="bi bi-receipt-cutoff"></i>
-                  <span>Generate Invoice</span>
+                  <i className="bi bi-building-fill-check"></i>
+                  <span>Insurance Companies</span>
                 </Link>
               </li>
               <li className="nav-item">

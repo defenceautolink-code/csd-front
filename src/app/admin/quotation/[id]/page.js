@@ -109,27 +109,6 @@ export default function QuotationDetailsPage() {
         setShowSendModal(false);
         setQuotation((prev) => ({ ...prev, status: "sent" }));
 
-        // Auto log follow-up in lead history table & update lead status to Quotation Sent
-        if (quotation.lead_id) {
-          try {
-            await api.post(`/leads/${quotation.lead_id}/follow-ups`, {
-              type: "Email",
-              outcome: "Quotation Sent",
-              status: "Sent",
-              notes: `Official Quotation #${quotation.quotation_number} emailed to customer (${targetEmail}). Total Amount: ₹${Number(quotation.grand_total || 0).toLocaleString("en-IN")}`,
-              follow_up_date: new Date().toISOString().split("T")[0],
-              follow_up_time: new Date().toLocaleTimeString("en-IN", {
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-              quotation_id: quotation.id,
-              lead_status_name: "Quotation Sent",
-            });
-          } catch (fuErr) {
-            console.log("Follow-up auto log note:", fuErr);
-          }
-        }
-
         fetchQuotation();
       } else {
         showToast(res?.message || "Failed to send quotation email.", "error");
@@ -359,7 +338,20 @@ export default function QuotationDetailsPage() {
   const crtm = getItemVal("CRTM");
   const insurance = getItemVal("Insurance");
   const accessories = getItemVal("Accessories");
-  const warranty = getItemVal("Warranty");
+  const getWarrantyVal = () => {
+    const it = quotation.items?.find((item) =>
+      item.item_name && item.item_name.toLowerCase().includes("warranty")
+    );
+    if (!it) return "N.A";
+    if (it.description && it.description.trim()) {
+      return it.description.replace(/^Warranty:\s*/i, "");
+    }
+    if (it.unit_price && Number(it.unit_price) > 0) {
+      return Number(it.unit_price).toLocaleString("en-IN");
+    }
+    return "N.A";
+  };
+  const warranty = getWarrantyVal();
   const diffAmtCash = getItemVal("Difference") !== "N.A"
     ? getItemVal("Difference")
     : (getItemVal("Cash Adjustment") !== "N.A" ? getItemVal("Cash Adjustment") : (getItemVal("DIFFERENCE AMT CASH") !== "N.A" ? getItemVal("DIFFERENCE AMT CASH") : "N.A"));

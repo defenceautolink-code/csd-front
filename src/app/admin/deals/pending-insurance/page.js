@@ -5,6 +5,7 @@ import Link from "next/link";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
 import dealApi from "@/services/dealApi";
+import insuranceCompanyApi from "@/services/insuranceCompanyApi";
 import { formatIndianCurrency } from "@/utils/numberToWords";
 import Pagination from "@/components/common/Pagination";
 
@@ -39,6 +40,16 @@ export default function PendingInsuranceDealsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
+  const [masterCompanies, setMasterCompanies] = useState([]);
+
+  useEffect(() => {
+    insuranceCompanyApi.getActiveCompanies().then((res) => {
+      if (Array.isArray(res) && res.length > 0) {
+        setMasterCompanies(res);
+        setFormData((prev) => ({ ...prev, insurance_company: res[0].name }));
+      }
+    });
+  }, []);
 
   // Modal State
   const [showModal, setShowModal] = useState(false);
@@ -568,8 +579,9 @@ export default function PendingInsuranceDealsPage() {
                           onChange={(e) => setFormData({ ...formData, insurance_company: e.target.value })}
                           required
                         >
-                          {INSURANCE_COMPANIES.map((c) => (
-                            <option key={c} value={c}>{c}</option>
+                          <option value="">Select Insurance Company</option>
+                          {(masterCompanies.length > 0 ? masterCompanies.map((c) => c.name) : INSURANCE_COMPANIES).map((name) => (
+                            <option key={name} value={name}>{name}</option>
                           ))}
                         </select>
                       </div>

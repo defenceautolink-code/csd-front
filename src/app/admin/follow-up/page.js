@@ -37,12 +37,12 @@ export default function FollowUpPage() {
     }
     const r = userObj ? normalizeRole(userObj.role) : "";
     if (r === "sales_executive" || r === "sales" || r === "executive") {
-      return `/sales-executive/leads/${leadId}`;
+      return `/sales-executive/leads/${leadId}?from=follow-up`;
     }
     if (r === "sales_manager" || r === "manager") {
-      return `/sales-manager/leads/${leadId}`;
+      return `/sales-manager/leads/${leadId}?from=follow-up`;
     }
-    return `/admin/leads/${leadId}`;
+    return `/admin/leads/${leadId}?from=follow-up`;
   };
 
   const getFollowUpDiscountInfo = (item) => {
@@ -1217,7 +1217,7 @@ export default function FollowUpPage() {
                                         type: "Phone Call",
                                         nextTime: "10:00 AM",
                                         notes: "",
-                                        request_discount: existingDisc && existingDisc.status === "pending" ? true : false,
+                                        request_discount: (item.outcome || "").toLowerCase().includes("negotiation") && existingDisc && existingDisc.status === "pending" ? true : false,
                                         discount_amount: existingDisc ? String(existingDisc.discount_amount || "") : "",
                                         proposed_price: existingDisc ? String(existingDisc.proposed_price || "") : "",
                                         discount_reason: existingDisc ? existingDisc.reason || "" : "",
@@ -1263,20 +1263,6 @@ export default function FollowUpPage() {
                                 >
                                   <i className="bi bi-trophy-fill text-success"></i>
                                   <span>Convert to Deal</span>
-                                </button>
-
-                                {/* Task 5: Delete Follow-Up */}
-                                <hr className="dropdown-divider my-1" />
-                                <button
-                                  type="button"
-                                  className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-danger"
-                                  onClick={() => {
-                                    setActiveActionMenuId(null);
-                                    handleDeleteFollowUp(item.id);
-                                  }}
-                                >
-                                  <i className="bi bi-trash3-fill text-danger"></i>
-                                  <span>Delete Follow-Up</span>
                                 </button>
                               </div>
                             )}
@@ -1592,7 +1578,15 @@ export default function FollowUpPage() {
                       <select
                         className="form-select"
                         value={callLog.outcome}
-                        onChange={(e) => setCallLog({ ...callLog, outcome: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const isNeg = val.toLowerCase().includes("negotiation");
+                          setCallLog({
+                            ...callLog,
+                            outcome: val,
+                            request_discount: isNeg ? callLog.request_discount : false,
+                          });
+                        }}
                       >
                         <option value="Interested / Call Back">Interested / Call Back</option>
                         <option value="Quotation Requested">Quotation Requested</option>
@@ -1678,63 +1672,65 @@ export default function FollowUpPage() {
                       ></textarea>
                     </div>
 
-                    {/* Customer Demanded Discount Switch & Fields */}
-                    <div className="col-12">
-                      <div className="p-3 rounded-3 border" style={{ backgroundColor: "#F8FAFC", borderColor: "#E2E8F0" }}>
-                        <div className="form-check form-switch d-flex align-items-center justify-content-between p-0 m-0">
-                          <label className="form-check-label fw-bold text-dark d-flex align-items-center gap-2 mb-0" htmlFor="followUpReqDiscountSwitch" style={{ cursor: "pointer" }}>
-                            <i className="bi bi-tag-fill text-danger"></i>
-                            <span>Customer Demanded Discount? (Send to Sales Manager & Admin for Approval)</span>
-                          </label>
-                          <input
-                            className="form-check-input ms-3"
-                            type="checkbox"
-                            role="switch"
-                            id="followUpReqDiscountSwitch"
-                            style={{ width: "2.6rem", height: "1.3rem", cursor: "pointer" }}
-                            checked={callLog.request_discount}
-                            onChange={(e) => setCallLog({ ...callLog, request_discount: e.target.checked })}
-                          />
-                        </div>
+                    {/* Customer Demanded Discount Switch & Fields - Show ONLY on Negotiation outcome (Task 2) */}
+                    {(callLog.outcome || "").toLowerCase().includes("negotiation") && (
+                      <div className="col-12">
+                        <div className="p-3 rounded-3 border" style={{ backgroundColor: "#F8FAFC", borderColor: "#E2E8F0" }}>
+                          <div className="form-check form-switch d-flex align-items-center justify-content-between p-0 m-0">
+                            <label className="form-check-label fw-bold text-dark d-flex align-items-center gap-2 mb-0" htmlFor="followUpReqDiscountSwitch" style={{ cursor: "pointer" }}>
+                              <i className="bi bi-tag-fill text-danger"></i>
+                              <span>Customer Demanded Discount? (Send to Sales Manager & Admin for Approval)</span>
+                            </label>
+                            <input
+                              className="form-check-input ms-3"
+                              type="checkbox"
+                              role="switch"
+                              id="followUpReqDiscountSwitch"
+                              style={{ width: "2.6rem", height: "1.3rem", cursor: "pointer" }}
+                              checked={callLog.request_discount}
+                              onChange={(e) => setCallLog({ ...callLog, request_discount: e.target.checked })}
+                            />
+                          </div>
 
-                        {callLog.request_discount && (
-                          <div className="mt-3 pt-3 border-top">
-                            <div className="row g-3">
-                              <div className="col-12">
-                                <label className="form-label text-dark fw-semibold small">
-                                  Requested Discount Amount (₹) <span className="text-danger">*</span>
-                                </label>
-                                <div className="input-group">
-                                  <span className="input-group-text bg-white fw-bold">₹</span>
-                                  <input
-                                    type="number"
-                                    className="form-control"
-                                    placeholder="e.g. 25000"
-                                    value={callLog.discount_amount}
-                                    onChange={(e) => setCallLog({ ...callLog, discount_amount: e.target.value })}
-                                    required={callLog.request_discount}
-                                  />
+                          {callLog.request_discount && (
+                            <div className="mt-3 pt-3 border-top">
+                              <div className="row g-3">
+                                <div className="col-12">
+                                  <label className="form-label text-dark fw-semibold small">
+                                    Requested Discount Amount (₹) <span className="text-danger">*</span>
+                                  </label>
+                                  <div className="input-group">
+                                    <span className="input-group-text bg-white fw-bold">₹</span>
+                                    <input
+                                      type="number"
+                                      className="form-control"
+                                      placeholder="e.g. 25000"
+                                      value={callLog.discount_amount}
+                                      onChange={(e) => setCallLog({ ...callLog, discount_amount: e.target.value })}
+                                      required={callLog.request_discount}
+                                    />
+                                  </div>
                                 </div>
-                              </div>
-                              <div className="col-12">
-                                <label className="form-label text-dark fw-semibold small">Discount Reason / Justification</label>
-                                <input
-                                  type="text"
-                                  className="form-control"
-                                  placeholder="e.g. Customer ready to pay token advance today if 25k discount approved"
-                                  value={callLog.discount_reason}
-                                  onChange={(e) => setCallLog({ ...callLog, discount_reason: e.target.value })}
-                                />
-                                <div className="form-text small text-muted mt-1">
-                                  <i className="bi bi-info-circle me-1 text-primary"></i>
-                                  Request status will default to <strong>Pending</strong> and appear on both Super Admin and Sales Manager Dashboards for approval.
+                                <div className="col-12">
+                                  <label className="form-label text-dark fw-semibold small">Discount Reason / Justification</label>
+                                  <input
+                                    type="text"
+                                    className="form-control"
+                                    placeholder="e.g. Customer ready to pay token advance today if 25k discount approved"
+                                    value={callLog.discount_reason}
+                                    onChange={(e) => setCallLog({ ...callLog, discount_reason: e.target.value })}
+                                  />
+                                  <div className="form-text small text-muted mt-1">
+                                    <i className="bi bi-info-circle me-1 text-primary"></i>
+                                    Request status will default to <strong>Pending</strong> and appear on both Super Admin and Sales Manager Dashboards for approval.
+                                  </div>
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
 

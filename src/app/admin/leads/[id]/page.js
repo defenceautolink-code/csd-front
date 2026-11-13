@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import axios from "axios";
 import AdminLayout from "@/app/components/AdminLayout";
@@ -79,6 +79,40 @@ export default function LeadDetailPage() {
   const router = useRouter();
   const { showToast } = useToast();
   const leadId = params?.id;
+  const searchParams = useSearchParams();
+  const fromParam = searchParams ? searchParams.get("from") : null;
+
+  // Resolve dynamic Back destination & label based on where user came from (Task 2)
+  const backDestination = useMemo(() => {
+    if (fromParam) {
+      const f = fromParam.toLowerCase();
+      if (f.includes("follow")) return { label: "Follow-Ups", path: "/admin/follow-up" };
+      if (f.includes("quote") || f.includes("quotation")) return { label: "Quotations", path: "/admin/quotation" };
+      if (f.includes("deal")) return { label: "Deals & Bookings", path: "/admin/deals" };
+      if (f.includes("invoice")) return { label: "Invoices", path: "/admin/invoice" };
+      if (fromParam.startsWith("/")) return { label: "Previous Page", path: fromParam };
+    }
+    if (typeof window !== "undefined" && document.referrer) {
+      const ref = document.referrer.toLowerCase();
+      if (ref.includes("/follow-up")) return { label: "Follow-Ups", path: "/admin/follow-up" };
+      if (ref.includes("/quotation")) return { label: "Quotations", path: "/admin/quotation" };
+      if (ref.includes("/deals")) return { label: "Deals & Bookings", path: "/admin/deals" };
+      if (ref.includes("/invoice")) return { label: "Invoices", path: "/admin/invoice" };
+    }
+    return { label: "Leads Pipeline", path: "/admin/leads" };
+  }, [fromParam]);
+
+  const handleGoBack = () => {
+    if (fromParam) {
+      router.push(backDestination.path);
+      return;
+    }
+    if (typeof window !== "undefined" && window.history.length > 1 && document.referrer && !document.referrer.includes(`/admin/leads/${leadId}`)) {
+      window.history.back();
+      return;
+    }
+    router.push(backDestination.path);
+  };
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 
@@ -203,57 +237,37 @@ export default function LeadDetailPage() {
     return 0;
   };
 
-  // Unified Follow-Up & Quotation History Timeline
-  const combinedHistory = useMemo(() => {
-    const list = (followUps || []).map((fu) => {
+  // Delete Confirmation Target: { type: 'lead' | 'followup' | 'quotation', id, title }
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Unified Follow-Up & Quotation History Timeline -> Pure Follow-Up History only (Task 1)
+  const pureFollowUps = useMemo(() => {
+    const list = [...(followUps || [])].sort((a, b) => {
+      const dateA = new Date(a.follow_up_date || a.created_at || 0).getTime();
+      const dateB = new Date(b.follow_up_date || b.created_at || 0).getTime();
+      return dateB - dateA;
+    });
+
+    const seenQuotes = new Set();
+    return list.filter((fu) => {
       const isQuote =
-        fu.type?.toLowerCase().includes("quotation") ||
-        fu.outcome?.toLowerCase().includes("quotation") ||
+        (fu.type || "").toLowerCase().includes("quotation") ||
+        (fu.status || "").toLowerCase().includes("quotation") ||
+        (fu.outcome || "").toLowerCase().includes("quotation") ||
         Boolean(fu.quotation_id);
 
-      return {
-        ...fu,
-        _isQuotation: isQuote,
-        _quotationId: fu.quotation_id,
-        _sortDate: new Date(fu.follow_up_date || fu.created_at || 0).getTime(),
-      };
-    });
-
-    // Merge quotations from quotations list if not already logged as follow-up
-    (quotations || []).forEach((q) => {
-      const alreadyLogged = list.some(
-        (item) =>
-          String(item._quotationId) === String(q.id) ||
-          (item.notes && q.quotation_number && item.notes.includes(q.quotation_number))
-      );
-
-      if (!alreadyLogged) {
-        list.push({
-          id: `quote-${q.id}`,
-          type: "Quotation Sent",
-          status: q.status || "Sent",
-          outcome: q.status || "Sent",
-          follow_up_date:
-            q.quotation_date ||
-            (q.created_at ? new Date(q.created_at).toISOString().split("T")[0] : ""),
-          follow_up_time: q.created_at
-            ? new Date(q.created_at).toLocaleTimeString("en-IN", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })
-            : "",
-          notes: `Official Quotation #${q.quotation_number || `#Q-${q.id}`} generated for ${q.variant_name || q.model_name || lead?.model_variant || "Vehicle"
-            }. Total Amount: ₹${getQuotationAmount(q).toLocaleString("en-IN")}`,
-          user_name: q.created_by_name || q.user?.name || "Admin User (Super Admin)",
-          _isQuotation: true,
-          _quotationId: q.id,
-          _sortDate: new Date(q.quotation_date || q.created_at || 0).getTime(),
-        });
+      if (isQuote) {
+        const match = fu.notes ? fu.notes.match(/#[A-Za-z0-9-]+/) : null;
+        const key = fu.quotation_id ? String(fu.quotation_id) : (match ? match[0] : `${fu.follow_up_date}_quote`);
+        if (seenQuotes.has(key)) {
+          return false;
+        }
+        seenQuotes.add(key);
       }
+      return true;
     });
-
-    return list.sort((a, b) => (b._sortDate || 0) - (a._sortDate || 0));
-  }, [followUps, quotations, lead]);
+  }, [followUps]);
 
   // Assignment history state
   const [assignments, setAssignments] = useState([]);
@@ -543,6 +557,35 @@ export default function LeadDetailPage() {
     }
   };
 
+  // Delete Action Handler (Task 5)
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      if (deleteTarget.type === "lead") {
+        await api.delete(`/leads/${deleteTarget.id}`);
+        showToast("Lead deleted successfully", "success");
+        setDeleteTarget(null);
+        router.push("/admin/leads");
+        return;
+      } else if (deleteTarget.type === "followup") {
+        await api.delete(`/follow-ups/${deleteTarget.id}`);
+        showToast("Follow-up interaction deleted", "success");
+        fetchFollowUps();
+      } else if (deleteTarget.type === "quotation") {
+        await api.delete(`/quotations/${deleteTarget.id}`);
+        showToast("Quotation deleted successfully", "success");
+        fetchQuotations();
+      }
+      setDeleteTarget(null);
+    } catch (err) {
+      console.error("Delete error:", err);
+      showToast(err?.response?.data?.message || "Failed to delete item", "error");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <AdminLayout>
@@ -691,9 +734,15 @@ export default function LeadDetailPage() {
         <div className="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
           <div>
             <div className="d-flex align-items-center gap-2 mb-1 no-print">
-              <Link href="/admin/leads" className="btn btn-sm btn-outline-secondary py-1 px-2 text-decoration-none">
-                <i className="bi bi-arrow-left me-1"></i> Leads Pipeline
-              </Link>
+              <button
+                type="button"
+                onClick={handleGoBack}
+                className="btn btn-sm btn-outline-secondary py-1 px-2.5 text-decoration-none d-inline-flex align-items-center gap-1.5 shadow-xs"
+                title={`Back to ${backDestination.label}`}
+              >
+                <i className="bi bi-arrow-left"></i>
+                <span>{backDestination.label}</span>
+              </button>
               <span className="text-muted">/</span>
               <span className="badge bg-secondary-subtle text-dark border px-2 py-1">Lead #{lead.id}</span>
             </div>
@@ -722,6 +771,15 @@ export default function LeadDetailPage() {
             >
               <i className="bi bi-printer-fill me-1"></i>
               <span>Print</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline-danger d-inline-flex align-items-center gap-1 shadow-sm"
+              onClick={() => setDeleteTarget({ type: "lead", id: lead.id, title: `${lead.name} (${lead.phone})` })}
+              title="Delete this Lead"
+            >
+              <i className="bi bi-trash3-fill me-1"></i>
+              <span>Delete Lead</span>
             </button>
             <button
               type="button"
@@ -920,9 +978,72 @@ export default function LeadDetailPage() {
                     <span className="text-muted small d-block">Expected Budget</span>
                     <div className="text-success fw-bold fs-6 mt-1">
                       <i className="bi bi-currency-rupee"></i>
-                      {lead.budget ? Number(lead.budget).toLocaleString("en-IN") : "Not Specified"}
+                      {lead.budget && Number(lead.budget) > 0
+                        ? Number(lead.budget).toLocaleString("en-IN")
+                        : (lead.variant?.price || lead.model_variant_price
+                          ? Number(lead.variant?.price || lead.model_variant_price).toLocaleString("en-IN")
+                          : "Not Specified")}
                     </div>
                   </div>
+                  {(() => {
+                    const localDisc = discountApprovalApi.getLeadApprovalStatus(lead.id);
+                    const discStatus = (lead.discount_approval_status || localDisc?.status || "none").toLowerCase();
+                    const approvedAmt = Number(lead.approved_discount || localDisc?.approved_amount || (discStatus === "approved" ? localDisc?.discount_amount : 0) || 0);
+                    const requestedAmt = Number(lead.requested_discount || localDisc?.discount_amount || 0);
+                    const effectiveApprovedDisc = approvedAmt > 0 ? approvedAmt : (discStatus === "approved" ? requestedAmt : 0);
+
+                    const rawBudget = Number(lead.budget) > 0
+                      ? Number(lead.budget)
+                      : (lead.variant?.price || lead.model_variant_price
+                        ? Number(lead.variant?.price || lead.model_variant_price)
+                        : 0);
+
+                    const finalTotalBudget = Math.max(0, rawBudget - effectiveApprovedDisc);
+
+                    return (
+                      <>
+                        <div className="col-sm-6">
+                          <span className="text-muted small d-block">Discount Request Status</span>
+                          <div className="mt-1 d-flex align-items-center gap-2 flex-wrap">
+                            {discStatus === "approved" ? (
+                              <span className="badge bg-success text-white py-1 px-2.5 d-inline-flex align-items-center gap-1.5 fw-semibold" style={{ fontSize: "12px" }}>
+                                <i className="bi bi-check-circle-fill"></i>
+                                Approved: ₹{effectiveApprovedDisc.toLocaleString("en-IN")}
+                              </span>
+                            ) : discStatus === "pending" ? (
+                              <span className="badge bg-warning text-dark py-1 px-2.5 d-inline-flex align-items-center gap-1.5 fw-semibold" style={{ fontSize: "12px" }}>
+                                <i className="bi bi-hourglass-split"></i>
+                                Pending (Req: ₹{requestedAmt > 0 ? requestedAmt.toLocaleString("en-IN") : "0"})
+                              </span>
+                            ) : discStatus === "rejected" ? (
+                              <span className="badge bg-danger text-white py-1 px-2.5 d-inline-flex align-items-center gap-1.5 fw-semibold" style={{ fontSize: "12px" }}>
+                                <i className="bi bi-x-circle-fill"></i>
+                                Rejected
+                              </span>
+                            ) : (
+                              <span className="badge bg-secondary-subtle text-secondary py-1 px-2 border" style={{ fontSize: "11px" }}>
+                                No Discount Requested
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Net Budget / Total (Budget - Approved Discount) when discount is approved */}
+                        {discStatus === "approved" && effectiveApprovedDisc > 0 && rawBudget > 0 && (
+                          <div className="col-sm-6">
+                            <span className="text-muted small d-block">Total Budget (After Approved Discount)</span>
+                            <div className="text-primary fw-bolder fs-6 mt-1 d-flex align-items-center gap-2">
+                              <i className="bi bi-calculator-fill text-primary"></i>
+                              <span>₹{finalTotalBudget.toLocaleString("en-IN")}</span>
+                              <span className="badge bg-success-subtle text-success border border-success-subtle px-1.5 py-0.5 fw-semibold" style={{ fontSize: "10.5px" }}>
+                                -₹{effectiveApprovedDisc.toLocaleString("en-IN")} Off
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
@@ -948,7 +1069,7 @@ export default function LeadDetailPage() {
               <div className="d-flex align-items-center gap-2">
                 <i className="bi bi-telephone-outbound-fill text-primary fs-5"></i>
                 <h6 className="mb-0 fw-bold text-dark fs-6">
-                  Follow-Up History ({combinedHistory.length})
+                  Follow-Up History ({pureFollowUps.length})
                 </h6>
               </div>
 
@@ -981,7 +1102,7 @@ export default function LeadDetailPage() {
                     <div className="spinner-border spinner-border-sm me-2"></div>
                     Loading follow-up interactions...
                   </div>
-                ) : combinedHistory.length === 0 ? (
+                ) : pureFollowUps.length === 0 ? (
                   <div className="text-center py-5 border rounded-3 bg-light">
                     <i className="bi bi-telephone-x text-muted display-6"></i>
                     <p className="mt-2 text-muted mb-3">No follow-up interaction logged yet for this lead.</p>
@@ -995,51 +1116,28 @@ export default function LeadDetailPage() {
                   </div>
                 ) : (
                   <div className="d-flex flex-column gap-3">
-                    {combinedHistory.map((fu, idx) => (
+                    {pureFollowUps.map((fu, idx) => (
                       <div
                         key={fu.id || idx}
-                        className={`p-3 border rounded-3 ${fu._isQuotation
-                            ? "bg-white shadow-sm"
-                            : "bg-light"
-                          }`}
+                        className="p-3 border rounded-3 bg-light"
                         style={{
-                          cursor: fu._quotationId ? "pointer" : "default",
                           transition: "all 0.15s ease",
-                          borderColor: fu._isQuotation ? "#3F4912" : "#e2e8f0",
-                          borderLeftWidth: fu._isQuotation ? "4px" : "1px",
+                          borderColor: "#e2e8f0",
                         }}
-                        onClick={() => {
-                          if (fu._quotationId) {
-                            router.push(`/admin/quotation/${fu._quotationId}`);
-                          }
-                        }}
-                        title={fu._quotationId ? "Click to view full quotation details" : undefined}
                       >
                         <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
                           <div className="d-flex align-items-center gap-2">
-                            {fu._isQuotation ? (
-                              <>
-                                <span
-                                  className="badge text-white d-inline-flex align-items-center gap-1"
-                                  style={{ backgroundColor: "#3F4912" }}
-                                >
-                                  <i className="bi bi-file-earmark-spreadsheet-fill"></i>
-                                  {fu.type || "Quotation Sent"}
-                                </span>
-                                <span className="badge bg-success-subtle text-success border">
-                                  {fu.status || fu.outcome || "Sent"}
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <span className="badge bg-primary text-white">
-                                  <i className="bi bi-telephone-fill me-1"></i>
-                                  {fu.type || "Phone Call"}
-                                </span>
-                                <span className="badge bg-info-subtle text-info border">
-                                  {fu.status || fu.outcome || "Call Back"}
-                                </span>
-                              </>
+                            <span className="badge bg-primary text-white">
+                              <i className="bi bi-telephone-fill me-1"></i>
+                              {fu.type || "Phone Call"}
+                            </span>
+                            <span className="badge bg-info-subtle text-info border">
+                              {fu.status || fu.outcome || "Call Back"}
+                            </span>
+                            {fu.is_discount_requested && fu.discount_amount && (
+                              <span className="badge bg-warning-subtle text-warning-emphasis border">
+                                <i className="bi bi-tag-fill me-1"></i>Disc. Req: ₹{Number(fu.discount_amount).toLocaleString("en-IN")}
+                              </span>
                             )}
                           </div>
 
@@ -1048,18 +1146,22 @@ export default function LeadDetailPage() {
                               <i className="bi bi-calendar3 me-1"></i>
                               {fu.follow_up_date} {fu.follow_up_time ? `at ${fu.follow_up_time}` : ""}
                             </span>
-                            {fu._quotationId && (
-                              <Link
-                                href={`/admin/quotation/${fu._quotationId}`}
-                                className="btn btn-sm btn-outline-primary py-0 px-2 d-inline-flex align-items-center gap-1"
-                                style={{ fontSize: "0.78rem" }}
-                                onClick={(e) => e.stopPropagation()}
-                                title="Open Quotation View"
-                              >
-                                <i className="bi bi-eye"></i>
-                                <span>View Quotation</span>
-                              </Link>
-                            )}
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-danger border-0 p-1 rounded-circle d-flex align-items-center justify-content-center"
+                              style={{ width: "28px", height: "28px" }}
+                              title="Delete this Follow-Up Record"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteTarget({
+                                  type: "followup",
+                                  id: fu.id,
+                                  title: `${fu.type || "Follow-up"} on ${fu.follow_up_date || "date"} (${fu.outcome || fu.status || "Interaction"})`,
+                                });
+                              }}
+                            >
+                              <i className="bi bi-trash3 text-danger"></i>
+                            </button>
                           </div>
                         </div>
 
@@ -1076,17 +1178,12 @@ export default function LeadDetailPage() {
                           <span>
                             Logged By: <strong className="text-dark">{fu.user_name || fu.user?.name || "Representative"}</strong>
                           </span>
-                          {fu._isQuotation && fu._quotationId ? (
-                            <span className="text-primary fw-semibold small d-inline-flex align-items-center gap-1">
-                              <i className="bi bi-box-arrow-up-right"></i>
-                              Click to open quotation
-                            </span>
-                          ) : fu.next_follow_up_date ? (
+                          {fu.next_follow_up_date && (
                             <span className="text-warning fw-semibold">
                               <i className="bi bi-alarm-fill me-1"></i>
                               Next: {fu.next_follow_up_date} {fu.next_follow_up_time || ""}
                             </span>
-                          ) : null}
+                          )}
                         </div>
                       </div>
                     ))}
@@ -1189,6 +1286,14 @@ export default function LeadDetailPage() {
                                 >
                                   <i className="bi bi-eye"></i>
                                 </Link>
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-outline-danger"
+                                  onClick={() => setDeleteTarget({ type: "quotation", id: q.id, title: `Quotation #${q.quotation_number || q.id}` })}
+                                  title="Delete Quotation"
+                                >
+                                  <i className="bi bi-trash3"></i>
+                                </button>
                               </div>
                             </td>
                             <td className="fw-bold text-primary">{q.quotation_number || `#Q-${q.id}`}</td>
@@ -1497,7 +1602,15 @@ export default function LeadDetailPage() {
                       <select
                         className="form-select"
                         value={followUpForm.outcome}
-                        onChange={(e) => setFollowUpForm({ ...followUpForm, outcome: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const isNeg = val.toLowerCase().includes("negotiation");
+                          setFollowUpForm({
+                            ...followUpForm,
+                            outcome: val,
+                            request_discount: isNeg ? followUpForm.request_discount : false,
+                          });
+                        }}
                       >
                         <option value="Interested / Call Back">Interested / Call Back</option>
                         <option value="Quotation Requested">Quotation Requested</option>
@@ -1588,63 +1701,65 @@ export default function LeadDetailPage() {
                       />
                     </div>
 
-                    {/* Customer Demanded Discount Switch & Fields */}
-                    <div className="col-12">
-                      <div className="p-3 rounded-3 border" style={{ backgroundColor: "#F8FAFC", borderColor: "#E2E8F0" }}>
-                        <div className="form-check form-switch d-flex align-items-center justify-content-between p-0 m-0">
-                          <label className="form-check-label fw-bold text-dark d-flex align-items-center gap-2 mb-0" htmlFor="leadDetailDiscountSwitch" style={{ cursor: "pointer" }}>
-                            <i className="bi bi-tag-fill text-danger"></i>
-                            <span>Customer Demanded Discount? (Send to Sales Manager & Admin for Approval)</span>
-                          </label>
-                          <input
-                            className="form-check-input ms-3"
-                            type="checkbox"
-                            role="switch"
-                            id="leadDetailDiscountSwitch"
-                            style={{ width: "2.6rem", height: "1.3rem", cursor: "pointer" }}
-                            checked={followUpForm.request_discount}
-                            onChange={(e) => setFollowUpForm({ ...followUpForm, request_discount: e.target.checked })}
-                          />
-                        </div>
+                    {/* Customer Demanded Discount Switch & Fields - Show ONLY on Negotiation outcome (Task 2) */}
+                    {(followUpForm.outcome || "").toLowerCase().includes("negotiation") && (
+                      <div className="col-12">
+                        <div className="p-3 rounded-3 border" style={{ backgroundColor: "#F8FAFC", borderColor: "#E2E8F0" }}>
+                          <div className="form-check form-switch d-flex align-items-center justify-content-between p-0 m-0">
+                            <label className="form-check-label fw-bold text-dark d-flex align-items-center gap-2 mb-0" htmlFor="leadDetailDiscountSwitch" style={{ cursor: "pointer" }}>
+                              <i className="bi bi-tag-fill text-danger"></i>
+                              <span>Customer Demanded Discount? (Send to Sales Manager & Admin for Approval)</span>
+                            </label>
+                            <input
+                              className="form-check-input ms-3"
+                              type="checkbox"
+                              role="switch"
+                              id="leadDetailDiscountSwitch"
+                              style={{ width: "2.6rem", height: "1.3rem", cursor: "pointer" }}
+                              checked={followUpForm.request_discount}
+                              onChange={(e) => setFollowUpForm({ ...followUpForm, request_discount: e.target.checked })}
+                            />
+                          </div>
 
-                        {followUpForm.request_discount && (
-                          <div className="mt-3 pt-3 border-top">
-                            <div className="row g-3">
-                              <div className="col-12">
-                                <label className="form-label text-dark fw-semibold small">
-                                  Requested Discount Amount (₹) <span className="text-danger">*</span>
-                                </label>
-                                <div className="input-group">
-                                  <span className="input-group-text bg-white fw-bold">₹</span>
-                                  <input
-                                    type="number"
-                                    className="form-control"
-                                    placeholder="e.g. 25000"
-                                    value={followUpForm.discount_amount}
-                                    onChange={(e) => setFollowUpForm({ ...followUpForm, discount_amount: e.target.value })}
-                                    required={followUpForm.request_discount}
-                                  />
+                          {followUpForm.request_discount && (
+                            <div className="mt-3 pt-3 border-top">
+                              <div className="row g-3">
+                                <div className="col-12">
+                                  <label className="form-label text-dark fw-semibold small">
+                                    Requested Discount Amount (₹) <span className="text-danger">*</span>
+                                  </label>
+                                  <div className="input-group">
+                                    <span className="input-group-text bg-white fw-bold">₹</span>
+                                    <input
+                                      type="number"
+                                      className="form-control"
+                                      placeholder="e.g. 25000"
+                                      value={followUpForm.discount_amount}
+                                      onChange={(e) => setFollowUpForm({ ...followUpForm, discount_amount: e.target.value })}
+                                      required={followUpForm.request_discount}
+                                    />
+                                  </div>
                                 </div>
-                              </div>
-                              <div className="col-12">
-                                <label className="form-label text-dark fw-semibold small">Discount Reason / Justification</label>
-                                <input
-                                  type="text"
-                                  className="form-control"
-                                  placeholder="e.g. Customer ready to pay token advance today if 25k discount approved"
-                                  value={followUpForm.discount_reason}
-                                  onChange={(e) => setFollowUpForm({ ...followUpForm, discount_reason: e.target.value })}
-                                />
-                                <div className="form-text small text-muted mt-1">
-                                  <i className="bi bi-info-circle me-1 text-primary"></i>
-                                  Request status will default to <strong>Pending</strong> and appear on both Super Admin and Sales Manager Dashboards for approval.
+                                <div className="col-12">
+                                  <label className="form-label text-dark fw-semibold small">Discount Reason / Justification</label>
+                                  <input
+                                    type="text"
+                                    className="form-control"
+                                    placeholder="e.g. Customer ready to pay token advance today if 25k discount approved"
+                                    value={followUpForm.discount_reason}
+                                    onChange={(e) => setFollowUpForm({ ...followUpForm, discount_reason: e.target.value })}
+                                  />
+                                  <div className="form-text small text-muted mt-1">
+                                    <i className="bi bi-info-circle me-1 text-primary"></i>
+                                    Request status will default to <strong>Pending</strong> and appear on both Super Admin and Sales Manager Dashboards for approval.
+                                  </div>
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
 
@@ -1674,6 +1789,58 @@ export default function LeadDetailPage() {
             }}
             showToast={showToast}
           />
+        )}
+
+        {/* Modal: Delete Confirmation (Task 5) */}
+        {deleteTarget && (
+          <div className="modal-backdrop-custom">
+            <div className="modal-dialog-custom" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "450px" }}>
+              <div className="modal-header-custom d-flex justify-content-between align-items-center bg-danger text-white">
+                <h5 className="modal-title-custom mb-0 fs-6 fw-bold">
+                  <i className="bi bi-exclamation-triangle-fill me-2"></i>
+                  Confirm Delete {deleteTarget.type === "lead" ? "Lead" : deleteTarget.type === "followup" ? "Follow-Up Record" : "Quotation"}
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close btn-close-white"
+                  onClick={() => setDeleteTarget(null)}
+                ></button>
+              </div>
+              <div className="modal-body-custom p-4">
+                <p className="text-dark mb-2">
+                  Are you sure you want to delete this {deleteTarget.type === "lead" ? "entire lead" : deleteTarget.type === "followup" ? "follow-up interaction" : "quotation"}?
+                </p>
+                {deleteTarget.title && (
+                  <div className="p-2 bg-light border rounded small fw-semibold text-secondary">
+                    {deleteTarget.title}
+                  </div>
+                )}
+                <p className="text-danger small mt-2 mb-0">
+                  <i className="bi bi-info-circle me-1"></i>
+                  This action cannot be undone.
+                </p>
+              </div>
+              <div className="modal-footer-custom d-flex justify-content-end gap-2 p-3 border-top">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-light border"
+                  onClick={() => setDeleteTarget(null)}
+                  disabled={isDeleting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-danger d-inline-flex align-items-center gap-1"
+                  onClick={handleConfirmDelete}
+                  disabled={isDeleting}
+                >
+                  <i className="bi bi-trash3-fill"></i>
+                  <span>{isDeleting ? "Deleting..." : "Yes, Delete"}</span>
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </AdminLayout>

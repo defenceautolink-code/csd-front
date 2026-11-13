@@ -50,9 +50,9 @@ export default function QuotationMainPage() {
       } catch (e) { }
     }
     const r = userObj?.role ? String(userObj.role).toLowerCase() : "";
-    if (r.includes("executive")) return `/sales-executive/leads/${leadId}`;
-    if (r.includes("manager")) return `/sales-manager/leads/${leadId}`;
-    return `/admin/leads/${leadId}`;
+    if (r.includes("executive")) return `/sales-executive/leads/${leadId}?from=quotation`;
+    if (r.includes("manager")) return `/sales-manager/leads/${leadId}?from=quotation`;
+    return `/admin/leads/${leadId}?from=quotation`;
   };
 
   const router = useRouter();
@@ -498,11 +498,11 @@ export default function QuotationMainPage() {
     const crtmAmount = parseAmount(crtmVal);
     const insVal = parseAmount(ins);
     const accVal = parseAmount(acc);
-    const warrVal = parseAmount(warr);
+    // WARRANTY is tenure duration (e.g. 1 Year, 2 Years) - Not counted in financial total
     const diffVal = parseAmount(diff);
     const discountVal = parseAmount(ms);
 
-    return base + rtoVal + bhVal + crtmAmount + insVal + accVal + warrVal + diffVal - discountVal;
+    return base + rtoVal + bhVal + crtmAmount + insVal + accVal + diffVal - discountVal;
   };
 
   const totalCol1 = calculateTotal(csdPrice, gjRto, bhRto, crtm, insurance, accessories, warranty, msReward, diffAmtCash);
@@ -766,12 +766,12 @@ export default function QuotationMainPage() {
         });
       }
 
-      if (parseAmount(warranty) > 0) {
+      if (warranty && String(warranty).trim()) {
         itemsArray.push({
           item_name: "Extended Warranty Shield",
-          description: "Manufacturer extended warranty coverage",
+          description: String(warranty).trim(),
           quantity: 1,
-          unit_price: parseAmount(warranty),
+          unit_price: 0,
           discount: 0,
           tax: 0,
         });
@@ -835,32 +835,6 @@ export default function QuotationMainPage() {
 
       const res = await quotationApi.createQuotation(payload);
       if (res && res.status && res.data) {
-        // Auto-record interaction in lead follow-up history table
-        if (selectedLeadId) {
-          try {
-            const calculatedTotal = itemsArray.reduce(
-              (acc, it) => acc + Number(it.unit_price || 0) * Number(it.quantity || 1),
-              0
-            );
-            await api.post(`/leads/${selectedLeadId}/follow-ups`, {
-              type: "Quotation Sent",
-              outcome: "Quotation Sent",
-              status: "Quotation Sent",
-              status: "Sent",
-              notes: `Official Quotation #${res.data.quotation_number} generated for ${carName || "Vehicle"
-                } (${modelSpec || ""}). Total Amount: ₹${calculatedTotal.toLocaleString("en-IN")}`,
-              follow_up_date: new Date().toISOString().split("T")[0],
-              follow_up_time: new Date().toLocaleTimeString("en-IN", {
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-              quotation_id: res.data.id,
-            });
-          } catch (fuErr) {
-            console.log("Follow-up auto log note:", fuErr);
-          }
-        }
-
         showToast(`Quotation #${res.data.quotation_number} saved and added to Quotations!`, "success");
         setActiveTab("records");
         loadQuotationsList(1, searchTerm, statusFilter, startDate, endDate, pagination.per_page, recordView);
@@ -1568,10 +1542,13 @@ export default function QuotationMainPage() {
                       />
                     </div>
                     <div className="col-md-6">
-                      <label className="form-label text-dark small fw-medium mb-1">WARRANTY</label>
+                      <label className="form-label text-dark small fw-medium mb-1">
+                        WARRANTY <span className="text-muted fw-normal" style={{ fontSize: "10px" }}>(Tenure, e.g. 1 Year, 2 Years)</span>
+                      </label>
                       <input
                         type="text"
                         className="form-control form-control-sm"
+                        placeholder="e.g. 1 Year, 2 Years"
                         value={warranty}
                         onChange={(e) => setWarranty(e.target.value)}
                       />
@@ -2024,22 +2001,7 @@ export default function QuotationMainPage() {
                                     <span>Convert to Deal</span>
                                   </button>
 
-                                  {can("quotation.delete") && (
-                                    <>
-                                      <hr className="dropdown-divider my-1" />
-                                      <button
-                                        type="button"
-                                        className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-danger"
-                                        onClick={() => {
-                                          setActiveActionMenuId(null);
-                                          handleDeleteQuotation(quote.id);
-                                        }}
-                                      >
-                                        <i className="bi bi-trash3-fill text-danger"></i>
-                                        <span>Delete Quotation</span>
-                                      </button>
-                                    </>
-                                  )}
+
                                 </div>
                               )}
                             </div>

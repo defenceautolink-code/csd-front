@@ -9,6 +9,7 @@ import insuranceApi, {
   calculateRenewalDates,
 } from "@/services/insuranceApi";
 import Pagination from "@/components/common/Pagination";
+import insuranceCompanyApi from "@/services/insuranceCompanyApi";
 import { formatIndianCurrency } from "@/utils/numberToWords";
 import { logActivity } from "@/utils/activityLogger";
 
@@ -43,6 +44,13 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeActionMenuId, setActiveActionMenuId] = useState(null);
+  const [companyList, setCompanyList] = useState([]);
+
+  useEffect(() => {
+    insuranceCompanyApi.getActiveCompanies().then((res) => {
+      if (Array.isArray(res)) setCompanyList(res);
+    });
+  }, []);
 
   // Edit Form State
   const [editForm, setEditForm] = useState({
@@ -898,26 +906,20 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
                         <label className="form-label small fw-semibold text-dark mb-1">
                           Insurance Company
                         </label>
-                        <input
-                          type="text"
-                          className="form-control form-control-sm"
-                          list="modalInsuranceCompanyList"
+                        <select
+                          className="form-select form-select-sm"
                           value={editForm.insurance_company}
                           onChange={(e) =>
                             setEditForm({ ...editForm, insurance_company: e.target.value })
                           }
-                        />
-                        <datalist id="modalInsuranceCompanyList">
-                          <option value="HDFC ERGO General Insurance" />
-                          <option value="ICICI Lombard General Insurance" />
-                          <option value="Tata AIG General Insurance" />
-                          <option value="Bajaj Allianz General Insurance" />
-                          <option value="New India Assurance" />
-                          <option value="Reliance General Insurance" />
-                          <option value="National Insurance Company" />
-                          <option value="SBI General Insurance" />
-                          <option value="Go Digit General Insurance" />
-                        </datalist>
+                        >
+                          <option value="">Select Insurance Company</option>
+                          {companyList.map((c) => (
+                            <option key={c.id || c.name} value={c.name}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
                       </div>
 
                       {/* Insurance Type */}
@@ -1182,15 +1184,21 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
                         <label className="form-label small fw-semibold text-dark mb-1">
                           Insurance Provider
                         </label>
-                        <input
-                          type="text"
-                          className="form-control form-control-sm"
+                        <select
+                          className="form-select form-select-sm"
                           value={renewForm.insurance_company}
                           onChange={(e) =>
                             setRenewForm({ ...renewForm, insurance_company: e.target.value })
                           }
                           required
-                        />
+                        >
+                          <option value="">Select Insurance Company</option>
+                          {companyList.map((c) => (
+                            <option key={c.id || c.name} value={c.name}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
                       </div>
 
                       <div className="col-md-6">

@@ -1050,20 +1050,7 @@ export default function DealsPage() {
                                       <span>Delete Permanently</span>
                                     </button>
                                   </>
-                                ) : (
-                                  /* Delete Deal (Move to Trash) */
-                                  <button
-                                    type="button"
-                                    className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-danger"
-                                    onClick={() => {
-                                      setActiveActionMenuId(null);
-                                      setDeleteTarget(deal);
-                                    }}
-                                  >
-                                    <i className="bi bi-trash text-danger"></i>
-                                    <span>Move to Trash</span>
-                                  </button>
-                                )}
+                                ) : null}
                               </div>
                             )}
                           </div>
@@ -1081,7 +1068,7 @@ export default function DealsPage() {
                           <div>
                             {deal.lead_id || deal.lead?.id ? (
                               <Link
-                                href={`/admin/leads/${deal.lead_id || deal.lead?.id}`}
+                                href={`/admin/leads/${deal.lead_id || deal.lead?.id}?from=deals`}
                                 className="text-primary text-decoration-none fw-bold d-inline-flex align-items-center gap-1 hover-underline"
                                 title="Open Lead 360 Complete Profile"
                               >

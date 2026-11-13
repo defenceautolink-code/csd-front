@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import dealApi from "@/services/dealApi";
 import quotationApi from "@/lib/quotationApi";
+import insuranceCompanyApi from "@/services/insuranceCompanyApi";
 import { numberToWords, formatIndianCurrency } from "@/utils/numberToWords";
 
 export default function ConvertDealModal({
@@ -17,6 +18,13 @@ export default function ConvertDealModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [leadQuotations, setLeadQuotations] = useState([]);
   const [isLoadingQuotes, setIsLoadingQuotes] = useState(false);
+  const [companyList, setCompanyList] = useState([]);
+
+  useEffect(() => {
+    insuranceCompanyApi.getActiveCompanies().then((res) => {
+      if (Array.isArray(res)) setCompanyList(res);
+    });
+  }, []);
 
   const getTodayDate = () => {
     const now = new Date();
@@ -979,25 +987,18 @@ export default function ConvertDealModal({
                       <label className="form-label text-dark fw-bold small mb-1">
                         Insurance Company <span className="text-muted fw-normal" style={{ fontSize: "11px" }}>(Optional)</span>
                       </label>
-                      <input
-                        type="text"
-                        className="form-control form-control-sm"
-                        placeholder="e.g. HDFC ERGO, ICICI Lombard, Tata AIG (optional)"
-                        list="modalInsuranceCompanyList"
+                      <select
+                        className="form-select form-select-sm"
                         value={insuranceDetails.insurance_company}
                         onChange={(e) => handleInsuranceChange("insurance_company", e.target.value)}
-                      />
-                      <datalist id="modalInsuranceCompanyList">
-                        <option value="HDFC ERGO General Insurance" />
-                        <option value="ICICI Lombard General Insurance" />
-                        <option value="Tata AIG General Insurance" />
-                        <option value="Bajaj Allianz General Insurance" />
-                        <option value="New India Assurance" />
-                        <option value="Reliance General Insurance" />
-                        <option value="National Insurance Company" />
-                        <option value="SBI General Insurance" />
-                        <option value="Go Digit General Insurance" />
-                      </datalist>
+                      >
+                        <option value="">Select Insurance Company</option>
+                        {companyList.map((c) => (
+                          <option key={c.id || c.name} value={c.name}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
                     {/* Policy Number */}

@@ -929,9 +929,15 @@ export default function SalesExecutiveLeadDetailsPage({ params }) {
                       <select
                         className="form-select"
                         value={formData.lead_status_name}
-                        onChange={(e) =>
-                          setFormData({ ...formData, lead_status_name: e.target.value })
-                        }
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const isNeg = val.toLowerCase().includes("negotiation") || (lead?.status_name || "").toLowerCase().includes("negotiation");
+                          setFormData({
+                            ...formData,
+                            lead_status_name: val,
+                            request_discount: isNeg ? formData.request_discount : false,
+                          });
+                        }}
                       >
                         <option value="">-- Keep Current Status ({lead.status_name}) --</option>
                         <option value="In Follow-Up">In Follow-Up</option>
@@ -943,59 +949,61 @@ export default function SalesExecutiveLeadDetailsPage({ params }) {
                       </select>
                     </div>
 
-                    {/* Special Discount Request to Sales Manager & Admin */}
-                    <div className="col-12 mt-3">
-                      <div className="card p-3 border-warning" style={{ backgroundColor: "rgba(255, 193, 7, 0.05)" }}>
-                        <div className="form-check form-switch mb-2">
-                          <input
-                            className="form-check-input"
-                            type="checkbox"
-                            role="switch"
-                            id="requestDiscountSwitch"
-                            checked={formData.request_discount}
-                            onChange={(e) =>
-                              setFormData({ ...formData, request_discount: e.target.checked })
-                            }
-                          />
-                          <label className="form-check-label fw-bold text-dark" htmlFor="requestDiscountSwitch">
-                            <i className="bi bi-tag-fill text-warning me-1"></i> Customer Demanding Special Discount? (Send to Manager/Admin)
-                          </label>
-                        </div>
-                        {formData.request_discount && (
-                          <div className="row g-2 mt-1">
-                            <div className="col-12">
-                              <label className="form-label text-dark fw-semibold small mb-1">
-                                Requested Discount (₹) <span className="text-danger">*</span>
-                              </label>
-                              <input
-                                type="number"
-                                className="form-control form-control-sm"
-                                placeholder="e.g. 25000"
-                                required={formData.request_discount}
-                                value={formData.discount_amount}
-                                onChange={(e) =>
-                                  setFormData({ ...formData, discount_amount: e.target.value })
-                                }
-                              />
-                            </div>
-                            <div className="col-12">
-                              <label className="form-label text-dark fw-semibold small mb-1">
-                                Reason for Discount
-                              </label>
-                              <input
-                                type="text"
-                                className="form-control form-control-sm"
-                                placeholder="e.g. Customer ready for immediate token advance booking"
-                                value={formData.discount_reason}
-                                onChange={(e) =>
-                                  setFormData({ ...formData, discount_reason: e.target.value })
-                                }
-                              />
-                            </div>
+                    {/* Special Discount Request to Sales Manager & Admin - Show ONLY if Negotiation is selected */}
+                    {((formData.lead_status_name || lead?.status_name || "").toLowerCase().includes("negotiation")) && (
+                      <div className="col-12 mt-3">
+                        <div className="card p-3 border-warning" style={{ backgroundColor: "rgba(255, 193, 7, 0.05)" }}>
+                          <div className="form-check form-switch mb-2">
+                            <input
+                              className="form-check-input"
+                              type="checkbox"
+                              role="switch"
+                              id="requestDiscountSwitch"
+                              checked={formData.request_discount}
+                              onChange={(e) =>
+                                setFormData({ ...formData, request_discount: e.target.checked })
+                              }
+                            />
+                            <label className="form-check-label fw-bold text-dark" htmlFor="requestDiscountSwitch">
+                              <i className="bi bi-tag-fill text-warning me-1"></i> Customer Demanding Special Discount? (Send to Manager/Admin)
+                            </label>
                           </div>
-                        )}
+                          {formData.request_discount && (
+                            <div className="row g-2 mt-1">
+                              <div className="col-12">
+                                <label className="form-label text-dark fw-semibold small mb-1">
+                                  Requested Discount (₹) <span className="text-danger">*</span>
+                                </label>
+                                <input
+                                  type="number"
+                                  className="form-control form-control-sm"
+                                  placeholder="e.g. 25000"
+                                  required={formData.request_discount}
+                                  value={formData.discount_amount}
+                                  onChange={(e) =>
+                                    setFormData({ ...formData, discount_amount: e.target.value })
+                                  }
+                                />
+                              </div>
+                              <div className="col-12">
+                                <label className="form-label text-dark fw-semibold small mb-1">
+                                  Reason for Discount
+                                </label>
+                                <input
+                                  type="text"
+                                  className="form-control form-control-sm"
+                                  placeholder="e.g. Customer ready for immediate token advance booking"
+                                  value={formData.discount_reason}
+                                  onChange={(e) =>
+                                    setFormData({ ...formData, discount_reason: e.target.value })
+                                  }
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
 
