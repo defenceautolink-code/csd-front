@@ -1296,12 +1296,7 @@ export default function FollowUpPage() {
                               {item.followUpsCount > 0 && (
                                 <span
                                   className="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill ms-1"
-                                  style={{ cursor: "pointer", fontSize: "10px", padding: "2px 6px" }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleOpenHistory(item);
-                                  }}
-                                  title="Click to view all interactions for this customer"
+                                  style={{ fontSize: "10px", padding: "2px 6px" }}
                                 >
                                   <i className="bi bi-clock-history me-1"></i>{item.followUpsCount} Calls
                                 </span>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useToast } from "./Toast";
 import { hasPermission, hasRole, clearAuthSession } from "@/utils/auth";
+import { getSidebarPages } from "@/utils/sidebarPages";
 
 export default function Header({ onToggleSidebar, onQuickAddLead }) {
   const router = useRouter();
@@ -12,9 +13,13 @@ export default function Header({ onToggleSidebar, onQuickAddLead }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
   const notifRef = useRef(null);
   const profileRef = useRef(null);
+  const searchRef = useRef(null);
+  const searchInputRef = useRef(null);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -25,20 +30,76 @@ export default function Header({ onToggleSidebar, onQuickAddLead }) {
       if (profileRef.current && !profileRef.current.contains(event.target)) {
         setShowProfileMenu(false);
       }
+      if (searchRef.current && !searchRef.current.contains(event.target)) {
+        setIsSearchOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleSearchKeyDown = (e) => {
-    if (e.key === "Enter" && searchQuery.trim()) {
-      showToast(`Searching CRM for "${searchQuery}"...`, "info");
-      router.push(`/leads?search=${encodeURIComponent(searchQuery.trim())}`);
-    }
-  };
-
   const [currentUser, setCurrentUser] = useState(null);
   const [mounted, setMounted] = useState(false);
+
+  // Global Ctrl+K / Cmd+K listener
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        setIsSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, []);
+
+  const sidebarPages = React.useMemo(() => {
+    return getSidebarPages(currentUser);
+  }, [currentUser]);
+
+  const filteredPages = React.useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return sidebarPages;
+    return sidebarPages.filter((item) => {
+      const matchTitle = item.title?.toLowerCase().includes(q);
+      const matchSection = item.section?.toLowerCase().includes(q);
+      const matchPath = item.path?.toLowerCase().includes(q);
+      const matchKeywords = item.keywords && item.keywords.some((k) => k.toLowerCase().includes(q));
+      return matchTitle || matchSection || matchPath || matchKeywords;
+    });
+  }, [sidebarPages, searchQuery]);
+
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [searchQuery]);
+
+  const navigateToPage = (item) => {
+    if (!item) return;
+    setIsSearchOpen(false);
+    setSearchQuery("");
+    router.push(item.path);
+  };
+
+  const handleSearchKeyDown = (e) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setIsSearchOpen(true);
+      setSelectedIndex((prev) => (prev + 1 < filteredPages.length ? prev + 1 : 0));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setIsSearchOpen(true);
+      setSelectedIndex((prev) => (prev - 1 >= 0 ? prev - 1 : Math.max(0, filteredPages.length - 1)));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (filteredPages.length > 0 && filteredPages[selectedIndex]) {
+        navigateToPage(filteredPages[selectedIndex]);
+      }
+    } else if (e.key === "Escape") {
+      setIsSearchOpen(false);
+      searchInputRef.current?.blur();
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -94,17 +155,154 @@ export default function Header({ onToggleSidebar, onQuickAddLead }) {
         >
           <i className="bi bi-list"></i>
         </button>
-        <div className="header-search">
+        <div className="header-search position-relative" ref={searchRef}>
           <i className="bi bi-search"></i>
           <input
+            ref={searchInputRef}
             type="text"
-            placeholder="Search leads, vehicles, customers..."
-            aria-label="Global search"
+            placeholder="Search sidebar pages..."
+            aria-label="Search sidebar pages"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setIsSearchOpen(true);
+            }}
+            onFocus={() => setIsSearchOpen(true)}
             onKeyDown={handleSearchKeyDown}
           />
-          <span className="search-shortcut">⌘K</span>
+          <span
+            className="search-shortcut"
+            style={{ cursor: "pointer" }}
+            title="Press ⌘K or Ctrl+K to search"
+            onClick={() => {
+              searchInputRef.current?.focus();
+              setIsSearchOpen(true);
+            }}
+          >
+            ⌘K
+          </span>
+
+          {/* Searchable Sidebar Pages Dropdown */}
+          {isSearchOpen && (
+            <div
+              className="sidebar-search-results shadow-lg"
+              style={{
+                position: "absolute",
+                top: "calc(100% + 8px)",
+                left: 0,
+                width: "360px",
+                maxWidth: "92vw",
+                maxHeight: "420px",
+                overflowY: "auto",
+                background: "#131C27",
+                border: "1px solid rgba(255, 255, 255, 0.15)",
+                borderRadius: "12px",
+                boxShadow: "0 14px 35px rgba(0, 0, 0, 0.55)",
+                zIndex: 1050,
+                padding: "8px",
+              }}
+            >
+              <div
+                className="d-flex align-items-center justify-content-between px-2 py-1 mb-1 border-bottom"
+                style={{ borderColor: "rgba(255, 255, 255, 0.08)" }}
+              >
+                <span className="text-muted small fw-semibold" style={{ fontSize: "11px", letterSpacing: "0.5px", textTransform: "uppercase" }}>
+                  Sidebar Pages ({filteredPages.length})
+                </span>
+                <span className="text-muted" style={{ fontSize: "10px" }}>
+                  Press <kbd style={{ padding: "1px 4px", fontSize: "10px", background: "rgba(255,255,255,0.1)", borderRadius: "3px" }}>↵</kbd> to open
+                </span>
+              </div>
+
+              {filteredPages.length === 0 ? (
+                <div className="text-center py-4 px-3 text-muted">
+                  <i className="bi bi-search fs-4 d-block mb-2 opacity-50"></i>
+                  <div className="small fw-semibold text-white">No pages found</div>
+                  <div style={{ fontSize: "12px" }}>No sidebar page matches &quot;{searchQuery}&quot;</div>
+                </div>
+              ) : (
+                <div className="d-flex flex-column gap-1">
+                  {filteredPages.map((page, index) => {
+                    const isSelected = index === selectedIndex;
+                    return (
+                      <div
+                        key={page.path}
+                        className="d-flex align-items-center justify-content-between p-2 rounded-2"
+                        style={{
+                          cursor: "pointer",
+                          backgroundColor: isSelected ? "rgba(220, 233, 162, 0.15)" : "transparent",
+                          border: isSelected ? "1px solid rgba(220, 233, 162, 0.3)" : "1px solid transparent",
+                          transition: "all 0.15s ease",
+                        }}
+                        onMouseEnter={() => setSelectedIndex(index)}
+                        onClick={() => navigateToPage(page)}
+                      >
+                        <div className="d-flex align-items-center gap-2 overflow-hidden" style={{ minWidth: 0 }}>
+                          <div
+                            style={{
+                              width: 32,
+                              height: 32,
+                              borderRadius: 8,
+                              background: isSelected ? "rgba(220, 233, 162, 0.25)" : "rgba(255, 255, 255, 0.06)",
+                              color: isSelected ? "#DCE9A2" : "#CBD5E1",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              flexShrink: 0,
+                              fontSize: "14px",
+                            }}
+                          >
+                            <i className={page.icon}></i>
+                          </div>
+                          <div className="d-flex flex-column" style={{ minWidth: 0 }}>
+                            <span
+                              className="text-truncate fw-semibold"
+                              style={{
+                                color: isSelected ? "#FFFFFF" : "#E2E8F0",
+                                fontSize: "13px",
+                              }}
+                            >
+                              {page.title}
+                            </span>
+                            <span
+                              className="text-truncate"
+                              style={{
+                                color: "#94A3B8",
+                                fontSize: "11px",
+                              }}
+                            >
+                              {page.section}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="d-flex align-items-center gap-1 flex-shrink-0 ms-2">
+                          <span
+                            className="badge text-truncate"
+                            style={{
+                              background: "rgba(255, 255, 255, 0.06)",
+                              color: "#94A3B8",
+                              fontSize: "10px",
+                              fontWeight: 400,
+                              maxWidth: "110px",
+                            }}
+                          >
+                            {page.path}
+                          </span>
+                          <i
+                            className="bi bi-arrow-right-short"
+                            style={{
+                              color: isSelected ? "#DCE9A2" : "#64748B",
+                              fontSize: "16px",
+                            }}
+                          ></i>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
