@@ -425,7 +425,7 @@ export default function FollowUpPage() {
           return {
             id: item.id,
             lead_id: leadId,
-            customer: custName,
+            customer: custName1,
             phone: phone,
             city: city,
             vehicle: vehicle,
