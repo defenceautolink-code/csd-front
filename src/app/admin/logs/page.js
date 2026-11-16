@@ -67,9 +67,8 @@ function SearchableSelect({
       {/* Trigger Button */}
       <button
         type="button"
-        className={`form-select form-select-sm text-start d-flex align-items-center justify-content-between text-truncate ${
-          isOpen ? "border-primary shadow-sm" : ""
-        }`}
+        className={`form-select form-select-sm text-start d-flex align-items-center justify-content-between text-truncate ${isOpen ? "border-primary shadow-sm" : ""
+          }`}
         style={{
           cursor: "pointer",
           backgroundColor: "#fff",
@@ -144,9 +143,8 @@ function SearchableSelect({
                   <button
                     key={opt.value}
                     type="button"
-                    className={`dropdown-item text-wrap rounded py-1 px-2 d-flex flex-column mb-1 ${
-                      isSelected ? "active bg-primary text-white" : ""
-                    }`}
+                    className={`dropdown-item text-wrap rounded py-1 px-2 d-flex flex-column mb-1 ${isSelected ? "active bg-primary text-white" : ""
+                      }`}
                     onClick={() => handleSelect(opt.value)}
                     style={{ fontSize: "12.5px" }}
                   >
@@ -154,9 +152,8 @@ function SearchableSelect({
                       <span className="fw-medium text-truncate">{opt.label}</span>
                       {opt.badge && (
                         <span
-                          className={`badge ${
-                            isSelected ? "bg-white text-primary" : "bg-light text-muted border"
-                          } ms-1 small`}
+                          className={`badge ${isSelected ? "bg-white text-primary" : "bg-light text-muted border"
+                            } ms-1 small`}
                           style={{ fontSize: "10px" }}
                         >
                           {opt.badge}
@@ -655,11 +652,14 @@ export default function ActivityLogsPage() {
 
         {/* Action Color Guide Note */}
         <div
-          className="card mb-3 px-3 py-2.5 shadow-sm"
+          className="card shadow-sm"
           style={{
             backgroundColor: "#ffffff",
             borderRadius: "10px",
             border: "1px solid #e5e7eb",
+            marginTop: "18px",
+            marginBottom: "22px",
+            padding: "12px 16px",
           }}
         >
           <div className="d-flex flex-wrap align-items-center gap-2">
