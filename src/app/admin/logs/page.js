@@ -189,6 +189,8 @@ export default function ActivityLogsPage() {
   const [logs, setLogs] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
@@ -324,7 +326,42 @@ export default function ActivityLogsPage() {
     }
   };
 
-  // Action Badge Helper
+  // 2-Month Cut-off Date Helper
+  const getTwoMonthCutoffDate = () => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 2);
+    return d.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  // Delete Logs Older than 2 Months
+  const handleDeleteOldLogs = async () => {
+    setIsDeleting(true);
+    try {
+      const res = await axios.delete("/activity-logs/clean-old?months=2");
+      if (res.data?.status) {
+        showToast(
+          res.data.message || "Old activity logs deleted successfully!",
+          (res.data.deleted_count ?? 0) > 0 ? "success" : "info"
+        );
+        setShowDeleteModal(false);
+        fetchLogs(1);
+      } else {
+        showToast(res.data?.message || "Failed to delete old activity logs", "error");
+      }
+    } catch (err) {
+      console.error("Delete old logs error:", err);
+      const msg = err.response?.data?.message || err.message || "Failed to delete old activity logs";
+      showToast(msg, "error");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Action Badge Helper with consistent, refined subtle borders
   const getActionBadge = (action) => {
     const act = (action || "").toLowerCase();
     switch (act) {
@@ -332,7 +369,16 @@ export default function ActivityLogsPage() {
       case "insert":
       case "post":
         return (
-          <span className="badge bg-success-subtle text-success px-2 py-1 fw-semibold">
+          <span
+            className="badge px-2 py-1 fw-semibold d-inline-flex align-items-center"
+            style={{
+              backgroundColor: "#e8f5e9",
+              color: "#2e7d32",
+              border: "1px solid #c8e6c9",
+              fontSize: "11px",
+              borderRadius: "5px",
+            }}
+          >
             <i className="bi bi-plus-circle me-1"></i>ADD
           </span>
         );
@@ -341,64 +387,148 @@ export default function ActivityLogsPage() {
       case "put":
       case "patch":
         return (
-          <span className="badge bg-warning-subtle text-warning px-2 py-1 fw-semibold">
+          <span
+            className="badge px-2 py-1 fw-semibold d-inline-flex align-items-center"
+            style={{
+              backgroundColor: "#fffde7",
+              color: "#b45309",
+              border: "1px solid #fde68a",
+              fontSize: "11px",
+              borderRadius: "5px",
+            }}
+          >
             <i className="bi bi-pencil-square me-1"></i>EDIT
           </span>
         );
       case "trash":
       case "soft_delete":
         return (
-          <span className="badge bg-warning-subtle text-dark border border-warning px-2 py-1 fw-semibold">
-            <i className="bi bi-trash me-1 text-warning"></i>TRASH
+          <span
+            className="badge px-2 py-1 fw-semibold d-inline-flex align-items-center"
+            style={{
+              backgroundColor: "#fff8e1",
+              color: "#b45309",
+              border: "1px solid #fcd34d",
+              fontSize: "11px",
+              borderRadius: "5px",
+            }}
+          >
+            <i className="bi bi-trash me-1"></i>TRASH
           </span>
         );
       case "restore":
         return (
-          <span className="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 fw-semibold">
+          <span
+            className="badge px-2 py-1 fw-semibold d-inline-flex align-items-center"
+            style={{
+              backgroundColor: "#f0fdf4",
+              color: "#16a34a",
+              border: "1px solid #bbf7d0",
+              fontSize: "11px",
+              borderRadius: "5px",
+            }}
+          >
             <i className="bi bi-arrow-counterclockwise me-1"></i>RESTORE
           </span>
         );
       case "delete":
         return (
-          <span className="badge bg-danger-subtle text-danger px-2 py-1 fw-semibold">
+          <span
+            className="badge px-2 py-1 fw-semibold d-inline-flex align-items-center"
+            style={{
+              backgroundColor: "#fef2f2",
+              color: "#dc2626",
+              border: "1px solid #fecaca",
+              fontSize: "11px",
+              borderRadius: "5px",
+            }}
+          >
             <i className="bi bi-trash3 me-1"></i>DELETE
           </span>
         );
       case "send":
       case "email":
         return (
-          <span className="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 fw-semibold">
+          <span
+            className="badge px-2 py-1 fw-semibold d-inline-flex align-items-center"
+            style={{
+              backgroundColor: "#eff6ff",
+              color: "#2563eb",
+              border: "1px solid #bfdbfe",
+              fontSize: "11px",
+              borderRadius: "5px",
+            }}
+          >
             <i className="bi bi-send-fill me-1"></i>SEND
           </span>
         );
       case "print":
       case "printed":
         return (
-          <span className="badge bg-secondary-subtle text-dark border px-2 py-1 fw-semibold">
-            <i className="bi bi-printer-fill me-1 text-secondary"></i>PRINT
+          <span
+            className="badge px-2 py-1 fw-semibold d-inline-flex align-items-center"
+            style={{
+              backgroundColor: "#f3f4f6",
+              color: "#4b5563",
+              border: "1px solid #e5e7eb",
+              fontSize: "11px",
+              borderRadius: "5px",
+            }}
+          >
+            <i className="bi bi-printer-fill me-1"></i>PRINT
           </span>
         );
       case "login":
         return (
-          <span className="badge bg-primary-subtle text-primary px-2 py-1 fw-semibold">
+          <span
+            className="badge px-2 py-1 fw-semibold d-inline-flex align-items-center"
+            style={{
+              backgroundColor: "#eff6ff",
+              color: "#2563eb",
+              border: "1px solid #bfdbfe",
+              fontSize: "11px",
+              borderRadius: "5px",
+            }}
+          >
             <i className="bi bi-box-arrow-in-right me-1"></i>LOGIN
           </span>
         );
       case "logout":
         return (
-          <span className="badge bg-secondary-subtle text-secondary px-2 py-1 fw-semibold">
+          <span
+            className="badge px-2 py-1 fw-semibold d-inline-flex align-items-center"
+            style={{
+              backgroundColor: "#f3f4f6",
+              color: "#4b5563",
+              border: "1px solid #e5e7eb",
+              fontSize: "11px",
+              borderRadius: "5px",
+            }}
+          >
             <i className="bi bi-box-arrow-right me-1"></i>LOGOUT
           </span>
         );
       case "export":
         return (
-          <span className="badge bg-info-subtle text-info px-2 py-1 fw-semibold">
+          <span
+            className="badge px-2 py-1 fw-semibold d-inline-flex align-items-center"
+            style={{
+              backgroundColor: "#ecfeff",
+              color: "#0891b2",
+              border: "1px solid #a5f3fc",
+              fontSize: "11px",
+              borderRadius: "5px",
+            }}
+          >
             <i className="bi bi-file-earmark-arrow-down me-1"></i>EXPORT
           </span>
         );
       default:
         return (
-          <span className="badge bg-light text-dark border px-2 py-1 fw-semibold">
+          <span
+            className="badge bg-light text-dark border px-2 py-1 fw-semibold"
+            style={{ fontSize: "11px", borderRadius: "5px" }}
+          >
             {action ? action.toUpperCase() : "ACTION"}
           </span>
         );
@@ -497,6 +627,15 @@ export default function ActivityLogsPage() {
 
           <div className="page-header-actions d-flex align-items-center gap-2">
             <button
+              className="btn btn-outline-danger d-flex align-items-center gap-1.5"
+              onClick={() => setShowDeleteModal(true)}
+              disabled={isLoading || isDeleting}
+              title="Delete activity logs older than 2 months"
+            >
+              <i className="bi bi-trash3"></i>
+              <span>Delete 2 Month Old</span>
+            </button>
+            <button
               className="btn btn-outline-custom"
               onClick={handleExport}
               disabled={isExporting || pagination.total === 0}
@@ -514,35 +653,122 @@ export default function ActivityLogsPage() {
           </div>
         </div>
 
-        {/* Action Color Guide Note (Task 3) */}
-        <div className="card border-0 shadow-sm mb-3 px-3 py-2.5" style={{ backgroundColor: "#ffffff", borderRadius: "10px" }}>
+        {/* Action Color Guide Note */}
+        <div
+          className="card mb-3 px-3 py-2.5 shadow-sm"
+          style={{
+            backgroundColor: "#ffffff",
+            borderRadius: "10px",
+            border: "1px solid #e5e7eb",
+          }}
+        >
           <div className="d-flex flex-wrap align-items-center gap-2">
-            <span className="text-dark small fw-bold d-flex align-items-center gap-1.5 me-1">
+            <span className="text-dark small fw-bold d-flex align-items-center gap-1.5 me-1" style={{ fontSize: "12px" }}>
               <i className="bi bi-info-circle-fill text-primary"></i>
               <span>Action Color Guide:</span>
             </span>
-            <span className="badge bg-success-subtle text-success px-2 py-1 fw-semibold" title="Record Created / Added">
+            <span
+              className="badge px-2.5 py-1 fw-semibold d-inline-flex align-items-center"
+              style={{
+                backgroundColor: "#e8f5e9",
+                color: "#2e7d32",
+                border: "1px solid #c8e6c9",
+                fontSize: "11.5px",
+                borderRadius: "6px",
+              }}
+              title="Record Created / Added"
+            >
               <i className="bi bi-plus-circle me-1"></i>Green: ADD (Create)
             </span>
-            <span className="badge bg-warning-subtle text-warning px-2 py-1 fw-semibold" title="Record Edited / Updated">
+            <span
+              className="badge px-2.5 py-1 fw-semibold d-inline-flex align-items-center"
+              style={{
+                backgroundColor: "#fffde7",
+                color: "#b45309",
+                border: "1px solid #fde68a",
+                fontSize: "11.5px",
+                borderRadius: "6px",
+              }}
+              title="Record Edited / Updated"
+            >
               <i className="bi bi-pencil-square me-1"></i>Yellow: EDIT (Update)
             </span>
-            <span className="badge bg-warning-subtle text-dark border border-warning px-2 py-1 fw-semibold" title="Record moved to Trash">
-              <i className="bi bi-trash me-1 text-warning"></i>Amber: TRASH (Archive)
+            <span
+              className="badge px-2.5 py-1 fw-semibold d-inline-flex align-items-center"
+              style={{
+                backgroundColor: "#fff8e1",
+                color: "#b45309",
+                border: "1px solid #fcd34d",
+                fontSize: "11.5px",
+                borderRadius: "6px",
+              }}
+              title="Record moved to Trash"
+            >
+              <i className="bi bi-trash me-1"></i>Amber: TRASH (Archive)
             </span>
-            <span className="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 fw-semibold" title="Record Restored">
+            <span
+              className="badge px-2.5 py-1 fw-semibold d-inline-flex align-items-center"
+              style={{
+                backgroundColor: "#f0fdf4",
+                color: "#16a34a",
+                border: "1px solid #bbf7d0",
+                fontSize: "11.5px",
+                borderRadius: "6px",
+              }}
+              title="Record Restored"
+            >
               <i className="bi bi-arrow-counterclockwise me-1"></i>Light Green: RESTORE
             </span>
-            <span className="badge bg-danger-subtle text-danger px-2 py-1 fw-semibold" title="Record Permanently Deleted">
+            <span
+              className="badge px-2.5 py-1 fw-semibold d-inline-flex align-items-center"
+              style={{
+                backgroundColor: "#fef2f2",
+                color: "#dc2626",
+                border: "1px solid #fecaca",
+                fontSize: "11.5px",
+                borderRadius: "6px",
+              }}
+              title="Record Permanently Deleted"
+            >
               <i className="bi bi-trash3 me-1"></i>Red: DELETE
             </span>
-            <span className="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 fw-semibold" title="Quotation / Email Sent or Login">
+            <span
+              className="badge px-2.5 py-1 fw-semibold d-inline-flex align-items-center"
+              style={{
+                backgroundColor: "#eff6ff",
+                color: "#2563eb",
+                border: "1px solid #bfdbfe",
+                fontSize: "11.5px",
+                borderRadius: "6px",
+              }}
+              title="Quotation / Email Sent or Login"
+            >
               <i className="bi bi-send-fill me-1"></i>Blue: SEND / LOGIN
             </span>
-            <span className="badge bg-info-subtle text-info px-2 py-1 fw-semibold" title="Data Exported">
+            <span
+              className="badge px-2.5 py-1 fw-semibold d-inline-flex align-items-center"
+              style={{
+                backgroundColor: "#ecfeff",
+                color: "#0891b2",
+                border: "1px solid #a5f3fc",
+                fontSize: "11.5px",
+                borderRadius: "6px",
+              }}
+              title="Data Exported"
+            >
               <i className="bi bi-file-earmark-arrow-down me-1"></i>Cyan: EXPORT
             </span>
-            <span className="badge bg-secondary-subtle text-secondary px-2 py-1 fw-semibold" title="Logout or Print">
+            <span
+              className="badge px-2.5 py-1 fw-semibold d-inline-flex align-items-center"
+              style={{
+                backgroundColor: "#f3f4f6",
+                color: "#4b5563",
+                border: "1px solid #e5e7eb",
+                fontSize: "11.5px",
+                borderRadius: "6px",
+              }}
+              title="Logout or Print"
+            >
               <i className="bi bi-box-arrow-right me-1"></i>Gray: LOGOUT / PRINT
             </span>
           </div>
@@ -656,17 +882,17 @@ export default function ActivityLogsPage() {
           </div>
 
           {/* Table: No, User (ID, Name, Mobile), Module, Action, Detail, IP Address, Time (IST) */}
-          <div className="table-responsive">
-            <table className="table table-custom">
+          <div className="table-responsive" style={{ overflowX: "auto" }}>
+            <table className="table table-custom mb-0" style={{ width: "100%" }}>
               <thead>
                 <tr>
-                  <th style={{ width: "50px" }}>No</th>
-                  <th style={{ width: "230px" }}>User</th>
-                  <th style={{ width: "140px" }}>Module</th>
-                  <th style={{ width: "110px" }}>Action</th>
-                  <th>Detail</th>
-                  <th style={{ width: "135px" }}>IP Address</th>
-                  <th style={{ width: "190px" }}>Date & Time (IST)</th>
+                  <th style={{ width: "45px", textAlign: "center", padding: "0.75rem 0.5rem" }}>No</th>
+                  <th style={{ width: "190px", padding: "0.75rem 0.75rem" }}>User</th>
+                  <th style={{ width: "130px", padding: "0.75rem 0.75rem" }}>Module</th>
+                  <th style={{ width: "95px", textAlign: "center", padding: "0.75rem 0.5rem" }}>Action</th>
+                  <th style={{ minWidth: "160px", padding: "0.75rem 0.75rem" }}>Detail</th>
+                  <th style={{ width: "120px", textAlign: "center", padding: "0.75rem 0.5rem" }}>IP Address</th>
+                  <th style={{ width: "185px", minWidth: "185px", padding: "0.75rem 1rem", textAlign: "left" }}>Date & Time (IST)</th>
                 </tr>
               </thead>
               <tbody>
@@ -687,30 +913,30 @@ export default function ActivityLogsPage() {
                   logs.map((log, index) => (
                     <tr key={log.id}>
                       {/* No / Index */}
-                      <td>
+                      <td style={{ textAlign: "center", padding: "0.75rem 0.5rem" }}>
                         <span className="text-muted small">
                           {(currentPage - 1) * perPage + index + 1}
                         </span>
                       </td>
 
                       {/* User: Name, ID, Mobile */}
-                      <td>
+                      <td style={{ padding: "0.75rem 0.75rem" }}>
                         {log.user ? (
                           <div className="d-flex align-items-center gap-2">
                             <div
                               className="rounded-circle bg-primary-subtle text-primary fw-bold d-flex align-items-center justify-content-center flex-shrink-0"
-                              style={{ width: "32px", height: "32px", fontSize: "12px" }}
+                              style={{ width: "30px", height: "30px", fontSize: "12px" }}
                             >
                               {log.user.name?.charAt(0).toUpperCase() || "U"}
                             </div>
-                            <div className="d-flex flex-column text-truncate" style={{ maxWidth: "180px" }}>
-                              <div className="fw-semibold text-dark lh-sm text-truncate" style={{ fontSize: "13px" }}>
+                            <div className="d-flex flex-column text-truncate" style={{ maxWidth: "150px" }}>
+                              <div className="fw-semibold text-dark lh-sm text-truncate" style={{ fontSize: "12.5px" }}>
                                 {log.user.name}{" "}
                                 <span className="badge bg-light text-muted border ms-1 small" style={{ fontSize: "10px" }}>
                                   #{log.user.id}
                                 </span>
                               </div>
-                              <div className="text-muted d-flex align-items-center gap-1 mt-1 small" style={{ fontSize: "11px" }}>
+                              <div className="text-muted d-flex align-items-center gap-1 mt-0.5 small" style={{ fontSize: "11px" }}>
                                 <i className="bi bi-telephone text-secondary" style={{ fontSize: "10px" }}></i>
                                 <span>{log.user.phone || log.user_phone || "No Mobile"}</span>
                               </div>
@@ -731,36 +957,36 @@ export default function ActivityLogsPage() {
                       </td>
 
                       {/* Module */}
-                      <td>
-                        <span className="badge bg-light text-dark border px-2 py-1 fw-medium" style={{ fontSize: "12px" }}>
+                      <td style={{ padding: "0.75rem 0.75rem" }}>
+                        <span className="badge bg-light text-dark border px-2 py-1 fw-medium" style={{ fontSize: "11.5px" }}>
                           <i className="bi bi-folder2 me-1 text-primary"></i>
                           {log.module}
                         </span>
                       </td>
 
                       {/* Action */}
-                      <td>
+                      <td style={{ textAlign: "center", padding: "0.75rem 0.5rem" }}>
                         {getActionBadge(log.action)}
                       </td>
 
                       {/* Detail */}
-                      <td>
-                        <span className="text-dark fw-medium" style={{ fontSize: "13px" }}>
+                      <td style={{ padding: "0.75rem 0.75rem", whiteSpace: "normal", wordBreak: "break-word" }}>
+                        <span className="text-dark fw-medium" style={{ fontSize: "12.5px" }}>
                           {log.detail || "-"}
                         </span>
                       </td>
 
                       {/* IP Address (IPv4) */}
-                      <td>
-                        <span className="badge bg-light text-secondary border font-monospace px-2 py-1" style={{ fontSize: "12px" }}>
+                      <td style={{ textAlign: "center", padding: "0.75rem 0.5rem" }}>
+                        <span className="badge bg-light text-secondary border font-monospace px-2 py-1" style={{ fontSize: "11px" }}>
                           <i className="bi bi-hdd-network me-1 text-muted"></i>
                           {log.ip_address || "127.0.0.1"}
                         </span>
                       </td>
 
                       {/* Date & Time (IST) */}
-                      <td>
-                        <div className="d-flex align-items-center gap-1 text-muted small">
+                      <td style={{ width: "185px", minWidth: "185px", padding: "0.75rem 1rem", whiteSpace: "nowrap" }}>
+                        <div className="d-flex align-items-center gap-1.5 text-secondary" style={{ fontSize: "12px" }}>
                           <i className="bi bi-clock me-1 text-primary"></i>
                           <span>{formatISTDateTime(log.raw_time, log.created_at)}</span>
                         </div>
@@ -790,6 +1016,112 @@ export default function ActivityLogsPage() {
           )}
         </div>
       </div>
+
+      {/* Delete 2 Months Old Confirmation Modal */}
+      {showDeleteModal && (
+        <div
+          className="modal fade show d-block"
+          tabIndex="-1"
+          style={{ backgroundColor: "rgba(0, 0, 0, 0.5)", zIndex: 1060 }}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="modal-dialog modal-dialog-centered" style={{ maxWidth: "460px" }}>
+            <div className="modal-content shadow-lg border-0" style={{ borderRadius: "12px" }}>
+              <div
+                className="modal-header d-flex justify-content-between align-items-center px-3 py-3"
+                style={{
+                  backgroundColor: "#131C27",
+                  borderTopLeftRadius: "12px",
+                  borderTopRightRadius: "12px",
+                  borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
+                }}
+              >
+                <div className="d-flex align-items-center gap-2">
+                  <div
+                    className="rounded-circle d-flex align-items-center justify-content-center"
+                    style={{
+                      width: "34px",
+                      height: "34px",
+                      fontSize: "15px",
+                      backgroundColor: "rgba(220, 38, 38, 0.2)",
+                      color: "#ef4444",
+                    }}
+                  >
+                    <i className="bi bi-exclamation-triangle-fill"></i>
+                  </div>
+                  <h5
+                    className="mb-0 fw-bold"
+                    style={{ color: "#ffffff", fontSize: "15px" }}
+                  >
+                    Delete Old Activity Logs?
+                  </h5>
+                </div>
+                <button
+                  type="button"
+                  className="btn-close btn-close-white"
+                  onClick={() => !isDeleting && setShowDeleteModal(false)}
+                  disabled={isDeleting}
+                  aria-label="Close"
+                ></button>
+              </div>
+
+              <div className="modal-body px-3 py-3">
+                <p className="text-secondary small mb-2.5">
+                  Are you sure you want to delete all activity logs older than <strong>2 months</strong>?
+                </p>
+
+                <div
+                  className="p-3 rounded-3 border mb-2.5"
+                  style={{ backgroundColor: "#fef2f2", borderColor: "#fecaca" }}
+                >
+                  <div className="d-flex align-items-center gap-2 text-danger fw-semibold small mb-1">
+                    <i className="bi bi-calendar-x-fill"></i>
+                    <span>Cut-off Date: {getTwoMonthCutoffDate()}</span>
+                  </div>
+                  <p className="small text-muted mb-0" style={{ fontSize: "12px", lineHeight: "1.4" }}>
+                    All activity log records created <strong>before {getTwoMonthCutoffDate()}</strong> will be permanently deleted. Data from the last 2 months will remain safe and intact.
+                  </p>
+                </div>
+
+                <div className="small text-muted fst-italic d-flex align-items-center gap-1">
+                  <i className="bi bi-info-circle text-secondary"></i>
+                  <span>This action is permanent and cannot be undone.</span>
+                </div>
+              </div>
+
+              <div className="modal-footer border-top-0 pt-0 px-3 pb-3 d-flex justify-content-end gap-2">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary px-3"
+                  onClick={() => setShowDeleteModal(false)}
+                  disabled={isDeleting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-danger px-3 d-flex align-items-center gap-1.5"
+                  onClick={handleDeleteOldLogs}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm" role="status"></span>
+                      <span>Deleting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <i className="bi bi-trash3-fill"></i>
+                      <span>Yes, Delete</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 }
