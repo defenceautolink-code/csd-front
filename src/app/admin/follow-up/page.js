@@ -11,6 +11,27 @@ import discountApprovalApi from "@/services/discountApprovalApi";
 import { logActivity } from "@/utils/activityLogger";
 import ConvertDealModal from "@/app/admin/leads/ConvertDealModal";
 
+const countLeadHistoryEntries = (followUps) => {
+  const seenQuotes = new Set();
+  return followUps.filter((followUp) => {
+    const isQuote =
+      (followUp.type || "").toLowerCase().includes("quotation") ||
+      (followUp.status || "").toLowerCase().includes("quotation") ||
+      (followUp.outcome || "").toLowerCase().includes("quotation") ||
+      Boolean(followUp.quotation_id);
+
+    if (!isQuote) return true;
+
+    const match = followUp.notes ? followUp.notes.match(/#[A-Za-z0-9-]+/) : null;
+    const key = followUp.quotation_id
+      ? String(followUp.quotation_id)
+      : (match ? match[0] : `${followUp.follow_up_date}_quote`);
+    if (seenQuotes.has(key)) return false;
+    seenQuotes.add(key);
+    return true;
+  }).length;
+};
+
 export default function FollowUpPage() {
   const { showToast } = useToast();
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
@@ -299,6 +320,36 @@ export default function FollowUpPage() {
           });
         }
 
+        let historyCountByLead = new Map();
+        if (viewMode !== "trash") {
+          try {
+            const token = typeof window !== "undefined" ? localStorage.getItem("token") || localStorage.getItem("auth_token") : null;
+            const headers = token ? { Authorization: `Bearer ${token}` } : {};
+            const historyRes = await axios.get(`${API_URL}/follow-ups`, {
+              params: { grouped: "false", per_page: "all" },
+              headers,
+            });
+            const historyList = historyRes.data?.data;
+            if (!Array.isArray(historyList)) {
+              throw new Error("Follow-up history response is not a list.");
+            }
+
+            const historiesByLead = new Map();
+            historyList.forEach((followUp) => {
+              const leadId = followUp.lead_id || followUp.lead?.id || followUp.lead?.lead_id;
+              if (!leadId) return;
+              const key = String(leadId);
+              if (!historiesByLead.has(key)) historiesByLead.set(key, []);
+              historiesByLead.get(key).push(followUp);
+            });
+            historiesByLead.forEach((history, leadId) => {
+              historyCountByLead.set(leadId, countLeadHistoryEntries(history));
+            });
+          } catch (error) {
+            console.error("Error fetching follow-up history counts:", error);
+          }
+        }
+
         let rawList = res.data.data;
         if (outcome && outcome !== "all") {
           const lowerOut = outcome.toLowerCase();
@@ -331,6 +382,7 @@ export default function FollowUpPage() {
 
         const todayStr = new Date().toISOString().split("T")[0];
         const liveItems = rawList.map((item, idx) => {
+          const leadId = item.lead_id || item.lead?.id || item.lead?.lead_id || item.id;
           const custName = item.lead?.name || item.customer_name || "Customer";
           const phone = item.lead?.phone || item.phone || "-";
           const city = item.lead?.city || "";
@@ -372,7 +424,7 @@ export default function FollowUpPage() {
 
           return {
             id: item.id,
-            lead_id: item.lead_id || item.lead?.id || item.lead?.lead_id || item.id,
+            lead_id: leadId,
             customer: custName,
             phone: phone,
             city: city,
@@ -422,7 +474,9 @@ export default function FollowUpPage() {
             urgency: isHot ? "High Urgency" : "Medium",
             urgencyClass: isHot ? "bg-danger-subtle text-danger" : "bg-warning-subtle text-warning",
             urgencyIcon: isHot ? "bi bi-fire" : null,
-            followUpsCount: item.follow_ups_count || 1,
+            followUpsCount: historyCountByLead.has(String(leadId))
+              ? historyCountByLead.get(String(leadId))
+              : Number(item.follow_ups_count) || 1,
             avatar: `/image/avatar-${avatarNum}.svg`,
             tab: itemTab,
           };

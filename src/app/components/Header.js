@@ -237,23 +237,7 @@ export default function Header({ onToggleSidebar, onQuickAddLead }) {
                         onMouseEnter={() => setSelectedIndex(index)}
                         onClick={() => navigateToPage(page)}
                       >
-                        <div className="d-flex align-items-center gap-2 overflow-hidden" style={{ minWidth: 0 }}>
-                          <div
-                            style={{
-                              width: 32,
-                              height: 32,
-                              borderRadius: 8,
-                              background: isSelected ? "rgba(220, 233, 162, 0.25)" : "rgba(255, 255, 255, 0.06)",
-                              color: isSelected ? "#DCE9A2" : "#CBD5E1",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              flexShrink: 0,
-                              fontSize: "14px",
-                            }}
-                          >
-                            <i className={page.icon}></i>
-                          </div>
+                        <div className="d-flex align-items-center overflow-hidden" style={{ minWidth: 0 }}>
                           <div className="d-flex flex-column" style={{ minWidth: 0 }}>
                             <span
                               className="text-truncate fw-semibold"
