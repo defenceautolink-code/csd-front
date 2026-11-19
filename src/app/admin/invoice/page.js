@@ -201,10 +201,11 @@ export default function GenerateInvoicePage() {
           };
         });
 
+      const isCancelled = d.deal_status === "cancelled";
       const totalPaid = Number(d.paid_amount ?? d.total_paid ?? 0);
       const netAmount = Number(d.net_amount ?? d.total_amount ?? 0);
-      const balanceDue = Math.max(0, netAmount - totalPaid);
-      const pctPaid = Math.min(100, Math.round(((totalPaid || 0) / (netAmount || 1)) * 100));
+      const balanceDue = isCancelled ? 0 : Math.max(0, netAmount - totalPaid);
+      const pctPaid = isCancelled ? 0 : Math.min(100, Math.round(((totalPaid || 0) / (netAmount || 1)) * 100));
 
       return {
         ...d,
@@ -246,21 +247,12 @@ export default function GenerateInvoicePage() {
 
   // Overall KPI Metrics from Dedicated Backend API (Fallback to computed)
   const metrics = useMemo(() => {
-    if (invoiceStats) {
-      return {
-        totalInvoicesCount: invoiceStats.total_invoices_count,
-        totalCollected: invoiceStats.total_collected,
-        totalDealVolume: invoiceStats.total_deal_volume,
-        totalPending: invoiceStats.total_pending,
-        totalDealsCount: invoiceStats.total_deals_count,
-      };
-    }
-
+    const activeDeals = enrichedDeals.filter((d) => d.deal_status !== "cancelled");
     const totalInvoicesCount = allInvoicesList.length;
     const totalCollected = allInvoicesList.reduce((sum, i) => sum + Number(i.amountPaid || 0), 0);
-    const totalDealVolume = enrichedDeals.reduce((sum, d) => sum + Number(d.net_amount || d.total_amount || 0), 0);
-    const totalPending = Math.max(0, totalDealVolume - totalCollected);
-    const totalDealsCount = enrichedDeals.length;
+    const totalDealVolume = activeDeals.reduce((sum, d) => sum + Number(d.net_amount || d.total_amount || 0), 0);
+    const totalPending = Math.max(0, activeDeals.reduce((sum, d) => sum + Number(d.computedBalanceDue || 0), 0));
+    const totalDealsCount = activeDeals.length;
 
     return {
       totalInvoicesCount,
@@ -269,7 +261,7 @@ export default function GenerateInvoicePage() {
       totalPending,
       totalDealsCount,
     };
-  }, [invoiceStats, allInvoicesList, enrichedDeals]);
+  }, [allInvoicesList, enrichedDeals]);
 
   // Filtered Deals for Tab 1 (Search + Stage Filter + Payment Filter + Date Range)
   const filteredDeals = useMemo(() => {
@@ -965,17 +957,19 @@ export default function GenerateInvoicePage() {
                                     }}
                                     onClick={(e) => e.stopPropagation()}
                                   >
-                                    <button
-                                      type="button"
-                                      className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-primary"
-                                      onClick={() => {
-                                        setActiveActionMenuId(null);
-                                        handleOpenGenerateForDeal(deal);
-                                      }}
-                                    >
-                                      <i className="bi bi-plus-circle text-primary"></i>
-                                      <span>{deal.computedBalanceDue > 0 ? "Add Bill" : "Add Additional Bill"}</span>
-                                    </button>
+                                    {deal.deal_status !== "cancelled" && (
+                                      <button
+                                        type="button"
+                                        className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-primary"
+                                        onClick={() => {
+                                          setActiveActionMenuId(null);
+                                          handleOpenGenerateForDeal(deal);
+                                        }}
+                                      >
+                                        <i className="bi bi-plus-circle text-primary"></i>
+                                        <span>{deal.computedBalanceDue > 0 ? "Add Bill" : "Add Additional Bill"}</span>
+                                      </button>
+                                    )}
 
                                     <button
                                       type="button"
@@ -1081,26 +1075,39 @@ export default function GenerateInvoicePage() {
                                 </div>
                                 <div className="progress" style={{ height: "5px" }}>
                                   <div
-                                    className={`progress-bar ${pctPaid === 100 ? "bg-success" : "bg-warning"}`}
+                                    className={`progress-bar ${
+                                      deal.deal_status === "cancelled"
+                                        ? "bg-secondary"
+                                        : pctPaid === 100
+                                        ? "bg-success"
+                                        : "bg-warning"
+                                    }`}
                                     role="progressbar"
-                                    style={{ width: `${pctPaid}%` }}
-                                    aria-valuenow={pctPaid}
+                                    style={{ width: `${deal.deal_status === "cancelled" ? 0 : pctPaid}%` }}
+                                    aria-valuenow={deal.deal_status === "cancelled" ? 0 : pctPaid}
                                     aria-valuemin="0"
                                     aria-valuemax="100"
                                   ></div>
                                 </div>
                                 <div className="d-flex justify-content-between align-items-center mt-1">
                                   <span
-                                    className={`badge ${deal.payment_status === "Fully Paid" || deal.computedBalanceDue === 0
+                                    className={`badge ${
+                                      deal.deal_status === "cancelled"
+                                        ? "bg-secondary text-white"
+                                        : deal.payment_status === "Fully Paid" || deal.computedBalanceDue === 0
                                         ? "bg-success text-white"
                                         : "bg-warning text-dark"
-                                      } px-2 py-0.5`}
+                                    } px-2 py-0.5`}
                                     style={{ fontSize: "10px" }}
                                   >
-                                    {deal.computedBalanceDue === 0 && deal.computedTotalPaid > 0 ? "Fully Paid" : deal.payment_status || "Partially Paid"}
+                                    {deal.deal_status === "cancelled"
+                                      ? "Refunded / Cancelled"
+                                      : deal.computedBalanceDue === 0 && deal.computedTotalPaid > 0
+                                      ? "Fully Paid"
+                                      : deal.payment_status || "Partially Paid"}
                                   </span>
                                   <span className="text-muted" style={{ fontSize: "10px" }}>
-                                    {pctPaid}%
+                                    {deal.deal_status === "cancelled" ? "0%" : `${pctPaid}%`}
                                   </span>
                                 </div>
                               </div>
@@ -1957,7 +1964,9 @@ export default function GenerateInvoicePage() {
                         <h4 className="fw-bold text-danger my-1">
                           ₹{formatIndianCurrency(selectedDealForMultiView.computedBalanceDue)}
                         </h4>
-                        <span className="small text-danger">Pending Receivables</span>
+                        <span className="small text-danger">
+                          {selectedDealForMultiView.deal_status === "cancelled" ? "Deal Cancelled (Settled)" : "Pending Receivables"}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -2044,7 +2053,11 @@ export default function GenerateInvoicePage() {
                     Close
                   </button>
 
-                  {selectedDealForMultiView.computedBalanceDue > 0 ? (
+                  {selectedDealForMultiView.deal_status === "cancelled" ? (
+                    <span className="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fw-semibold">
+                      <i className="bi bi-x-circle me-1"></i>Deal Cancelled & Settled
+                    </span>
+                  ) : selectedDealForMultiView.computedBalanceDue > 0 ? (
                     <button
                       type="button"
                       className="btn text-white fw-bold shadow-sm d-flex align-items-center gap-2"

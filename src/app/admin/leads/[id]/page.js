@@ -10,6 +10,7 @@ import api from "@/lib/axios";
 import quotationApi from "@/lib/quotationApi";
 import ConvertDealModal from "../ConvertDealModal";
 import discountApprovalApi from "@/services/discountApprovalApi";
+import { formatIndianCurrency } from "@/utils/numberToWords";
 
 export const renderLeadStatusBadge = (statusName, extraClasses = "") => {
   const s = (statusName || "New").trim();
@@ -124,7 +125,11 @@ export default function LeadDetailPage() {
     quotations: true,
     assignments: true,
     insurance: true,
+    invoices: true,
   });
+
+  // Single Invoice Preview State
+  const [selectedInvoiceForSingleView, setSelectedInvoiceForSingleView] = useState(null);
 
   // Print Lead 360 Handler
   const handlePrintLeadProfile = () => {
@@ -134,6 +139,7 @@ export default function LeadDetailPage() {
       quotations: true,
       assignments: true,
       insurance: true,
+      invoices: true,
     });
     setTimeout(() => {
       if (typeof window !== "undefined") {
@@ -141,6 +147,74 @@ export default function LeadDetailPage() {
       }
     }, 350);
   };
+
+  // Derive primary deal and all invoices for this lead (Task 2)
+  const { primaryDeal, leadInvoices } = useMemo(() => {
+    if (!lead) return { primaryDeal: null, leadInvoices: [] };
+
+    // Find deal: from lead.deals array or lead.latestDeal / lead.latest_deal
+    const dealList = Array.isArray(lead.deals) && lead.deals.length > 0
+      ? lead.deals
+      : (lead.latestDeal ? [lead.latestDeal] : (lead.latest_deal ? [lead.latest_deal] : []));
+
+    const deal = dealList[0] || null;
+
+    // Collect payments from deal.payments or lead.payments
+    let payments = [];
+    if (deal && Array.isArray(deal.payments) && deal.payments.length > 0) {
+      payments = deal.payments;
+    } else if (Array.isArray(lead.payments) && lead.payments.length > 0) {
+      payments = lead.payments;
+    }
+
+    const formattedInvoices = payments
+      .filter((p) => p.status !== "rejected")
+      .map((p, idx) => {
+        const invDate = p.payment_date || (p.created_at ? p.created_at.split("T")[0] : new Date().toISOString().split("T")[0]);
+        const invNo = p.invoice_no || `DAL-/${new Date(invDate).getFullYear()}/${String(new Date(invDate).getMonth() + 1).padStart(2, "0")}/${String(1000 + (p.id || idx + 1))}`;
+        let installmentTitle = "Installment Payment";
+        if (p.payment_type) {
+          installmentTitle = p.payment_type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+        }
+        const amt = Number(p.amount) || 0;
+
+        return {
+          id: p.id || idx + 1,
+          invoiceNo: invNo,
+          date: invDate,
+          time: p.created_at ? new Date(p.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "12:00 PM",
+          installmentTitle,
+          paymentMode: (p.payment_mode || "UPI").toUpperCase(),
+          transactionRef: p.transaction_reference || p.reference_no || (p.payment_mode?.toLowerCase() === "cash" ? "Cash Receipt" : "VERIFIED-REF"),
+          bankName: p.bank_name || "HDFC Bank",
+          receivedBy: p.received_by || p.recorded_by_name || "Accounts",
+          amountPaid: amt,
+          status: p.payment_type === "refund" ? "Refunded" : "Paid",
+          dealNumber: deal?.deal_number || "DEAL-PENDING",
+          customerName: lead.name,
+          mobile: lead.phone,
+          email: lead.email,
+          city: lead.city,
+          vehicle: deal?.model_variant || lead.model_variant || "Vehicle",
+          color: deal?.color || "Standard",
+          vin: deal?.vin_chassis_number || "—",
+          regNo: deal?.registration_number || "—",
+          totalDealAmount: deal ? (deal.net_amount || deal.total_amount) : (lead.budget || 0),
+          items: [
+            {
+              desc: `${installmentTitle} for ${deal?.model_variant || lead.model_variant || "Vehicle"}`,
+              hsn: "998313",
+              qty: 1,
+              rate: amt,
+              amount: amt,
+            },
+          ],
+          remarks: p.notes || `Installment payment for ${lead.name}`,
+        };
+      });
+
+    return { primaryDeal: deal, leadInvoices: formattedInvoices };
+  }, [lead]);
 
   // Insurance history state
   const [insurances, setInsurances] = useState([]);
@@ -1569,6 +1643,196 @@ export default function LeadDetailPage() {
             )}
           </div>
 
+          {/* 5. Deal Ledger & Invoices Section (Task 2 - Matching Screenshot 2) */}
+          <div className="card shadow-sm border-0" style={{ borderRadius: "16px", overflow: "hidden", background: "#ffffff" }}>
+            <div
+              className="d-flex align-items-center justify-content-between px-4 py-3"
+              style={{
+                backgroundColor: "#F1F3ED",
+                borderBottom: openSections.invoices ? "1px solid #DFE2D6" : "none",
+                cursor: "pointer",
+                userSelect: "none",
+              }}
+              onClick={() => toggleSection("invoices")}
+            >
+              <div className="d-flex align-items-center gap-2">
+                <i className="bi bi-collection-fill text-primary fs-5"></i>
+                <div>
+                  <div className="d-flex align-items-center gap-2">
+                    <h6 className="mb-0 fw-bold text-dark fs-6">
+                      Deal Ledger & Invoices: {primaryDeal ? primaryDeal.deal_number : "Not Converted Yet"}
+                    </h6>
+                    {primaryDeal && (
+                      <span
+                        className={`badge ${
+                          primaryDeal.deal_status === "cancelled"
+                            ? "bg-danger text-white"
+                            : "bg-success-subtle text-success border border-success-subtle"
+                        } fw-semibold px-2 py-0.5`}
+                        style={{ fontSize: "11px" }}
+                      >
+                        {primaryDeal.deal_status === "cancelled" ? "Cancelled" : "Booking Confirmed"}
+                      </span>
+                    )}
+                  </div>
+                  <span className="small text-muted" style={{ fontSize: "12px" }}>
+                    Customer: {lead.name} • {primaryDeal?.model_variant || lead.model_variant || "Vehicle"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="d-flex align-items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                <Link
+                  href="/admin/deals"
+                  className="btn btn-sm btn-outline-custom d-inline-flex align-items-center gap-1 py-1 px-2.5"
+                  style={{ fontSize: "0.8rem" }}
+                >
+                  <i className="bi bi-trophy text-primary"></i>
+                  <span>Deals & Bookings</span>
+                </Link>
+                <Link
+                  href="/admin/invoice"
+                  className="btn btn-sm btn-outline-custom d-inline-flex align-items-center gap-1 py-1 px-2.5"
+                  style={{ fontSize: "0.8rem" }}
+                >
+                  <i className="bi bi-receipt text-success"></i>
+                  <span>All Invoices</span>
+                </Link>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-light border-0 rounded-circle p-1 d-flex align-items-center justify-content-center"
+                  style={{ width: "32px", height: "32px", background: "rgba(0,0,0,0.05)" }}
+                  onClick={() => toggleSection("invoices")}
+                  title={openSections.invoices ? "Hide / Collapse" : "Show / Expand"}
+                >
+                  <i className={`bi ${openSections.invoices ? "bi-chevron-up" : "bi-chevron-down"} fw-bold text-dark`}></i>
+                </button>
+              </div>
+            </div>
+
+            {openSections.invoices && (
+              <div className="card-body p-4">
+                {primaryDeal ? (
+                  <>
+                    {/* Financial Summary (Matching Screenshot 2) */}
+                    <div className="row g-3 mb-4">
+                      <div className="col-12 col-md-4">
+                        <div className="card bg-light border-0 p-3 rounded-3">
+                          <span className="small text-muted text-uppercase fw-semibold">Net Deal Amount</span>
+                          <h4 className="fw-bold text-dark my-1">
+                            ₹{formatIndianCurrency(primaryDeal.net_amount || primaryDeal.total_amount || 0)}
+                          </h4>
+                          <span className="small text-muted">{primaryDeal.model_variant}</span>
+                        </div>
+                      </div>
+                      <div className="col-12 col-md-4">
+                        <div className="card bg-success-subtle border-0 p-3 rounded-3">
+                          <span className="small text-success text-uppercase fw-semibold">Total Paid</span>
+                          <h4 className="fw-bold text-success my-1">
+                            ₹{formatIndianCurrency(primaryDeal.total_paid || 0)}
+                          </h4>
+                          <span className="small text-success">
+                            {leadInvoices.length} Invoices Cleared
+                          </span>
+                        </div>
+                      </div>
+                      <div className="col-12 col-md-4">
+                        <div className="card bg-danger-subtle border-0 p-3 rounded-3">
+                          <span className="small text-danger text-uppercase fw-semibold">Balance Due</span>
+                          <h4 className="fw-bold text-danger my-1">
+                            ₹{formatIndianCurrency(primaryDeal.deal_status === "cancelled" ? 0 : (primaryDeal.balance_due || 0))}
+                          </h4>
+                          <span className="small text-danger">
+                            {primaryDeal.deal_status === "cancelled" ? "Deal Cancelled (Settled)" : "Pending Receivables"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Table of Invoices (Matching Screenshot 2) */}
+                    <h6 className="fw-bold text-dark mb-3 d-flex align-items-center gap-2">
+                      <i className="bi bi-receipt text-primary"></i>
+                      All Invoices Issued for this Deal ({leadInvoices.length} Invoices)
+                    </h6>
+
+                    {leadInvoices.length === 0 ? (
+                      <div className="text-center py-4 border rounded-3 bg-light text-muted">
+                        <i className="bi bi-receipt-cutoff display-6 text-muted mb-2"></i>
+                        <p className="mb-1 fw-semibold text-dark">No Installment Invoices Recorded Yet</p>
+                        <p className="small text-muted mb-0">Payments recorded in Deals or Billing will appear here automatically.</p>
+                      </div>
+                    ) : (
+                      <div className="table-responsive border rounded-3 overflow-hidden">
+                        <table className="table align-middle mb-0 table-hover">
+                          <thead className="table-light small text-uppercase">
+                            <tr>
+                              <th className="py-2.5 px-3">#</th>
+                              <th>Invoice No</th>
+                              <th>Date</th>
+                              <th>Payment Type</th>
+                              <th>Payment Mode</th>
+                              <th>Reference / UTR</th>
+                              <th className="text-end">Amount Paid</th>
+                              <th className="text-center">Status</th>
+                              <th className="text-end px-3">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody style={{ fontSize: "0.88rem" }}>
+                            {leadInvoices.map((inv, idx) => (
+                              <tr key={inv.id || idx}>
+                                <td className="px-3 text-muted fw-bold">{idx + 1}</td>
+                                <td>
+                                  <span className="badge font-monospace bg-light text-dark border fw-bold">
+                                    {inv.invoiceNo}
+                                  </span>
+                                </td>
+                                <td>{inv.date}</td>
+                                <td className="fw-semibold text-dark">{inv.installmentTitle}</td>
+                                <td>{inv.paymentMode}</td>
+                                <td className="font-monospace text-muted small">
+                                  {inv.paymentMode?.toLowerCase() === "cash" ? "Cash Receipt" : inv.transactionRef}
+                                </td>
+                                <td className="text-end fw-bold text-success">
+                                  ₹{formatIndianCurrency(inv.amountPaid)}
+                                </td>
+                                <td className="text-center">
+                                  <span className={`badge ${inv.status === "Refunded" ? "bg-danger-subtle text-danger" : "bg-success-subtle text-success"}`}>
+                                    {inv.status}
+                                  </span>
+                                </td>
+                                <td className="text-end px-3">
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline-dark d-inline-flex align-items-center gap-1"
+                                    onClick={() => setSelectedInvoiceForSingleView(inv)}
+                                  >
+                                    <i className="bi bi-file-earmark-text"></i>
+                                    <span>View Bill</span>
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center py-5 border rounded-3 bg-light">
+                    <i className="bi bi-receipt text-muted display-6"></i>
+                    <h6 className="fw-bold text-dark mt-2 mb-1">No Deal or Invoices Converted Yet</h6>
+                    <p className="text-muted small mb-3">
+                      This lead has not been converted to a Deal yet. Convert to Deal to issue booking invoices, record installments, and track payment balances.
+                    </p>
+                    <Link href={`/admin/leads`} className="btn btn-sm btn-primary">
+                      <i className="bi bi-trophy-fill me-1"></i> Check Deals & Bookings
+                    </Link>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
         {/* Modal: Log Follow-Up Call */}
         {showFollowUpModal && (
           <div className="modal-backdrop-custom">
@@ -1838,6 +2102,251 @@ export default function LeadDetailPage() {
                   <i className="bi bi-trash3-fill"></i>
                   <span>{isDeleting ? "Deleting..." : "Yes, Delete"}</span>
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* =========================================================================
+            MODAL: SINGLE INVOICE BILL PREVIEW & PRINT (Task 2)
+            ========================================================================= */}
+        {selectedInvoiceForSingleView && (
+          <div
+            className="modal fade show d-block"
+            tabIndex="-1"
+            style={{ backgroundColor: "rgba(0,0,0,0.65)", zIndex: 1060 }}
+            onClick={() => setSelectedInvoiceForSingleView(null)}
+          >
+            <div
+              className="modal-dialog modal-dialog-centered modal-lg print-modal-dialog"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div
+                className="modal-content border-0 shadow-lg print-card-content"
+                style={{ borderRadius: "16px", overflow: "hidden", backgroundColor: "#FFFFFF" }}
+              >
+                {/* Header */}
+                <div
+                  className="modal-header px-4 py-3 text-white d-flex align-items-center justify-content-between no-print"
+                  style={{ backgroundColor: "#2A3816" }}
+                >
+                  <div className="d-flex align-items-center gap-2">
+                    <i className="bi bi-file-earmark-text fs-5 text-warning"></i>
+                    <div>
+                      <h5 className="modal-title fw-bold text-white mb-0">
+                        Invoice Preview: {selectedInvoiceForSingleView.invoiceNo}
+                      </h5>
+                      <span className="small" style={{ color: "#DCE9A2" }}>
+                        Deal #{selectedInvoiceForSingleView.dealNumber} • {selectedInvoiceForSingleView.customerName}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-close btn-close-white"
+                    onClick={() => setSelectedInvoiceForSingleView(null)}
+                  ></button>
+                </div>
+
+                {/* Printable Invoice Body */}
+                <div className="modal-body px-4 py-4 printable-deal-sheet">
+                  {/* Top Branding */}
+                  <div className="d-flex justify-content-between align-items-start border-bottom pb-3 mb-3">
+                    <div>
+                      <h4 className="fw-bold mb-0" style={{ color: "var(--primary, #58632A)" }}>
+                        DEFENCE AUTOLINK
+                      </h4>
+                      <div className="small text-muted">
+                        CSD Canteen Authorized Military Automobile Consultancy
+                      </div>
+                      <div className="small text-muted">
+                        Reg. Address: CSD Depot Road, Ahmedabad, Gujarat, India
+                      </div>
+                      <div className="small text-muted">
+                        GSTIN: 24AAACD1234F1Z5 | Support: +91 98765 43210
+                      </div>
+                    </div>
+                    <div className="text-end">
+                      <span className="badge bg-success text-white fs-6 px-3 py-1 text-uppercase fw-bold">
+                        Tax Invoice / Payment Receipt
+                      </span>
+                      <div className="small text-muted mt-2">
+                        Invoice No: <strong className="text-dark font-monospace">{selectedInvoiceForSingleView.invoiceNo}</strong>
+                      </div>
+                      <div className="small text-muted">
+                        Date: <strong>{selectedInvoiceForSingleView.date}</strong> {selectedInvoiceForSingleView.time}
+                      </div>
+                      <div className="small text-muted">
+                        Deal No: <strong className="font-monospace text-primary">{selectedInvoiceForSingleView.dealNumber}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Customer & Vehicle Info */}
+                  <div className="row g-3 mb-3">
+                    <div className="col-6">
+                      <div className="border rounded p-3 h-100 bg-light">
+                        <span className="small text-uppercase fw-bold text-muted d-block mb-1">
+                          Billed To (Customer):
+                        </span>
+                        <div className="fw-bold text-dark fs-6 mb-1">{selectedInvoiceForSingleView.customerName}</div>
+                        <div className="small text-muted">
+                          Phone: <strong>{selectedInvoiceForSingleView.mobile || "—"}</strong>
+                        </div>
+                        {selectedInvoiceForSingleView.email && (
+                          <div className="small text-muted">
+                            Email: {selectedInvoiceForSingleView.email}
+                          </div>
+                        )}
+                        <div className="small text-muted">
+                          City: {selectedInvoiceForSingleView.city || "Ahmedabad, Gujarat"}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="col-6">
+                      <div className="border rounded p-3 h-100 bg-light">
+                        <span className="small text-uppercase fw-bold text-muted d-block mb-1">
+                          Vehicle Booking Details:
+                        </span>
+                        <div className="fw-bold text-primary fs-6 mb-1">
+                          {selectedInvoiceForSingleView.vehicle}
+                        </div>
+                        <div className="small text-muted">
+                          Color: <strong>{selectedInvoiceForSingleView.color || "Standard"}</strong>
+                        </div>
+                        {selectedInvoiceForSingleView.vin && (
+                          <div className="small text-muted font-monospace">
+                            VIN / Chassis: {selectedInvoiceForSingleView.vin}
+                          </div>
+                        )}
+                        <div className="small text-muted">
+                          Payment Type: <strong>{selectedInvoiceForSingleView.installmentTitle}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Line Items Table */}
+                  <div className="table-responsive mb-3">
+                    <table className="table table-bordered align-middle mb-0">
+                      <thead className="table-light small text-uppercase">
+                        <tr>
+                          <th style={{ width: "40px" }} className="text-center">#</th>
+                          <th>Item Description</th>
+                          <th style={{ width: "90px" }} className="text-center">HSN/SAC</th>
+                          <th style={{ width: "70px" }} className="text-center">Qty</th>
+                          <th style={{ width: "130px" }} className="text-end">Rate (₹)</th>
+                          <th style={{ width: "140px" }} className="text-end">Amount (₹)</th>
+                        </tr>
+                      </thead>
+                      <tbody style={{ fontSize: "0.88rem" }}>
+                        {(selectedInvoiceForSingleView.items || []).map((it, idx) => (
+                          <tr key={idx}>
+                            <td className="text-center text-muted">{idx + 1}</td>
+                            <td className="fw-semibold text-dark">{it.desc}</td>
+                            <td className="text-center font-monospace">{it.hsn || "998313"}</td>
+                            <td className="text-center">{it.qty || 1}</td>
+                            <td className="text-end">₹{formatIndianCurrency(it.rate || it.amount)}</td>
+                            <td className="text-end fw-bold text-dark">₹{formatIndianCurrency(it.amount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr>
+                          <td colSpan="5" className="text-end fw-bold text-dark pt-3">
+                            Invoice Total:
+                          </td>
+                          <td className="text-end fw-bold fs-6 text-success pt-3">
+                            ₹{formatIndianCurrency(selectedInvoiceForSingleView.amountPaid)}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+
+                  {/* Payment Details */}
+                  <div className="row g-3 mb-4">
+                    <div className="col-7">
+                      <div className="border rounded p-3 bg-light">
+                        <span className="small text-uppercase fw-bold text-muted d-block mb-1">
+                          Payment Mode & Verification:
+                        </span>
+                        <div className="small">
+                          <div>
+                            Payment Method: <strong>{selectedInvoiceForSingleView.paymentMode}</strong>
+                          </div>
+                          {selectedInvoiceForSingleView.paymentMode?.toLowerCase() !== "cash" && (
+                            <div>
+                              UTR / Transaction Ref:{" "}
+                              <strong className="font-monospace text-dark">
+                                {selectedInvoiceForSingleView.transactionRef || "Verified"}
+                              </strong>
+                            </div>
+                          )}
+                          {selectedInvoiceForSingleView.receivedBy && (
+                            <div>
+                              Received By: <strong>{selectedInvoiceForSingleView.receivedBy}</strong>
+                            </div>
+                          )}
+                          {selectedInvoiceForSingleView.remarks && (
+                            <div className="mt-1 text-muted">
+                              Remarks: {selectedInvoiceForSingleView.remarks}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="col-5">
+                      <div className="border rounded p-3 bg-light text-end">
+                        <div className="d-flex justify-content-between small text-muted mb-1">
+                          <span>Total Agreed Deal Value:</span>
+                          <strong>
+                            ₹{formatIndianCurrency(selectedInvoiceForSingleView.totalDealAmount)}
+                          </strong>
+                        </div>
+                        <div className="d-flex justify-content-between small text-muted mb-1">
+                          <span>Paid in this Invoice:</span>
+                          <strong className="text-success">
+                            ₹{formatIndianCurrency(selectedInvoiceForSingleView.amountPaid)}
+                          </strong>
+                        </div>
+                        <hr className="my-2" />
+                        <div className="d-flex justify-content-between fw-bold">
+                          <span>Invoice Status:</span>
+                          <span className="text-success">RECEIVED / PAID</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer Controls */}
+                <div className="modal-footer px-4 py-3 bg-light no-print d-flex justify-content-between">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={() => setSelectedInvoiceForSingleView(null)}
+                  >
+                    Close Preview
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn btn-primary d-flex align-items-center gap-1 fw-bold"
+                    style={{
+                      backgroundColor: "var(--primary, #58632A)",
+                      borderColor: "var(--primary, #58632A)",
+                    }}
+                    onClick={() => {
+                      if (typeof window !== "undefined") window.print();
+                    }}
+                  >
+                    <i className="bi bi-printer-fill me-1"></i>
+                    <span>Print Invoice</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>

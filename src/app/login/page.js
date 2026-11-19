@@ -140,7 +140,7 @@ export default function LoginPage() {
           password: password,
         },
         {
-          timeout: 10000,
+          timeout: 30000,
           headers: {
             "Content-Type": "application/json",
             Accept: "application/json",

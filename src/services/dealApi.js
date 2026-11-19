@@ -489,6 +489,17 @@ export const dealApi = {
     return response.data;
   },
 
+  /**
+   * Refund money & cancel an existing deal
+   * @param {number|string} dealId
+   * @param {Object} payload
+   */
+  refundCancelDeal: async (dealId, payload) => {
+    const response = await api.post(`/deals/${dealId}/refund-cancel`, payload);
+    window.dispatchEvent(new Event("csd_deals_updated"));
+    return response.data;
+  },
+
   getPayments: async (params = {}) => {
     const response = await api.get("/payments", { params });
     return response.data;
