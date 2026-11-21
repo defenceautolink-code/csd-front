@@ -1471,6 +1471,15 @@ export default function LeadsPage() {
               <span>Export CSV</span>
             </button>}
 
+            <Link
+              href="/admin/leads/dates"
+              className="btn btn-outline-custom d-flex align-items-center gap-1"
+              title="Quickly edit Birth and Anniversary dates directly"
+            >
+              <i className="bi bi-calendar-heart text-danger"></i>
+              <span>Manage Dates</span>
+            </Link>
+
             {(can("lead.import") || (!isSalesManager && can("lead.export")) || can("lead.create")) && (
               <button
                 className="btn btn-outline-custom d-flex align-items-center gap-1"

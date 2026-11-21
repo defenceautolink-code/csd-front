@@ -79,6 +79,7 @@ export function getSidebarPages(currentUser) {
       // Main Menu
       { title: "Dashboard", path: "/admin/dashboard", icon: "bi bi-grid-1x2-fill", section: "Main Menu", keywords: ["home", "stats", "overview", "analytics"] },
       { title: "Leads Pipeline", path: "/admin/leads", icon: "bi bi-funnel-fill", section: "Main Menu", keywords: ["leads", "pipeline", "inquiries", "customers", "prospects"] },
+      { title: "Lead Dates Manager", path: "/admin/leads/dates", icon: "bi bi-calendar2-heart-fill", section: "Main Menu", keywords: ["birthday", "anniversary", "dates", "leads", "dob", "lead dates"] },
       { title: "Follow-Ups", path: "/admin/follow-up", icon: "bi bi-telephone-outbound-fill", section: "Main Menu", keywords: ["follow up", "calls", "call tracker", "notes", "interactions", "schedule"] },
       { title: "Send Quotation", path: "/admin/quotation", icon: "bi bi-file-earmark-spreadsheet-fill", section: "Main Menu", keywords: ["quotation", "quote", "price estimate", "proposal"] },
       { title: "Deals & Bookings", path: "/admin/deals", icon: "bi bi-trophy-fill", section: "Main Menu", keywords: ["deals", "bookings", "won", "orders", "deliveries", "sales"] },
@@ -95,7 +96,7 @@ export function getSidebarPages(currentUser) {
       { title: "Variants", path: "/admin/variant", icon: "bi bi-tag-fill", section: "Master Data", keywords: ["variants", "trims", "specifications", "pricing"] },
       { title: "Update Price", path: "/admin/update-price", icon: "bi bi-currency-rupee", section: "Master Data", keywords: ["update price", "price list", "bulk price", "rates"] },
       { title: "Insurance Companies", path: "/admin/insurance-companies", icon: "bi bi-building-fill-check", section: "Master Data", keywords: ["insurance companies", "providers", "insurers", "companies"] },
-      { title: "Expense Master", path: "/admin/expense-master", icon: "bi bi-wallet2", section: "Master Data", keywords: ["expense master", "expense categories", "heads"] },
+      { title: "Expense", path: "/admin/expense-master", icon: "bi bi-wallet2", section: "Master Data", keywords: ["expense", "expense master", "expense categories", "heads"] },
       { title: "Lead Sources", path: "/admin/lead-source", icon: "bi bi-diagram-3-fill", section: "Master Data", keywords: ["lead sources", "campaigns", "channels", "source"] },
       // Management
       { title: "Activity Logs", path: "/admin/logs", icon: "bi bi-clock-history", section: "Management", keywords: ["activity logs", "audit", "system logs", "history"] },

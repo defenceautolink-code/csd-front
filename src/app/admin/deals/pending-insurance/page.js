@@ -156,7 +156,7 @@ export default function PendingInsuranceDealsPage() {
           const rem = new Date(val);
           rem.setDate(rem.getDate() - Number(updated.reminder_days_before || 15));
           updated.reminder_date = rem.toISOString().split("T")[0];
-        } catch {}
+        } catch { }
       }
       return updated;
     });
@@ -417,7 +417,17 @@ export default function PendingInsuranceDealsPage() {
                         </span>
                       </td>
                       <td>
-                        <div className="fw-bold text-dark">{deal.customer_name || "—"}</div>
+                        {deal.lead_id || deal.customer_id || deal.lead?.id ? (
+                          <Link
+                            href={`/admin/leads/${deal.lead_id || deal.customer_id || deal.lead?.id}`}
+                            className="fw-bold text-primary text-decoration-none hover-underline d-inline-block"
+                            title="Click to view Lead Details"
+                          >
+                            {deal.customer_name || "—"}
+                          </Link>
+                        ) : (
+                          <div className="fw-bold text-dark">{deal.customer_name || "—"}</div>
+                        )}
                         <div className="d-flex align-items-center gap-2 small text-muted mt-1">
                           {deal.customer_mobile && (
                             <span>
@@ -453,10 +463,10 @@ export default function PendingInsuranceDealsPage() {
                       <td className="text-muted small">
                         {deal.booking_date
                           ? new Date(deal.booking_date).toLocaleDateString("en-GB", {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric",
-                            })
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                          })
                           : "—"}
                       </td>
                       <td className="fw-bold text-dark">

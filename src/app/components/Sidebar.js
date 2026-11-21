@@ -76,9 +76,9 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
             Authorization: `Bearer ${token}`,
             Accept: "application/json",
           },
-        }).catch(() => {});
+        }).catch(() => { });
       }
-    } catch (_) {}
+    } catch (_) { }
     clearAuthSession();
     showToast("Signed out successfully", "info");
     router.push("/login");
@@ -265,6 +265,16 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                   <span>Team Leads Pipeline</span>
                 </Link>
               </li>}
+              <li className="nav-item">
+                <Link
+                  href="/admin/leads/dates"
+                  className={`nav-link ${isLinkActive("/admin/leads/dates") || isLinkActive("/admin/lead-dates") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-calendar2-heart-fill"></i>
+                  <span>Lead Dates Manager</span>
+                </Link>
+              </li>
               <li className="nav-item">
                 <Link
                   href="/sales-manager/follow-up"
@@ -535,11 +545,21 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
               <li className="nav-item">
                 <Link
                   href="/admin/leads"
-                  className={`nav-link ${isLinkActive("/admin/leads") ? "active" : ""}`}
+                  className={`nav-link ${isLinkActive("/admin/leads") && !isLinkActive("/admin/leads/dates") ? "active" : ""}`}
                   onClick={onCloseMobile}
                 >
                   <i className="bi bi-funnel-fill"></i>
                   <span>Leads Pipeline</span>
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link
+                  href="/admin/leads/dates"
+                  className={`nav-link ${isLinkActive("/admin/leads/dates") || isLinkActive("/admin/lead-dates") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-calendar2-heart-fill"></i>
+                  <span>Lead Dates Manager</span>
                 </Link>
               </li>
               <li className="nav-item">
@@ -562,36 +582,36 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                   <span>Send Quotation</span>
                 </Link>
               </li>
-                              <li className="nav-item">
-                  <Link
-                    href="/admin/deals"
-                    className={`nav-link ${isLinkActive("/admin/deals") && !isLinkActive("/admin/deals/pending-insurance") ? "active" : ""}`}
-                    onClick={onCloseMobile}
-                  >
-                    <i className="bi bi-trophy-fill"></i>
-                    <span>Deals & Bookings</span>
-                  </Link>
-                </li>
-                <li className="nav-item">
-                  <Link
-                    href="/admin/invoice"
-                    className={`nav-link ${isLinkActive("/admin/invoice") ? "active" : ""}`}
-                    onClick={onCloseMobile}
-                  >
-                    <i className="bi bi-receipt-cutoff"></i>
-                    <span>Generate Invoice</span>
-                  </Link>
-                </li>
-                <li className="nav-item">
-                  <Link
-                    href="/admin/deals/pending-insurance"
-                    className={`nav-link ${isLinkActive("/admin/deals/pending-insurance") ? "active" : ""}`}
-                    onClick={onCloseMobile}
-                  >
-                    <i className="bi bi-shield-plus"></i>
-                    <span>Pending Insurance</span>
-                  </Link>
-                </li>
+              <li className="nav-item">
+                <Link
+                  href="/admin/deals"
+                  className={`nav-link ${isLinkActive("/admin/deals") && !isLinkActive("/admin/deals/pending-insurance") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-trophy-fill"></i>
+                  <span>Deals & Bookings</span>
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link
+                  href="/admin/invoice"
+                  className={`nav-link ${isLinkActive("/admin/invoice") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-receipt-cutoff"></i>
+                  <span>Generate Invoice</span>
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link
+                  href="/admin/deals/pending-insurance"
+                  className={`nav-link ${isLinkActive("/admin/deals/pending-insurance") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-shield-plus"></i>
+                  <span>Pending Insurance</span>
+                </Link>
+              </li>
               <li className="nav-item">
                 <Link
                   href="/admin/insurance"
@@ -703,7 +723,7 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                   onClick={onCloseMobile}
                 >
                   <i className="bi bi-wallet2"></i>
-                  <span>Expense Master</span>
+                  <span>Expense</span>
                 </Link>
               </li>
               <li className="nav-item">

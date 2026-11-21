@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import Link from "next/link";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
 import insuranceApi, {
@@ -824,7 +825,17 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
 
                         {/* Customer Info */}
                         <td>
-                          <div className="fw-semibold text-dark">{item.customer_name || "N/A"}</div>
+                          {item.lead_id || item.customer_id || item.deal?.lead_id ? (
+                            <Link
+                              href={`/admin/leads/${item.lead_id || item.customer_id || item.deal?.lead_id}`}
+                              className="fw-semibold text-primary text-decoration-none hover-underline d-inline-block"
+                              title="Click to view Lead Details"
+                            >
+                              {item.customer_name || "N/A"}
+                            </Link>
+                          ) : (
+                            <div className="fw-semibold text-dark">{item.customer_name || "N/A"}</div>
+                          )}
                           <div className="text-muted small d-flex align-items-center gap-1">
                             <i className="bi bi-telephone"></i>
                             <a
@@ -1080,7 +1091,7 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
                           onClick={(e) => {
                             try {
                               e.target.showPicker?.();
-                            } catch (err) {}
+                            } catch (err) { }
                           }}
                           value={renewForm.policy_start_date}
                           onChange={(e) => {
@@ -1120,7 +1131,7 @@ export default function InsuranceManager({ userRole = "Super Admin" }) {
                           onClick={(e) => {
                             try {
                               e.target.showPicker?.();
-                            } catch (err) {}
+                            } catch (err) { }
                           }}
                           value={renewForm.policy_expiry_date}
                           onChange={(e) => {
