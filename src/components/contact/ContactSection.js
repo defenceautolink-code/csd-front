@@ -2,6 +2,9 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import axios from "axios";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 
 export default function ContactSection() {
   const [formData, setFormData] = useState({
@@ -56,22 +59,33 @@ export default function ContactSection() {
 
     setSubmitting(true);
     try {
-      // Simulate form submission or API dispatch
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      setSubmitSuccess(true);
-      setFormData({
-        name: "",
-        email: "",
-        phone: "",
-        subject: "",
-        message: "",
+      const res = await axios.post(`${API_BASE_URL}/visitor/contact`, {
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim(),
+        subject: formData.subject.trim() || undefined,
+        message: formData.message.trim(),
       });
-      setIsCaptchaChecked(false);
-      setTimeout(() => {
-        setSubmitSuccess(false);
-      }, 5000);
+
+      if (res.data && res.data.status) {
+        setSubmitSuccess(true);
+        setFormData({
+          name: "",
+          email: "",
+          phone: "",
+          subject: "",
+          message: "",
+        });
+        setIsCaptchaChecked(false);
+        setTimeout(() => {
+          setSubmitSuccess(false);
+        }, 6000);
+      } else {
+        throw new Error(res.data?.message || "Failed to submit inquiry.");
+      }
     } catch (err) {
-      setErrorMessage("Failed to send message. Please try again.");
+      console.error("Contact submit error:", err);
+      setErrorMessage(err.response?.data?.message || "Failed to send message. Please try again.");
     } finally {
       setSubmitting(false);
     }

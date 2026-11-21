@@ -738,6 +738,40 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
               </li>
             </ul>
 
+            <div className="nav-section-title">Website & CMS</div>
+            <ul className="sidebar-nav">
+              <li className="nav-item">
+                <Link
+                  href="/admin/blogs"
+                  className={`nav-link ${isLinkActive("/admin/blogs") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-newspaper"></i>
+                  <span>Blogs</span>
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link
+                  href="/admin/crm"
+                  className={`nav-link ${isLinkActive("/admin/crm") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-file-earmark-richtext"></i>
+                  <span>CRM (Useful Links)</span>
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link
+                  href="/admin/contacts"
+                  className={`nav-link ${isLinkActive("/admin/contacts") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-envelope-paper-fill"></i>
+                  <span>Contact Inquiries</span>
+                </Link>
+              </li>
+            </ul>
+
             <div className="nav-section-title">Management</div>
             <ul className="sidebar-nav">
               <li className="nav-item">

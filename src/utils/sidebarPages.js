@@ -98,6 +98,10 @@ export function getSidebarPages(currentUser) {
       { title: "Insurance Companies", path: "/admin/insurance-companies", icon: "bi bi-building-fill-check", section: "Master Data", keywords: ["insurance companies", "providers", "insurers", "companies"] },
       { title: "Expense", path: "/admin/expense-master", icon: "bi bi-wallet2", section: "Master Data", keywords: ["expense", "expense master", "expense categories", "heads"] },
       { title: "Lead Sources", path: "/admin/lead-source", icon: "bi bi-diagram-3-fill", section: "Master Data", keywords: ["lead sources", "campaigns", "channels", "source"] },
+      // Website & CMS
+      { title: "Blogs", path: "/admin/blogs", icon: "bi bi-newspaper", section: "Website & CMS", keywords: ["blogs", "articles", "news", "posts", "cms"] },
+      { title: "CRM (Useful Links)", path: "/admin/crm", icon: "bi bi-file-earmark-richtext", section: "Website & CMS", keywords: ["crm", "pages", "useful links", "cms", "content", "terms", "privacy"] },
+      { title: "Contact Inquiries", path: "/admin/contacts", icon: "bi bi-envelope-paper-fill", section: "Website & CMS", keywords: ["contact", "inquiries", "messages", "leads", "contact us"] },
       // Management
       { title: "Activity Logs", path: "/admin/logs", icon: "bi bi-clock-history", section: "Management", keywords: ["activity logs", "audit", "system logs", "history"] },
       { title: "Settings", path: "/admin/settings", icon: "bi bi-gear-fill", section: "Management", keywords: ["settings", "configuration", "preferences"] },
