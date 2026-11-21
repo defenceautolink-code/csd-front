@@ -2,8 +2,10 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import axios from "axios";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
+import api from "@/lib/axios";
 import dealApi from "@/services/dealApi";
 import { numberToWords, formatIndianCurrency } from "@/utils/numberToWords";
 import Pagination from "@/components/common/Pagination";
@@ -93,6 +95,22 @@ export default function DealsPage() {
   const [isRestoring, setIsRestoring] = useState(false);
   const [forceDeleteTarget, setForceDeleteTarget] = useState(null);
   const [isForceDeleting, setIsForceDeleting] = useState(false);
+
+  // Money Return / Deal Cancellation Modal State
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [selectedDealForRefund, setSelectedDealForRefund] = useState(null);
+  const [refundForm, setRefundForm] = useState({
+    total_received: 0,
+    refund_amount: "0",
+    payment_mode: "Bank Transfer (NEFT/RTGS)",
+    transaction_reference: "",
+    bank_name: "HDFC Bank",
+    refund_date: new Date().toISOString().split("T")[0],
+    reason: "",
+    notes: "",
+  });
+  const [isSubmittingRefund, setIsSubmittingRefund] = useState(false);
+  const [refundSuccessVoucher, setRefundSuccessVoucher] = useState(null);
 
   const getTodayDate = () => {
     const now = new Date();
@@ -516,6 +534,82 @@ export default function DealsPage() {
       showToast(err.response?.data?.message || "Failed to verify payment.", "error");
     } finally {
       setIsVerifyingPaymentId(null);
+    }
+  };
+
+  // Money Return / Cancel Deal Handlers
+  const handleOpenRefundModal = (deal) => {
+    const totalPaid = Number(deal.total_paid) || 0;
+    setSelectedDealForRefund(deal);
+    setRefundForm({
+      total_received: totalPaid,
+      refund_amount: String(totalPaid),
+      payment_mode: "Bank Transfer (NEFT/RTGS)",
+      transaction_reference: "",
+      bank_name: "HDFC Bank",
+      refund_date: new Date().toISOString().split("T")[0],
+      reason: "",
+      notes: "",
+    });
+    setShowRefundModal(true);
+  };
+
+  const handleRefundAmountChange = (val) => {
+    setRefundForm((prev) => ({
+      ...prev,
+      refund_amount: val,
+    }));
+  };
+
+  const handleConfirmRefundCancel = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!selectedDealForRefund) return;
+
+    const refundNum = parseFloat(refundForm.refund_amount) || 0;
+    const totalPaid = Number(refundForm.total_received) || 0;
+
+    if (refundNum < 0) {
+      showToast("Refund amount cannot be negative.", "error");
+      return;
+    }
+    if (refundNum > totalPaid) {
+      showToast(`Refund amount cannot exceed total paid amount (₹${formatIndianCurrency(totalPaid)}).`, "error");
+      return;
+    }
+
+    const isCash = refundForm.payment_mode === "CASH" || refundForm.payment_mode === "Cash";
+
+    setIsSubmittingRefund(true);
+    try {
+      const payload = {
+        refund_amount: refundNum,
+        cancellation_fee: 0,
+        payment_mode: refundForm.payment_mode,
+        transaction_reference: isCash ? "" : refundForm.transaction_reference,
+        bank_name: isCash ? "" : refundForm.bank_name,
+        reason: refundForm.reason,
+        notes: refundForm.notes,
+      };
+
+      const res = await dealApi.refundCancelDeal(selectedDealForRefund.id, payload);
+      if (res && res.status) {
+        showToast(res.message || "Deal cancelled and refund processed successfully.", "success");
+        setShowRefundModal(false);
+        if (res.data?.voucher) {
+          setRefundSuccessVoucher(res.data.voucher);
+        }
+        // Refresh deals list & KPI statistics
+        fetchDeals(pagination.current_page, searchTerm, stageFilter, startDate, endDate, pagination.per_page);
+        fetchMetrics();
+        window.dispatchEvent(new Event("csd_deals_updated"));
+      } else {
+        showToast(res?.message || "Failed to process refund.", "error");
+      }
+    } catch (err) {
+      console.error("Error processing deal refund:", err);
+      showToast(err.response?.data?.message || "Failed to process refund.", "error");
+    } finally {
+      setIsSubmittingRefund(false);
     }
   };
 
@@ -967,7 +1061,7 @@ export default function DealsPage() {
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 {/* Add Bill */}
-                                {deal.balance_amount > 0 && (
+                                {deal.balance_amount > 0 && deal.deal_status !== "cancelled" && (
                                   <button
                                     type="button"
                                     className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 rounded-2 fw-semibold text-success"
@@ -1018,6 +1112,27 @@ export default function DealsPage() {
                                     <i className="bi bi-file-earmark-text text-info"></i>
                                     <span>View Quotation #{deal.quotation_id}</span>
                                   </Link>
+                                )}
+
+                                {recordView !== "trash" && deal.deal_status !== "cancelled" && (
+                                  <button
+                                    type="button"
+                                    className="dropdown-item d-flex align-items-center gap-2 py-2 px-3 small text-danger fw-semibold"
+                                    style={{ backgroundColor: "rgba(220, 38, 38, 0.05)" }}
+                                    onClick={() => {
+                                      setActiveActionMenuId(null);
+                                      handleOpenRefundModal(deal);
+                                    }}
+                                  >
+                                    <i className="bi bi-arrow-counterclockwise text-danger"></i>
+                                    <span>Money Return & Cancel</span>
+                                  </button>
+                                )}
+
+                                {recordView !== "trash" && deal.deal_status === "cancelled" && (
+                                  <div className="px-3 py-1.5 text-danger small fst-italic">
+                                    <i className="bi bi-x-circle me-1"></i> Deal Cancelled
+                                  </div>
                                 )}
 
                                 <div className="dropdown-divider my-1"></div>
@@ -2054,13 +2169,14 @@ export default function DealsPage() {
 
                 {/* Financial Ledger Breakdown */}
                 {(() => {
+                  const isCancelled = viewDeal.deal_status === "cancelled";
                   const netVal = Number(viewDeal.net_amount || viewDeal.total_amount || 0);
                   const paymentsList = Array.isArray(viewDeal.payments) ? viewDeal.payments : [];
                   const recVal = Math.max(
                     Number(viewDeal.paid_amount || viewDeal.total_paid || 0),
                     paymentsList.filter((p) => p.status !== "rejected").reduce((s, p) => s + (Number(p.amount) || 0), 0)
                   );
-                  const dueVal = Math.max(0, netVal - recVal);
+                  const dueVal = isCancelled ? 0 : Math.max(0, netVal - recVal);
 
                   return (
                     <div className="row g-2 mb-3 text-center">
@@ -2112,8 +2228,6 @@ export default function DealsPage() {
                           <th>Bank</th>
                           <th>Received By</th>
                           <th className="text-end">Amount</th>
-                          <th className="text-center">Status</th>
-                          <th className="text-center">Action</th>
                         </tr>
                       </thead>
                       <tbody className="small">
@@ -2140,16 +2254,6 @@ export default function DealsPage() {
                             </td>
                             <td className="text-end fw-bold text-success">
                               ₹{formatIndianCurrency(p.amount)}
-                            </td>
-                            <td className="text-center">
-                              <span className={`badge px-2 py-1 ${p.status === "rejected" ? "bg-danger text-white" : "bg-success text-white"}`}>
-                                {p.status === "rejected" ? "Rejected" : "Cleared"}
-                              </span>
-                            </td>
-                            <td className="text-center">
-                              <span className="badge bg-success-subtle text-success border border-success border-opacity-25 px-2 py-1">
-                                <i className="bi bi-check-circle-fill me-1"></i>Cleared
-                              </span>
                             </td>
                           </tr>
                         ))}
@@ -2497,6 +2601,468 @@ export default function DealsPage() {
                       <span>Print Invoice</span>
                     </button>
                   </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* =========================================================================
+            MODAL 6: MONEY RETURN & DEAL CANCELLATION (VOUCHER INPUT MODAL)
+            ========================================================================= */}
+        {showRefundModal && selectedDealForRefund && (
+          <div
+            className="modal fade show d-block"
+            tabIndex="-1"
+            style={{ backgroundColor: "rgba(0,0,0,0.65)", zIndex: 1060 }}
+            onClick={() => setShowRefundModal(false)}
+          >
+            <div
+              className="modal-dialog modal-dialog-centered modal-lg"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-content border-0 shadow-lg" style={{ borderRadius: "16px", overflow: "hidden" }}>
+                {/* Header */}
+                <div
+                  className="modal-header px-4 py-3 text-white d-flex align-items-center justify-content-between"
+                  style={{ backgroundColor: "#2A3816" }}
+                >
+                  <div className="d-flex align-items-center gap-3">
+                    <div
+                      className="rounded-circle d-flex align-items-center justify-content-center text-white"
+                      style={{
+                        width: "42px",
+                        height: "42px",
+                        backgroundColor: "rgba(220, 38, 38, 0.3)",
+                        border: "1px solid rgba(255,255,255,0.2)",
+                      }}
+                    >
+                      <i className="bi bi-arrow-counterclockwise fs-5 text-warning"></i>
+                    </div>
+                    <div>
+                      <h5 className="modal-title fw-bold text-white mb-0">
+                        Money Return & Deal Cancellation
+                      </h5>
+                      <span className="small" style={{ color: "#DCE9A2" }}>
+                        Deal #{selectedDealForRefund.deal_number} • Customer: {selectedDealForRefund.customer_name}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-close btn-close-white"
+                    onClick={() => setShowRefundModal(false)}
+                  ></button>
+                </div>
+
+                {/* Form Body */}
+                <form onSubmit={handleConfirmRefundCancel}>
+                  <div className="modal-body px-4 py-4">
+                    {/* Deal & Financial Summary Banner */}
+                    <div className="row g-3 mb-4">
+                      <div className="col-12 col-md-4">
+                        <div className="card bg-light border-0 p-3 rounded-3">
+                          <span className="small text-muted text-uppercase fw-semibold">Net Deal Amount</span>
+                          <h4 className="fw-bold text-dark my-1">
+                            ₹{formatIndianCurrency(selectedDealForRefund.net_amount || selectedDealForRefund.total_amount)}
+                          </h4>
+                          <span className="small text-muted">{selectedDealForRefund.model_variant}</span>
+                        </div>
+                      </div>
+                      <div className="col-12 col-md-4">
+                        <div className="card bg-success-subtle border-0 p-3 rounded-3">
+                          <span className="small text-success text-uppercase fw-semibold">Total Paid So Far</span>
+                          <h4 className="fw-bold text-success my-1">
+                            ₹{formatIndianCurrency(refundForm.total_received)}
+                          </h4>
+                          <span className="small text-success">Advance / Cleared Amount</span>
+                        </div>
+                      </div>
+                      <div className="col-12 col-md-4">
+                        <div className="card bg-danger-subtle border-0 p-3 rounded-3">
+                          <span className="small text-danger text-uppercase fw-semibold">Delivery Stage</span>
+                          <h4 className="fw-bold text-danger my-1">
+                            Cancelling Deal
+                          </h4>
+                          <span className="small text-danger">Balance Due will be set to ₹0</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Refund Inputs */}
+                    <div className="border rounded-3 p-3 bg-white mb-3 shadow-xs">
+                      <h6 className="fw-bold text-dark mb-3 d-flex align-items-center gap-2">
+                        <i className="bi bi-cash-stack text-success"></i>
+                        Refund Payment Details
+                      </h6>
+
+                      <div className="row g-3">
+                        <div className="col-12 col-md-6">
+                          <label className="form-label small fw-bold text-success">
+                            Refund Amount to Return (₹) *
+                          </label>
+                          <div className="input-group">
+                            <span className="input-group-text bg-success-subtle text-success fw-bold">₹</span>
+                            <input
+                              type="number"
+                              min="0"
+                              max={refundForm.total_received}
+                              className="form-control fw-bold text-success fs-5"
+                              value={refundForm.refund_amount}
+                              onChange={(e) => handleRefundAmountChange(e.target.value)}
+                              required
+                            />
+                          </div>
+                          <span className="text-success small" style={{ fontSize: "11px" }}>
+                            Actual money returned to customer (Max: ₹{formatIndianCurrency(refundForm.total_received)}).
+                          </span>
+                        </div>
+
+                        <div className="col-12 col-md-6">
+                          <label className="form-label small fw-bold text-dark">
+                            Refund Payment Mode *
+                          </label>
+                          <select
+                            className="form-select"
+                            value={refundForm.payment_mode}
+                            onChange={(e) => setRefundForm({ ...refundForm, payment_mode: e.target.value })}
+                            required
+                          >
+                            <option value="CASH">Cash</option>
+                            <option value="Bank Transfer (NEFT/RTGS)">Bank Transfer (NEFT/RTGS)</option>
+                            <option value="UPI / GPay">UPI / Google Pay / PhonePe</option>
+                            <option value="Cheque">Cheque</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </div>
+
+                        {!(refundForm.payment_mode === "CASH" || refundForm.payment_mode === "Cash") && (
+                          <>
+                            <div className="col-12 col-md-6">
+                              <label className="form-label small fw-bold text-dark">
+                                Transaction Ref / UTR / Cheque No
+                              </label>
+                              <input
+                                type="text"
+                                className="form-control font-monospace"
+                                placeholder="e.g. UTR123456789 / CHQ-9901"
+                                value={refundForm.transaction_reference}
+                                onChange={(e) => setRefundForm({ ...refundForm, transaction_reference: e.target.value })}
+                              />
+                            </div>
+
+                            <div className="col-12 col-md-6">
+                              <label className="form-label small fw-bold text-dark">
+                                Bank / Disbursed Account
+                              </label>
+                              <input
+                                type="text"
+                                className="form-control"
+                                placeholder="e.g. HDFC Bank Dealership A/c"
+                                value={refundForm.bank_name}
+                                onChange={(e) => setRefundForm({ ...refundForm, bank_name: e.target.value })}
+                              />
+                            </div>
+                          </>
+                        )}
+
+                        <div className="col-12 col-md-6">
+                          <label className="form-label small fw-bold text-dark">
+                            Cancellation Reason *
+                          </label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            placeholder="Enter cancellation reason..."
+                            value={refundForm.reason}
+                            onChange={(e) => setRefundForm({ ...refundForm, reason: e.target.value })}
+                            required
+                          />
+                        </div>
+
+                        <div className="col-12">
+                          <label className="form-label small fw-bold text-dark">
+                            Additional Notes / Remarks
+                          </label>
+                          <textarea
+                            className="form-control"
+                            rows="2"
+                            placeholder="Optional cancellation notes or customer agreement reference..."
+                            value={refundForm.notes}
+                            onChange={(e) => setRefundForm({ ...refundForm, notes: e.target.value })}
+                          ></textarea>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Caution Alert */}
+                    <div className="alert alert-warning d-flex align-items-center gap-2 py-2 px-3 small mb-0 rounded-3">
+                      <i className="bi bi-exclamation-triangle-fill fs-5 text-warning"></i>
+                      <div>
+                        <strong>Notice:</strong> This action will mark this Deal as <strong>Cancelled</strong>, exclude it from <strong>Active Deals</strong> and <strong>Pipeline</strong>, set Pending Receivables to <strong>₹0</strong>, and generate a Credit Note / Refund Voucher.
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="modal-footer px-4 py-3 bg-light d-flex justify-content-between">
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary"
+                      onClick={() => setShowRefundModal(false)}
+                      disabled={isSubmittingRefund}
+                    >
+                      Close
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn btn-danger d-inline-flex align-items-center gap-2 fw-bold px-4"
+                      disabled={isSubmittingRefund}
+                    >
+                      {isSubmittingRefund ? (
+                        <>
+                          <span className="spinner-border spinner-border-sm"></span>
+                          <span>Processing Refund...</span>
+                        </>
+                      ) : (
+                        <>
+                          <i className="bi bi-check-circle-fill"></i>
+                          <span>Confirm Refund & Cancel Deal</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* =========================================================================
+            MODAL 7: OFFICIAL PRINTABLE REFUND VOUCHER & CANCELLATION RECEIPT
+            ========================================================================= */}
+        {refundSuccessVoucher && (
+          <div
+            className="modal fade show d-block"
+            tabIndex="-1"
+            style={{ backgroundColor: "rgba(0,0,0,0.75)", zIndex: 1070 }}
+            onClick={() => setRefundSuccessVoucher(null)}
+          >
+            <div
+              className="modal-dialog modal-dialog-centered modal-lg print-modal-dialog"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div
+                className="modal-content border-0 shadow-lg print-card-content"
+                style={{ borderRadius: "16px", overflow: "hidden", backgroundColor: "#FFFFFF" }}
+              >
+                {/* Header */}
+                <div
+                  className="modal-header px-4 py-3 text-white d-flex align-items-center justify-content-between no-print"
+                  style={{ backgroundColor: "#2A3816" }}
+                >
+                  <div className="d-flex align-items-center gap-2">
+                    <i className="bi bi-receipt-cutoff fs-5 text-warning"></i>
+                    <div>
+                      <h5 className="modal-title fw-bold text-white mb-0">
+                        Refund Voucher & Cancellation Receipt
+                      </h5>
+                      <span className="small text-white-50">
+                        Voucher No: {refundSuccessVoucher.voucher_number} • Deal #{refundSuccessVoucher.deal_number}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-close btn-close-white"
+                    onClick={() => setRefundSuccessVoucher(null)}
+                  ></button>
+                </div>
+
+                {/* Printable Invoice Voucher Body */}
+                <div className="modal-body px-4 py-4 printable-deal-sheet">
+                  {/* Top Branding */}
+                  <div className="d-flex justify-content-between align-items-start border-bottom pb-3 mb-3">
+                    <div>
+                      <h4 className="fw-bold mb-0" style={{ color: "var(--primary, #58632A)" }}>
+                        DEFENCE AUTOLINK
+                      </h4>
+                      <div className="small text-muted">
+                        CSD Canteen Authorized Military Automobile Consultancy
+                      </div>
+                      <div className="small text-muted">
+                        Reg. Address: CSD Depot Road, Ahmedabad, Gujarat, India
+                      </div>
+                      <div className="small text-muted">
+                        GSTIN: 24AAACD1234F1Z5 | Support: +91 98765 43210
+                      </div>
+                    </div>
+                    <div className="text-end">
+                      <span className="badge bg-danger text-white fs-6 px-3 py-1 text-uppercase fw-bold">
+                        Deal Cancelled • Refund Voucher
+                      </span>
+                      <div className="small text-muted mt-2">
+                        Voucher No: <strong className="text-dark font-monospace">{refundSuccessVoucher.voucher_number}</strong>
+                      </div>
+                      <div className="small text-muted">
+                        Receipt No: <strong className="text-dark font-monospace">{refundSuccessVoucher.receipt_number}</strong>
+                      </div>
+                      <div className="small text-muted">
+                        Date: <strong>{refundSuccessVoucher.date}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Customer & Vehicle Info */}
+                  <div className="row g-3 mb-3">
+                    <div className="col-6">
+                      <div className="border rounded p-3 h-100 bg-light">
+                        <span className="small text-uppercase fw-bold text-muted d-block mb-1">
+                          Customer Information:
+                        </span>
+                        <div className="fw-bold text-dark fs-6 mb-1">{refundSuccessVoucher.customer_name}</div>
+                        <div className="small text-muted">
+                          Phone: <strong>{refundSuccessVoucher.customer_phone || "—"}</strong>
+                        </div>
+                        <div className="small text-muted">
+                          Deal Number: <strong className="font-monospace text-primary">{refundSuccessVoucher.deal_number}</strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="col-6">
+                      <div className="border rounded p-3 h-100 bg-light">
+                        <span className="small text-uppercase fw-bold text-muted d-block mb-1">
+                          Booked Vehicle Particulars:
+                        </span>
+                        <div className="fw-bold text-primary fs-6 mb-1">{refundSuccessVoucher.vehicle}</div>
+                        <div className="small text-muted">
+                          Total Deal Value: <strong>₹{formatIndianCurrency(refundSuccessVoucher.total_deal_amount)}</strong>
+                        </div>
+                        <div className="small text-danger">
+                          Status: <strong>Cancelled / Refunded</strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Refund Breakdown Table */}
+                  <div className="table-responsive mb-3">
+                    <table className="table table-bordered align-middle mb-0">
+                      <thead className="table-light small text-uppercase">
+                        <tr>
+                          <th>Particulars</th>
+                          <th className="text-center" style={{ width: "160px" }}>Payment Mode</th>
+                          <th className="text-center" style={{ width: "180px" }}>Reference / UTR</th>
+                          <th className="text-end" style={{ width: "160px" }}>Amount (₹)</th>
+                        </tr>
+                      </thead>
+                      <tbody style={{ fontSize: "0.9rem" }}>
+                        <tr>
+                          <td>
+                            <strong>Advance / Payment Received for Booking</strong>
+                            <div className="small text-muted">Original customer installment payment credited</div>
+                          </td>
+                          <td className="text-center">—</td>
+                          <td className="text-center font-monospace small">Prior Credit</td>
+                          <td className="text-end fw-bold text-dark">
+                            ₹{formatIndianCurrency(refundSuccessVoucher.total_received)}
+                          </td>
+                        </tr>
+                        <tr className="bg-success-subtle">
+                          <td>
+                            <strong className="text-success fs-6">
+                              <i className="bi bi-check-circle-fill me-1"></i> Net Refund Amount Paid to Customer
+                            </strong>
+                            <div className="small text-muted">Disbursed back to customer's account</div>
+                          </td>
+                          <td className="text-center fw-semibold text-dark">
+                            {refundSuccessVoucher.payment_mode}
+                          </td>
+                          <td className="text-center font-monospace small text-dark">
+                            {refundSuccessVoucher.transaction_reference}
+                          </td>
+                          <td className="text-end fw-bold fs-5 text-success">
+                            ₹{formatIndianCurrency(refundSuccessVoucher.refund_amount)}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Reason & Balance Due Summary */}
+                  <div className="row g-3 mb-4">
+                    <div className="col-7">
+                      <div className="border rounded p-3 bg-light">
+                        <span className="small text-uppercase fw-bold text-muted d-block mb-1">
+                          Cancellation Reason & Remarks:
+                        </span>
+                        <div className="small text-dark fw-semibold mb-1">
+                          {refundSuccessVoucher.reason}
+                        </div>
+                        <div className="small text-muted">
+                          Customer and dealership mutually agree that booking #{refundSuccessVoucher.deal_number} stands cancelled with full settlement of dues.
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-5">
+                      <div className="border rounded p-3 bg-light text-end">
+                        <div className="d-flex justify-content-between small text-muted mb-1">
+                          <span>Updated Deal Status:</span>
+                          <span className="badge bg-danger">CANCELLED</span>
+                        </div>
+                        <div className="d-flex justify-content-between small text-muted mb-1">
+                          <span>Pending Receivables:</span>
+                          <strong className="text-success">₹0.00 (Nil)</strong>
+                        </div>
+                        <hr className="my-2" />
+                        <div className="d-flex justify-content-between fw-bold">
+                          <span>Settlement Status:</span>
+                          <span className="text-success">REFUND COMPLETED</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Signatures */}
+                  <div className="row pt-4 mt-2">
+                    <div className="col-6 text-center">
+                      <div style={{ borderTop: "1px dashed #666", width: "200px", margin: "0 auto", paddingTop: "6px" }}>
+                        <span className="small text-muted fw-bold">Customer Signature</span>
+                      </div>
+                    </div>
+                    <div className="col-6 text-center">
+                      <div style={{ borderTop: "1px dashed #666", width: "200px", margin: "0 auto", paddingTop: "6px" }}>
+                        <span className="small text-muted fw-bold">Authorized Signatory / Seal</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer Controls */}
+                <div className="modal-footer px-4 py-3 bg-light no-print d-flex justify-content-between">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={() => setRefundSuccessVoucher(null)}
+                  >
+                    Close Preview
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn btn-primary d-flex align-items-center gap-1 fw-bold"
+                    style={{
+                      backgroundColor: "var(--primary, #58632A)",
+                      borderColor: "var(--primary, #58632A)",
+                    }}
+                    onClick={() => {
+                      if (typeof window !== "undefined") window.print();
+                    }}
+                  >
+                    <i className="bi bi-printer-fill me-1"></i>
+                    <span>Print Refund Receipt</span>
+                  </button>
                 </div>
               </div>
             </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import Link from "next/link";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
 import insuranceApi, {
@@ -727,7 +728,17 @@ export default function InsuranceRecordsManager({ userRole = "Super Admin" }) {
 
                         {/* Customer Info */}
                         <td>
-                          <div className="fw-semibold text-dark">{r.customer_name || "N/A"}</div>
+                          {r.lead_id || r.customer_id || r.deal?.lead_id ? (
+                            <Link
+                              href={`/admin/leads/${r.lead_id || r.customer_id || r.deal?.lead_id}`}
+                              className="fw-semibold text-primary text-decoration-none hover-underline d-inline-block"
+                              title="Click to view Lead Details"
+                            >
+                              {r.customer_name || "N/A"}
+                            </Link>
+                          ) : (
+                            <div className="fw-semibold text-dark">{r.customer_name || "N/A"}</div>
+                          )}
                           <div className="text-muted small d-flex align-items-center gap-1">
                             <i className="bi bi-telephone"></i>
                             <span>{r.customer_phone || r.customer_number || "-"}</span>

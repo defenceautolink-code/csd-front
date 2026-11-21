@@ -1,9 +1,28 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import axios from "axios";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 
 export default function FooterSection() {
+  const [usefulLinks, setUsefulLinks] = useState([]);
+
+  useEffect(() => {
+    const fetchUsefulLinks = async () => {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/visitor/crm-pages`);
+        if (res.data && res.data.status && Array.isArray(res.data.data)) {
+          setUsefulLinks(res.data.data);
+        }
+      } catch (e) {
+        console.error("Failed to load useful links:", e);
+      }
+    };
+
+    fetchUsefulLinks();
+  }, []);
   return (
     <footer className="csd-site-footer">
       <div className="csd-footer-widgets">
@@ -79,25 +98,18 @@ export default function FooterSection() {
               </div>
             </div>
 
-            {/* Col 2: Useful Link */}
+            {/* Col 2: Useful Link (Dynamic from CRM Pages) */}
             <div className="col-12 col-md-6 col-lg-3">
               <div className="csd-footer-widget csd-footer-links">
                 <h5 className="csd-footer-title">Useful Link</h5>
                 <ul className="csd-footer-nav">
-                  <li>
-                    <Link href="/privacy-policy">Privacy Policy</Link>
-                  </li>
-                  <li>
-                    <Link href="/terms-conditions">Terms & Conditions</Link>
-                  </li>
-                  <li>
-                    <Link href="/buyer-terms-conditions">
-                      Buyer Terms and Conditions
-                    </Link>
-                  </li>
-                  <li>
-                    <Link href="/disclaimer">Disclaimer</Link>
-                  </li>
+                  {usefulLinks && usefulLinks.length > 0 ? (
+                    usefulLinks.map((item) => (
+                      <li key={item.id}>
+                        <Link href={`/page/${item.slug}`}>{item.title}</Link>
+                      </li>
+                    ))
+                  ) : null}
                 </ul>
               </div>
             </div>

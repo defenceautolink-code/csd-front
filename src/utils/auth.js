@@ -425,6 +425,8 @@ export function canAccessAdminPath(pathname, customUser = undefined) {
       const isSharedAdminRoute =
         pathname === "/admin/leads" ||
         pathname.startsWith("/admin/leads/") ||
+        pathname === "/admin/lead-dates" ||
+        pathname.startsWith("/admin/lead-dates/") ||
         pathname === "/admin/follow-up" ||
         pathname.startsWith("/admin/follow-up/") ||
         pathname === "/admin/deals" ||
