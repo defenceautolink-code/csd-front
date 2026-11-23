@@ -10,6 +10,7 @@ import dealApi from "@/services/dealApi";
 import { numberToWords, formatIndianCurrency } from "@/utils/numberToWords";
 import Pagination from "@/components/common/Pagination";
 import { logActivity } from "@/utils/activityLogger";
+import { printElement } from "@/utils/printElement";
 
 // Helper to generate Invoice Number in exact required format: DAL-/YYYY/MM/XXXX
 export const generateInvoiceNumber = () => {
@@ -123,6 +124,20 @@ export default function DealsPage() {
   // View Deal / Ledger Modal State
   const [viewDeal, setViewDeal] = useState(null);
   const [isVerifyingPaymentId, setIsVerifyingPaymentId] = useState(null);
+
+  // Print Voucher / Invoice Handler with dedicated print mode class
+  const handlePrintVoucherOrInvoice = () => {
+    if (typeof window !== "undefined") {
+      document.body.classList.add("print-voucher-active");
+      const cleanUp = () => {
+        document.body.classList.remove("print-voucher-active");
+        window.removeEventListener("afterprint", cleanUp);
+      };
+      window.addEventListener("afterprint", cleanUp);
+      setTimeout(cleanUp, 2000);
+      window.print();
+    }
+  };
 
   // Close 3-dots action menu on outside click
   useEffect(() => {
@@ -694,48 +709,111 @@ export default function DealsPage() {
           ========================================================================= */}
       <style jsx global>{`
         @media print {
-          body * {
+          @page {
+            size: A4 portrait;
+            margin: 8mm;
+          }
+
+          html,
+          body {
+            overflow: visible !important;
+            height: auto !important;
+            min-height: 0 !important;
+            background: #ffffff !important;
+            color: #0f172a !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          /* When printing a voucher, completely hide page body, header, and sidebar */
+          body:has(#printable-single-invoice-voucher) .page-body,
+          body:has(#printable-deal-ledger) .page-body,
+          body:has(#printable-refund-voucher) .page-body,
+          body.print-voucher-active .page-body,
+          .page-header-wrapper,
+          .app-sidebar,
+          .app-header,
+          .modal-backdrop,
+          .modal-header,
+          .modal-footer,
+          .modal-header-custom,
+          .modal-footer-custom,
+          .btn-close,
+          .btn,
+          button,
+          .no-print {
+            display: none !important;
             visibility: hidden !important;
           }
-          #printable-deal-ledger,
-          #printable-deal-ledger * {
+
+          /* Ensure modal backdrop does not hide or darken the deal ledger modal */
+          .modal-backdrop-custom {
+            position: static !important;
+            display: block !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            width: 100% !important;
+            height: auto !important;
+            backdrop-filter: none !important;
+          }
+
+          /* Reset modal wrappers to transparent static blocks so they don't clip */
+          .modal,
+          .modal-dialog,
+          .modal-content,
+          .modal-dialog-scrollable,
+          .modal-dialog-custom {
+            position: static !important;
+            display: block !important;
+            max-width: 100% !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            border: none !important;
+            overflow: visible !important;
+            max-height: none !important;
+            height: auto !important;
+          }
+
+          .print-only-block {
+            display: block !important;
             visibility: visible !important;
           }
-          #printable-deal-ledger {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
+
+          .print-only-flex {
+            display: flex !important;
+            visibility: visible !important;
+          }
+
+          /* Active printable voucher sheet: flows naturally at top of printed page */
+          #printable-deal-ledger,
+          #printable-single-invoice-voucher,
+          #printable-refund-voucher {
+            display: block !important;
+            visibility: visible !important;
+            position: static !important;
             width: 100% !important;
             max-width: 100% !important;
             margin: 0 !important;
-            padding: 24px !important;
+            padding: 16px !important;
             background: #ffffff !important;
             box-shadow: none !important;
             border: 1px solid #cbd5e1 !important;
             border-radius: 4px !important;
             color: #0f172a !important;
+            overflow: visible !important;
           }
-          .modal-backdrop-custom {
-            background: transparent !important;
-            position: static !important;
-            padding: 0 !important;
-          }
-          .modal-dialog-custom {
-            max-width: 100% !important;
-            margin: 0 !important;
-            box-shadow: none !important;
-          }
-          .modal-header-custom,
-          .modal-footer-custom,
-          .btn-close,
-          .no-print {
-            display: none !important;
-          }
-          .print-only-block {
-            display: block !important;
-          }
-          .print-only-flex {
-            display: flex !important;
+
+          #printable-deal-ledger *,
+          #printable-single-invoice-voucher *,
+          #printable-refund-voucher * {
+            visibility: visible !important;
           }
         }
       `}</style>
@@ -1329,6 +1407,7 @@ export default function DealsPage() {
             />
           )}
         </div>
+      </div>
 
         {/* ===================================================================
             MODAL 1: GENERATE TAX INVOICE & RECORD PAYMENT (ADD BILL)
@@ -2292,11 +2371,7 @@ export default function DealsPage() {
                   <button
                     type="button"
                     className="btn btn-primary d-inline-flex align-items-center gap-1"
-                    onClick={() => {
-                      if (typeof window !== "undefined") {
-                        window.print();
-                      }
-                    }}
+                    onClick={() => printElement("printable-deal-ledger", "Deal Order Voucher & Ledger")}
                   >
                     <i className="bi bi-printer"></i>
                     <span>Print Deal Receipt</span>
@@ -2338,9 +2413,7 @@ export default function DealsPage() {
                     <button
                       type="button"
                       className="btn btn-sm btn-outline-light d-flex align-items-center gap-1"
-                      onClick={() => {
-                        if (typeof window !== "undefined") window.print();
-                      }}
+                      onClick={() => printElement("printable-single-invoice-voucher", "Tax Invoice Voucher")}
                     >
                       <i className="bi bi-printer-fill"></i>
                       <span>Print Voucher</span>
@@ -2593,9 +2666,7 @@ export default function DealsPage() {
                         backgroundColor: "var(--primary, #58632A)",
                         borderColor: "var(--primary, #58632A)",
                       }}
-                      onClick={() => {
-                        if (typeof window !== "undefined") window.print();
-                      }}
+                      onClick={() => printElement("printable-single-invoice-voucher", "Tax Invoice Voucher")}
                     >
                       <i className="bi bi-printer-fill me-1"></i>
                       <span>Print Invoice</span>
@@ -2880,7 +2951,7 @@ export default function DealsPage() {
                 </div>
 
                 {/* Printable Invoice Voucher Body */}
-                <div className="modal-body px-4 py-4 printable-deal-sheet">
+                <div className="modal-body px-4 py-4 printable-deal-sheet" id="printable-refund-voucher">
                   {/* Top Branding */}
                   <div className="d-flex justify-content-between align-items-start border-bottom pb-3 mb-3">
                     <div>
@@ -3056,9 +3127,7 @@ export default function DealsPage() {
                       backgroundColor: "var(--primary, #58632A)",
                       borderColor: "var(--primary, #58632A)",
                     }}
-                    onClick={() => {
-                      if (typeof window !== "undefined") window.print();
-                    }}
+                    onClick={() => printElement("printable-refund-voucher", "Refund Voucher & Cancellation Receipt")}
                   >
                     <i className="bi bi-printer-fill me-1"></i>
                     <span>Print Refund Receipt</span>
@@ -3068,7 +3137,6 @@ export default function DealsPage() {
             </div>
           </div>
         )}
-      </div>
     </AdminLayout>
   );
 }
