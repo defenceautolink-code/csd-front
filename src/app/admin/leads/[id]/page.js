@@ -11,6 +11,7 @@ import quotationApi from "@/lib/quotationApi";
 import ConvertDealModal from "../ConvertDealModal";
 import discountApprovalApi from "@/services/discountApprovalApi";
 import { formatIndianCurrency } from "@/utils/numberToWords";
+import { printElement } from "@/utils/printElement";
 
 export const renderLeadStatusBadge = (statusName, extraClasses = "") => {
   const s = (statusName || "New").trim();
@@ -130,6 +131,20 @@ export default function LeadDetailPage() {
 
   // Single Invoice Preview State
   const [selectedInvoiceForSingleView, setSelectedInvoiceForSingleView] = useState(null);
+
+  // Print Single Invoice Voucher Handler
+  const handlePrintInvoice = () => {
+    if (typeof window !== "undefined") {
+      document.body.classList.add("print-invoice-mode");
+      const cleanUp = () => {
+        document.body.classList.remove("print-invoice-mode");
+        window.removeEventListener("afterprint", cleanUp);
+      };
+      window.addEventListener("afterprint", cleanUp);
+      setTimeout(cleanUp, 2000);
+      window.print();
+    }
+  };
 
   // Print Lead 360 Handler
   const handlePrintLeadProfile = () => {
@@ -729,10 +744,14 @@ export default function LeadDetailPage() {
           .no-print,
           .btn,
           button,
-          .modal,
           .modal-backdrop,
           .modal-backdrop-custom,
           .toast-container {
+            display: none !important;
+          }
+
+          /* Hide modal by default during standard lead profile print */
+          .modal {
             display: none !important;
           }
 
@@ -746,6 +765,71 @@ export default function LeadDetailPage() {
             padding: 0 !important;
             overflow: visible !important;
             background: #ffffff !important;
+          }
+
+          /* =========================================================================
+             SINGLE INVOICE VOUCHER PRINT MODE
+             When printing the modal invoice receipt, hide the lead page and print ONLY the invoice
+             ========================================================================= */
+          body.print-invoice-mode .lead-detail-page,
+          body:has(#printable-lead-invoice) .lead-detail-page,
+          body.print-invoice-mode .page-header-wrapper,
+          body.print-invoice-mode .app-sidebar,
+          body.print-invoice-mode .app-header,
+          body.print-invoice-mode .modal-header,
+          body.print-invoice-mode .modal-footer,
+          body.print-invoice-mode .btn-close,
+          body.print-invoice-mode .btn,
+          body.print-invoice-mode button,
+          body:has(#printable-lead-invoice) .modal-header,
+          body:has(#printable-lead-invoice) .modal-footer,
+          body:has(#printable-lead-invoice) .btn-close,
+          body:has(#printable-lead-invoice) .btn,
+          body:has(#printable-lead-invoice) button {
+            display: none !important;
+            visibility: hidden !important;
+          }
+
+          body.print-invoice-mode .modal,
+          body:has(#printable-lead-invoice) .modal,
+          body.print-invoice-mode .modal-dialog,
+          body.print-invoice-mode .modal-content,
+          body:has(#printable-lead-invoice) .modal-dialog,
+          body:has(#printable-lead-invoice) .modal-content {
+            position: static !important;
+            display: block !important;
+            max-width: 100% !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+            border: none !important;
+            background: transparent !important;
+            overflow: visible !important;
+            max-height: none !important;
+            height: auto !important;
+          }
+
+          body.print-invoice-mode #printable-lead-invoice,
+          body:has(#printable-lead-invoice) #printable-lead-invoice {
+            display: block !important;
+            visibility: visible !important;
+            position: static !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 16px !important;
+            background: #ffffff !important;
+            box-shadow: none !important;
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 4px !important;
+            color: #0f172a !important;
+            overflow: visible !important;
+          }
+
+          body.print-invoice-mode #printable-lead-invoice *,
+          body:has(#printable-lead-invoice) #printable-lead-invoice * {
+            visibility: visible !important;
           }
 
           /* Allow cards to flow naturally without premature clipping */
@@ -2106,6 +2190,7 @@ export default function LeadDetailPage() {
             </div>
           </div>
         )}
+      </div>
 
         {/* =========================================================================
             MODAL: SINGLE INVOICE BILL PREVIEW & PRINT (Task 2)
@@ -2141,15 +2226,25 @@ export default function LeadDetailPage() {
                       </span>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className="btn-close btn-close-white"
-                    onClick={() => setSelectedInvoiceForSingleView(null)}
-                  ></button>
+                  <div className="d-flex align-items-center gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-light d-flex align-items-center gap-1"
+                      onClick={() => printElement("printable-lead-invoice", "Tax Invoice / Payment Receipt")}
+                    >
+                      <i className="bi bi-printer-fill"></i>
+                      <span>Print</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-close btn-close-white"
+                      onClick={() => setSelectedInvoiceForSingleView(null)}
+                    ></button>
+                  </div>
                 </div>
 
                 {/* Printable Invoice Body */}
-                <div className="modal-body px-4 py-4 printable-deal-sheet">
+                <div className="modal-body px-4 py-4 printable-deal-sheet" id="printable-lead-invoice">
                   {/* Top Branding */}
                   <div className="d-flex justify-content-between align-items-start border-bottom pb-3 mb-3">
                     <div>
@@ -2320,6 +2415,40 @@ export default function LeadDetailPage() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Signatures & Terms */}
+                  <div className="row pt-4 mt-2 border-top align-items-end">
+                    <div className="col-7">
+                      <span className="small fw-bold text-dark d-block mb-1">
+                        Terms & Conditions:
+                      </span>
+                      <ol className="small text-muted ps-3 mb-0" style={{ fontSize: "0.72rem", lineHeight: "1.4" }}>
+                        <li>This is an official computer-generated receipt for CSD AFD portal documentation.</li>
+                        <li>Token booking amounts are adjusted against final vehicle invoice upon delivery.</li>
+                        <li>Vehicle allocation is subject to availability and Army CSD AFD portal approval.</li>
+                      </ol>
+                    </div>
+
+                    <div className="col-5 text-center">
+                      <div
+                        className="mb-1 d-inline-block px-3 py-1 rounded"
+                        style={{
+                          border: "2px dashed #58632A",
+                          color: "#58632A",
+                          fontWeight: 700,
+                          fontSize: "0.75rem",
+                        }}
+                      >
+                        DEFENCE AUTOLINK AUTHORIZED
+                      </div>
+                      <div
+                        className="small fw-bold text-dark pt-3 border-top mx-auto"
+                        style={{ maxWidth: "180px" }}
+                      >
+                        Authorized Signatory
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Footer Controls */}
@@ -2339,9 +2468,7 @@ export default function LeadDetailPage() {
                       backgroundColor: "var(--primary, #58632A)",
                       borderColor: "var(--primary, #58632A)",
                     }}
-                    onClick={() => {
-                      if (typeof window !== "undefined") window.print();
-                    }}
+                    onClick={() => printElement("printable-lead-invoice", "Tax Invoice / Payment Receipt")}
                   >
                     <i className="bi bi-printer-fill me-1"></i>
                     <span>Print Invoice</span>
@@ -2351,7 +2478,6 @@ export default function LeadDetailPage() {
             </div>
           </div>
         )}
-      </div>
     </AdminLayout>
   );
 }
