@@ -557,6 +557,7 @@ export default function AdminCallRecordingsAudit() {
                   <table className="table table-hover align-middle mb-0">
                     <thead className="table-light">
                       <tr>
+                        <th>Action</th>
                         <th>Date</th>
                         <th>Staff Member</th>
                         <th>Role</th>
@@ -564,7 +565,6 @@ export default function AdminCallRecordingsAudit() {
                         <th className="text-center">Recordings Uploaded</th>
                         <th>Compliance Status</th>
                         <th>Review Breakdown</th>
-                        <th className="text-end">Inspect</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -572,6 +572,16 @@ export default function AdminCallRecordingsAudit() {
                         .slice((summaryPage - 1) * summaryPerPage, summaryPage * summaryPerPage)
                         .map((row) => (
                         <tr key={`${row.user_id}_${row.date || "none"}`}>
+                          <td className="text-nowrap">
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-primary text-nowrap"
+                              onClick={() => handleOpenStaffDetail(row)}
+                            >
+                              <i className="bi bi-headphones me-1"></i>
+                              View &amp; Listen ({row.recordings_uploaded})
+                            </button>
+                          </td>
                           <td className="small text-nowrap fw-semibold">
                             {row.date ? (
                               <>
@@ -616,16 +626,6 @@ export default function AdminCallRecordingsAudit() {
                                 <span className="small text-muted">-</span>
                               )}
                             </div>
-                          </td>
-                          <td className="text-end">
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-primary"
-                              onClick={() => handleOpenStaffDetail(row)}
-                            >
-                              <i className="bi bi-headphones me-1"></i>
-                              View &amp; Listen ({row.recordings_uploaded})
-                            </button>
                           </td>
                         </tr>
                       ))}
