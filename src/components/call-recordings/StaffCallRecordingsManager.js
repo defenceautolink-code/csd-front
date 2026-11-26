@@ -14,6 +14,9 @@ const ALLOWED_EXTENSIONS = [
   "amr", "3gp", "3gpp", "webm", "mp4", "mpeg", "mpga", "flac", "wma",
 ];
 
+const MAX_FILE_SIZE_MB = 3;
+const MAX_FILE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024; // 3 MB
+
 const formatDateLocal = (d) => {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -122,6 +125,18 @@ export default function StaffCallRecordingsManager() {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ completed: 0, total: 0, percent: 0 });
+  const [uploadModal, setUploadModal] = useState({
+    open: false,
+    isComplete: false,
+    totalEligible: 0,
+    completedEligible: 0,
+    uploadedCount: 0,
+    failedCount: 0,
+    currentFileName: "",
+    items: [],
+    oversizedFiles: [],
+    failedFiles: [],
+  });
 
   // Day Detail Modal (View & Listen)
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -187,15 +202,11 @@ export default function StaffCallRecordingsManager() {
         rejected.push(`${file.name} (unsupported .${ext})`);
         return;
       }
-      if (file.size > 50 * 1024 * 1024) {
-        rejected.push(`${file.name} (> 50MB)`);
-        return;
-      }
       valid.push(file);
     });
 
     if (rejected.length > 0) {
-      showToast(`Skipped ${rejected.length} file(s): ${rejected.slice(0, 2).join(", ")}`, "warning");
+      showToast(`Skipped ${rejected.length} unsupported file(s): ${rejected.slice(0, 2).join(", ")}`, "warning");
     }
 
     if (valid.length > 0) {
@@ -217,32 +228,142 @@ export default function StaffCallRecordingsManager() {
       return;
     }
 
+    const eligibleFiles = [];
+    const oversizedFiles = [];
+    const initialItems = [];
+
+    selectedFiles.forEach((file, idx) => {
+      const key = `${file.name}_${file.size}_${file.lastModified}_${idx}`;
+      if (file.size > MAX_FILE_BYTES) {
+        oversizedFiles.push({ name: file.name, size: file.size });
+        initialItems.push({
+          key,
+          name: file.name,
+          size: file.size,
+          eligibleIndex: -1,
+          status: "skipped_size",
+          message: `Exceeds ${MAX_FILE_SIZE_MB} MB limit`,
+        });
+      } else {
+        const eligibleIndex = eligibleFiles.length;
+        eligibleFiles.push(file);
+        initialItems.push({
+          key,
+          name: file.name,
+          size: file.size,
+          eligibleIndex,
+          status: "pending",
+          message: "",
+        });
+      }
+    });
+
+    if (eligibleFiles.length === 0) {
+      setUploadProgress({ completed: 0, total: 0, percent: 100 });
+      setUploadModal({
+        open: true,
+        isComplete: true,
+        totalEligible: 0,
+        completedEligible: 0,
+        uploadedCount: 0,
+        failedCount: 0,
+        currentFileName: "",
+        items: initialItems,
+        oversizedFiles,
+        failedFiles: [],
+      });
+      setSelectedFiles([]);
+      return;
+    }
+
     setIsUploading(true);
-    setUploadProgress({ completed: 0, total: selectedFiles.length, percent: 0 });
+    setUploadProgress({ completed: 0, total: eligibleFiles.length, percent: 0 });
+    setUploadModal({
+      open: true,
+      isComplete: false,
+      totalEligible: eligibleFiles.length,
+      completedEligible: 0,
+      uploadedCount: 0,
+      failedCount: 0,
+      currentFileName: eligibleFiles[0]?.name || "",
+      items: initialItems,
+      oversizedFiles,
+      failedFiles: [],
+    });
 
     try {
       const todayDate = getTodayDate();
       const result = await callRecordingApi.uploadBatch(
-        selectedFiles,
+        eligibleFiles,
         {
           recording_date: todayDate,
           notes: batchNotes.trim() || null,
         },
-        (progress) => setUploadProgress(progress)
+        (progress) => {
+          setUploadProgress({
+            completed: progress.completed,
+            total: progress.total,
+            percent: progress.percent,
+          });
+          setUploadModal((prev) => {
+            const nextItems = prev.items.map((item) => {
+              if (item.eligibleIndex !== progress.currentIndex) return item;
+              if (progress.phase === "uploading") {
+                return { ...item, status: "uploading", message: "Uploading..." };
+              }
+              if (progress.phase === "uploaded") {
+                return { ...item, status: "uploaded", message: "Uploaded" };
+              }
+              if (progress.phase === "failed") {
+                return {
+                  ...item,
+                  status: "failed",
+                  message: progress.errorMessage || "Upload failed",
+                };
+              }
+              return item;
+            });
+
+            return {
+              ...prev,
+              completedEligible: progress.completed,
+              uploadedCount:
+                progress.phase === "uploaded" ? prev.uploadedCount + 1 : prev.uploadedCount,
+              failedCount:
+                progress.phase === "failed" ? prev.failedCount + 1 : prev.failedCount,
+              currentFileName:
+                progress.phase === "uploading" ? progress.currentFileName : prev.currentFileName,
+              items: nextItems,
+            };
+          });
+        }
       );
+
+      const failedNameSet = new Set(
+        (result.errors || []).flatMap((errItem) => errItem.files || [])
+      );
+      const failedList = (result.errors || []).map((errItem) => ({
+        name: (errItem.files || []).join(", "),
+        message: errItem.message,
+      }));
+
+      setUploadModal((prev) => ({
+        ...prev,
+        isComplete: true,
+        currentFileName: "",
+        failedFiles: failedList,
+      }));
 
       if (result.uploaded_count > 0) {
         showToast(
           `${result.uploaded_count} call recording(s) uploaded successfully for ${todayDate}!`,
-          result.partial ? "warning" : "success"
+          result.partial || oversizedFiles.length > 0 ? "warning" : "success"
         );
       }
 
-      if (result.errors?.length > 0) {
-        showToast(`Some files failed: ${result.errors[0].message}`, "error");
-      }
-
-      if (!result.partial && result.errors?.length === 0) {
+      if (failedList.length > 0) {
+        setSelectedFiles(eligibleFiles.filter((f) => failedNameSet.has(f.name)));
+      } else {
         setSelectedFiles([]);
         setBatchNotes("");
       }
@@ -250,6 +371,12 @@ export default function StaffCallRecordingsManager() {
       setCurrentPage(1);
       await loadData(1);
     } catch (err) {
+      setUploadModal((prev) => ({
+        ...prev,
+        isComplete: true,
+        currentFileName: "",
+        failedFiles: [{ name: "Batch", message: err?.message || "Bulk upload failed." }],
+      }));
       showToast(err?.message || "Bulk upload failed.", "error");
     } finally {
       setIsUploading(false);
@@ -451,7 +578,7 @@ export default function StaffCallRecordingsManager() {
                 Click here or Drag &amp; Drop all today&apos;s call recordings
               </h6>
               <p className="text-muted small mb-0">
-                Supports multiple files at once (.mp3, .m4a, .mpeg, .wav, .aac, .ogg, .opus, .amr, .3gp, .webm — max 50MB per file)
+                Supports multiple files at once (.mp3, .m4a, .mpeg, .wav, .aac, .ogg, .opus, .amr, .3gp, .webm — max {MAX_FILE_SIZE_MB}MB per file)
               </p>
             </div>
 
@@ -462,6 +589,11 @@ export default function StaffCallRecordingsManager() {
                   <span className="fw-semibold small">
                     Selected Files: <span className="badge bg-primary">{selectedFiles.length}</span>{" "}
                     <span className="text-muted ms-1">({formatBytes(totalSelectedSize)})</span>
+                    {selectedFiles.some((f) => f.size > MAX_FILE_BYTES) && (
+                      <span className="badge bg-danger-subtle text-danger border border-danger-subtle ms-2">
+                        {selectedFiles.filter((f) => f.size > MAX_FILE_BYTES).length} file(s) &gt; {MAX_FILE_SIZE_MB}MB (will skip)
+                      </span>
+                    )}
                   </span>
                   <button
                     type="button"
@@ -474,31 +606,45 @@ export default function StaffCallRecordingsManager() {
                 </div>
 
                 <div className="d-flex flex-wrap gap-2 mb-3" style={{ maxHeight: "180px", overflowY: "auto" }}>
-                  {selectedFiles.map((file, idx) => (
-                    <div
-                      key={`${file.name}_${idx}`}
-                      className="d-flex align-items-center gap-2 px-2 py-1 rounded border small"
-                      style={{ backgroundColor: "rgba(37, 99, 235, 0.06)" }}
-                    >
-                      <i className="bi bi-file-earmark-music-fill text-primary"></i>
-                      <span className="text-truncate" style={{ maxWidth: "200px" }} title={file.name}>
-                        {file.name}
-                      </span>
-                      <span className="text-muted" style={{ fontSize: "0.75rem" }}>
-                        ({formatBytes(file.size)})
-                      </span>
-                      {!isUploading && (
-                        <button
-                          type="button"
-                          className="btn btn-sm p-0 text-danger border-0 lh-1"
-                          onClick={() => handleRemoveFile(idx)}
-                          title="Remove file"
+                  {selectedFiles.map((file, idx) => {
+                    const isTooLarge = file.size > MAX_FILE_BYTES;
+                    return (
+                      <div
+                        key={`${file.name}_${idx}`}
+                        className={`d-flex align-items-center gap-2 px-2 py-1 rounded border small ${
+                          isTooLarge ? "border-danger bg-danger-subtle" : ""
+                        }`}
+                        style={!isTooLarge ? { backgroundColor: "rgba(37, 99, 235, 0.06)" } : undefined}
+                      >
+                        <i
+                          className={`bi ${
+                            isTooLarge
+                              ? "bi-exclamation-triangle-fill text-danger"
+                              : "bi-file-earmark-music-fill text-primary"
+                          }`}
+                        ></i>
+                        <span className="text-truncate" style={{ maxWidth: "200px" }} title={file.name}>
+                          {file.name}
+                        </span>
+                        <span
+                          className={isTooLarge ? "text-danger fw-semibold" : "text-muted"}
+                          style={{ fontSize: "0.75rem" }}
                         >
-                          <i className="bi bi-x-circle-fill"></i>
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                          ({formatBytes(file.size)}{isTooLarge ? ` > ${MAX_FILE_SIZE_MB}MB` : ""})
+                        </span>
+                        {!isUploading && (
+                          <button
+                            type="button"
+                            className="btn btn-sm p-0 text-danger border-0 lh-1"
+                            onClick={() => handleRemoveFile(idx)}
+                            title="Remove file"
+                          >
+                            <i className="bi bi-x-circle-fill"></i>
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <div className="row g-2 align-items-end">
@@ -877,6 +1023,205 @@ export default function StaffCallRecordingsManager() {
                   onClick={() => setDetailModalOpen(false)}
                 >
                   Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sequential Bulk Upload Progress & Summary Popup */}
+      {uploadModal.open && (
+        <div
+          className="modal fade show d-block"
+          tabIndex="-1"
+          style={{ backgroundColor: "rgba(0,0,0,0.65)", zIndex: 1060 }}
+        >
+          <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div className="modal-content border-0 shadow-lg">
+              <div className="modal-header">
+                <div className="d-flex align-items-center gap-2">
+                  {!uploadModal.isComplete ? (
+                    <span className="spinner-border spinner-border-sm text-primary" role="status"></span>
+                  ) : uploadModal.oversizedFiles.length > 0 || uploadModal.failedCount > 0 ? (
+                    <i className="bi bi-exclamation-triangle-fill text-warning fs-5"></i>
+                  ) : (
+                    <i className="bi bi-check-circle-fill text-success fs-5"></i>
+                  )}
+                  <div>
+                    <h5 className="modal-title fw-bold mb-0">
+                      {uploadModal.isComplete
+                        ? "Upload Summary"
+                        : `Uploading Recordings (${uploadModal.completedEligible} / ${uploadModal.totalEligible})`}
+                    </h5>
+                    <small className="d-block" style={{ color: "#cbd5e1" }}>
+                      {uploadModal.isComplete
+                        ? "All eligible files have been processed (1 file at a time)."
+                        : `Uploading 1 by 1 — currently: ${uploadModal.currentFileName || "..."}`}
+                    </small>
+                  </div>
+                </div>
+                {uploadModal.isComplete && (
+                  <button
+                    type="button"
+                    className="btn-close"
+                    aria-label="Close"
+                    onClick={() => setUploadModal((prev) => ({ ...prev, open: false }))}
+                  ></button>
+                )}
+              </div>
+
+              <div className="modal-body">
+                {/* Live Progress Counter & Bar */}
+                {uploadModal.totalEligible > 0 && (
+                  <div className="mb-3">
+                    <div className="d-flex justify-content-between align-items-center small fw-semibold mb-1">
+                      <span>
+                        Progress: {uploadModal.completedEligible} of {uploadModal.totalEligible} recording(s)
+                      </span>
+                      <span className="text-primary">
+                        {Math.round(
+                          (uploadModal.completedEligible / uploadModal.totalEligible) * 100
+                        )}
+                        %
+                      </span>
+                    </div>
+                    <div className="progress" style={{ height: "10px" }}>
+                      <div
+                        className={`progress-bar ${
+                          !uploadModal.isComplete
+                            ? "progress-bar-striped progress-bar-animated"
+                            : "bg-success"
+                        }`}
+                        role="progressbar"
+                        style={{
+                          width: `${Math.round(
+                            (uploadModal.completedEligible / uploadModal.totalEligible) * 100
+                          )}%`,
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Summary Badges */}
+                <div className="d-flex flex-wrap gap-2 mb-3">
+                  <span className="badge bg-success-subtle text-success border border-success-subtle px-3 py-2">
+                    <i className="bi bi-check-circle-fill me-1"></i>
+                    Uploaded: {uploadModal.uploadedCount}
+                  </span>
+                  {uploadModal.oversizedFiles.length > 0 && (
+                    <span className="badge bg-warning-subtle text-warning border border-warning-subtle px-3 py-2">
+                      <i className="bi bi-exclamation-triangle-fill me-1"></i>
+                      Skipped (&gt; {MAX_FILE_SIZE_MB} MB): {uploadModal.oversizedFiles.length}
+                    </span>
+                  )}
+                  {uploadModal.failedCount > 0 && (
+                    <span className="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2">
+                      <i className="bi bi-x-circle-fill me-1"></i>
+                      Failed: {uploadModal.failedCount}
+                    </span>
+                  )}
+                </div>
+
+                {/* Alert List for > 3 MB Oversized Files after completion */}
+                {uploadModal.isComplete && uploadModal.oversizedFiles.length > 0 && (
+                  <div className="alert alert-warning border-warning mb-3" role="alert">
+                    <div className="fw-bold mb-1">
+                      <i className="bi bi-exclamation-octagon-fill me-2"></i>
+                      These {uploadModal.oversizedFiles.length} file(s) exceed the {MAX_FILE_SIZE_MB} MB limit and were not uploaded:
+                    </div>
+                    <div className="small mb-2">
+                      Files larger than {MAX_FILE_SIZE_MB} MB cannot be uploaded. Please reduce their file size to {MAX_FILE_SIZE_MB} MB or less and upload again:
+                    </div>
+                    <ul className="mb-0 ps-3 small">
+                      {uploadModal.oversizedFiles.map((f, idx) => (
+                        <li key={`${f.name}_${idx}`} className="fw-semibold">
+                          {f.name}{" "}
+                          <span className="text-danger">({formatBytes(f.size)})</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Alert List for Failed Files (if any) */}
+                {uploadModal.isComplete && uploadModal.failedFiles.length > 0 && (
+                  <div className="alert alert-danger border-danger mb-3" role="alert">
+                    <div className="fw-bold mb-1">
+                      <i className="bi bi-x-octagon-fill me-2"></i>
+                      Upload errors ({uploadModal.failedFiles.length}):
+                    </div>
+                    <ul className="mb-0 ps-3 small">
+                      {uploadModal.failedFiles.map((f, idx) => (
+                        <li key={`${f.name}_${idx}`}>
+                          <strong>{f.name}:</strong> {f.message}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Per-File Live Status List */}
+                <div className="list-group" style={{ maxHeight: "300px", overflowY: "auto" }}>
+                  {uploadModal.items.map((item, idx) => (
+                    <div
+                      key={item.key}
+                      className="list-group-item d-flex justify-content-between align-items-center gap-2 py-2"
+                    >
+                      <div className="d-flex align-items-center gap-2 text-truncate">
+                        <span className="text-muted small fw-semibold" style={{ minWidth: "28px" }}>
+                          #{idx + 1}
+                        </span>
+                        <span className="small fw-medium text-truncate" title={item.name}>
+                          {item.name}
+                        </span>
+                        <span className="text-muted" style={{ fontSize: "0.75rem" }}>
+                          ({formatBytes(item.size)})
+                        </span>
+                      </div>
+
+                      <div className="flex-shrink-0">
+                        {item.status === "uploaded" && (
+                          <span className="badge bg-success-subtle text-success">
+                            <i className="bi bi-check-lg me-1"></i>Uploaded
+                          </span>
+                        )}
+                        {item.status === "uploading" && (
+                          <span className="badge bg-primary-subtle text-primary">
+                            <span className="spinner-border spinner-border-sm me-1" style={{ width: "0.7rem", height: "0.7rem" }}></span>
+                            Uploading...
+                          </span>
+                        )}
+                        {item.status === "pending" && (
+                          <span className="badge bg-secondary-subtle text-secondary">
+                            Waiting
+                          </span>
+                        )}
+                        {item.status === "skipped_size" && (
+                          <span className="badge bg-warning-subtle text-warning">
+                            <i className="bi bi-exclamation-triangle me-1"></i>&gt; {MAX_FILE_SIZE_MB} MB (Skipped)
+                          </span>
+                        )}
+                        {item.status === "failed" && (
+                          <span className="badge bg-danger-subtle text-danger" title={item.message}>
+                            <i className="bi bi-x-circle me-1"></i>Failed
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={!uploadModal.isComplete}
+                  onClick={() => setUploadModal((prev) => ({ ...prev, open: false }))}
+                >
+                  {uploadModal.isComplete ? "Close" : "Uploading... Please wait"}
                 </button>
               </div>
             </div>

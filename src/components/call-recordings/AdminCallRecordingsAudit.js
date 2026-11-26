@@ -135,6 +135,12 @@ export default function AdminCallRecordingsAudit() {
   const [reviewRemark, setReviewRemark] = useState("");
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
+  // Delete Older Than 1 Month Modal
+  const [cleanupModalOpen, setCleanupModalOpen] = useState(false);
+  const [cleanupLoadingPreview, setCleanupLoadingPreview] = useState(false);
+  const [cleanupDeleting, setCleanupDeleting] = useState(false);
+  const [cleanupInfo, setCleanupInfo] = useState({ cutoffDate: "", count: 0 });
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       try {
@@ -276,6 +282,49 @@ export default function AdminCallRecordingsAudit() {
     setReviewRemark("");
   };
 
+  const handleOpenCleanupModal = async () => {
+    setCleanupModalOpen(true);
+    setCleanupLoadingPreview(true);
+    setCleanupInfo({ cutoffDate: "", count: 0 });
+    try {
+      const res = await callRecordingApi.deleteOlderThanMonth(true);
+      if (res?.status) {
+        setCleanupInfo({
+          cutoffDate: res.cutoff_date || "",
+          count: Number(res.count || 0),
+        });
+      }
+    } catch (err) {
+      showToast(err?.response?.data?.message || "Failed to check old recordings.", "error");
+      setCleanupModalOpen(false);
+    } finally {
+      setCleanupLoadingPreview(false);
+    }
+  };
+
+  const handleConfirmCleanup = async () => {
+    setCleanupDeleting(true);
+    try {
+      const res = await callRecordingApi.deleteOlderThanMonth(false);
+      if (res?.status) {
+        showToast(
+          res.message || `Deleted ${res.deleted_count || 0} recording(s) before ${res.cutoff_date}.`,
+          "success"
+        );
+        setCleanupModalOpen(false);
+        setCurrentPage(1);
+        loadSummary();
+        if (activeTab === "recordings") {
+          loadRecordings(1);
+        }
+      }
+    } catch (err) {
+      showToast(err?.response?.data?.message || "Failed to delete old recordings.", "error");
+    } finally {
+      setCleanupDeleting(false);
+    }
+  };
+
   const dashboardHref = getRoleDashboardPath(currentUser?.role);
 
   return (
@@ -294,6 +343,16 @@ export default function AdminCallRecordingsAudit() {
             <p className="text-muted small mb-0">
               Monitor Sales Executive &amp; Receptionist daily follow-up calls vs uploaded call recordings.
             </p>
+          </div>
+          <div className="d-flex align-items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-outline-danger btn-sm fw-semibold"
+              onClick={handleOpenCleanupModal}
+            >
+              <i className="bi bi-trash3 me-1"></i>
+              Delete Older Than 1 Month
+            </button>
           </div>
         </div>
 
@@ -960,6 +1019,111 @@ export default function AdminCallRecordingsAudit() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Recordings Older Than 1 Month Confirmation Modal */}
+      {cleanupModalOpen && (
+        <div
+          className="modal fade show d-block"
+          tabIndex="-1"
+          style={{ backgroundColor: "rgba(0,0,0,0.65)", zIndex: 1070 }}
+        >
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content border-0 shadow-lg">
+              <div className="modal-header">
+                <div>
+                  <h5 className="modal-title fw-bold mb-0">
+                    <i className="bi bi-exclamation-triangle-fill text-warning me-2"></i>
+                    Delete Recordings Older Than 1 Month
+                  </h5>
+                  <small className="d-block" style={{ color: "#cbd5e1" }}>
+                    Permanent cleanup of old audio files &amp; database records
+                  </small>
+                </div>
+                {!cleanupDeleting && (
+                  <button
+                    type="button"
+                    className="btn-close"
+                    aria-label="Close"
+                    onClick={() => setCleanupModalOpen(false)}
+                  ></button>
+                )}
+              </div>
+
+              <div className="modal-body">
+                {cleanupLoadingPreview ? (
+                  <div className="text-center py-4">
+                    <div className="spinner-border text-danger" role="status"></div>
+                    <p className="text-muted small mt-2 mb-0">
+                      Checking recordings older than 1 month...
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="alert alert-danger border-danger mb-3" role="alert">
+                      <div className="fw-bold mb-1">
+                        Cutoff Date: {cleanupInfo.cutoffDate || "-"}
+                      </div>
+                      <div className="small mb-0">
+                        All call recording records and audio files dated strictly before{" "}
+                        <strong>{cleanupInfo.cutoffDate}</strong> will be permanently deleted.
+                        This action cannot be undone.
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded border bg-light d-flex justify-content-between align-items-center">
+                      <span className="small fw-semibold text-dark">
+                        Matching recordings before {cleanupInfo.cutoffDate}:
+                      </span>
+                      <span
+                        className={`badge fs-6 ${
+                          cleanupInfo.count > 0 ? "bg-danger" : "bg-secondary"
+                        }`}
+                      >
+                        {cleanupInfo.count} Recording{cleanupInfo.count === 1 ? "" : "s"}
+                      </span>
+                    </div>
+
+                    {cleanupInfo.count === 0 && (
+                      <p className="small text-muted mt-3 mb-0">
+                        No call recordings found before {cleanupInfo.cutoffDate}.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary"
+                  onClick={() => setCleanupModalOpen(false)}
+                  disabled={cleanupDeleting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={handleConfirmCleanup}
+                  disabled={cleanupLoadingPreview || cleanupDeleting || cleanupInfo.count === 0}
+                >
+                  {cleanupDeleting ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <i className="bi bi-trash3 me-1"></i>
+                      Delete {cleanupInfo.count} Recording{cleanupInfo.count === 1 ? "" : "s"}
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

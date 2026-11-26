@@ -26,8 +26,9 @@ export const callRecordingApi = {
   },
 
   /**
-   * Bulk upload multiple audio files under a single batch ID with progress updates.
-   * Uploads in small chunks (up to 3 files per request) so 10-30 recordings never hit server size/timeout limits.
+   * Bulk upload multiple audio files under a single batch ID with live per-file progress updates.
+   * Uploads strictly 1 file per request sequentially so each recording's progress & validation
+   * is tracked individually without hitting server size/timeout limits.
    */
   uploadBatch: async (files, metadata = {}, onProgress = null) => {
     const fileList = Array.from(files || []);
@@ -39,13 +40,26 @@ export const callRecordingApi = {
       metadata.batch_id ||
       `batch_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
-    const chunkSize = 3;
+    const chunkSize = 1;
     const uploadedRecords = [];
     const errors = [];
     let completed = 0;
 
     for (let i = 0; i < fileList.length; i += chunkSize) {
       const chunk = fileList.slice(i, i + chunkSize);
+      const activeFile = chunk[0];
+
+      if (typeof onProgress === "function") {
+        onProgress({
+          phase: "uploading",
+          currentIndex: i,
+          currentFileName: activeFile?.name || "",
+          completed,
+          total: fileList.length,
+          percent: Math.round((completed / fileList.length) * 100),
+        });
+      }
+
       const formData = new FormData();
 
       if (metadata.recording_date) {
@@ -74,6 +88,9 @@ export const callRecordingApi = {
         completed += chunk.length;
         if (typeof onProgress === "function") {
           onProgress({
+            phase: "uploaded",
+            currentIndex: i,
+            currentFileName: activeFile?.name || "",
             completed,
             total: fileList.length,
             percent: Math.round((completed / fileList.length) * 100),
@@ -83,7 +100,7 @@ export const callRecordingApi = {
         const msg =
           err?.response?.data?.message ||
           err?.message ||
-          "Failed to upload batch chunk.";
+          "Failed to upload recording.";
         errors.push({
           files: chunk.map((f) => f.name),
           message: msg,
@@ -91,6 +108,10 @@ export const callRecordingApi = {
         completed += chunk.length;
         if (typeof onProgress === "function") {
           onProgress({
+            phase: "failed",
+            currentIndex: i,
+            currentFileName: activeFile?.name || "",
+            errorMessage: msg,
             completed,
             total: fileList.length,
             percent: Math.round((completed / fileList.length) * 100),
@@ -125,6 +146,16 @@ export const callRecordingApi = {
    */
   deleteRecording: async (id) => {
     const response = await api.delete(`/call-recordings/${id}`);
+    return response.data;
+  },
+
+  /**
+   * Delete (or preview count with dryRun=true) all recordings older than 1 month.
+   */
+  deleteOlderThanMonth: async (dryRun = false) => {
+    const response = await api.post("/call-recordings/delete-older-than-month", {
+      dry_run: dryRun,
+    });
     return response.data;
   },
 

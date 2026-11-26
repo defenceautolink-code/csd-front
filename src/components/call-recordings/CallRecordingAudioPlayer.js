@@ -3,6 +3,27 @@
 import React, { useState, useEffect, useRef } from "react";
 import callRecordingApi from "@/services/callRecordingApi";
 
+// Module-level reference so only one recording can play at a time across the entire page/modal.
+let activeAudioEl = null;
+
+function pauseOtherAudio(currentEl = null) {
+  if (activeAudioEl && activeAudioEl !== currentEl) {
+    try {
+      activeAudioEl.pause();
+    } catch (_) { }
+  }
+  if (typeof document !== "undefined") {
+    document.querySelectorAll("audio").forEach((el) => {
+      if (el !== currentEl && !el.paused) {
+        try {
+          el.pause();
+        } catch (_) { }
+      }
+    });
+  }
+  activeAudioEl = currentEl || null;
+}
+
 export default function CallRecordingAudioPlayer({ recordingId, fileName = "Recording" }) {
   const [blobUrl, setBlobUrl] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -13,6 +34,14 @@ export default function CallRecordingAudioPlayer({ recordingId, fileName = "Reco
 
   useEffect(() => {
     return () => {
+      if (audioRef.current) {
+        try {
+          audioRef.current.pause();
+        } catch (_) { }
+        if (activeAudioEl === audioRef.current) {
+          activeAudioEl = null;
+        }
+      }
       if (blobUrlRef.current) {
         URL.revokeObjectURL(blobUrlRef.current);
       }
@@ -20,6 +49,7 @@ export default function CallRecordingAudioPlayer({ recordingId, fileName = "Reco
   }, []);
 
   const handleLoadAndPlay = async () => {
+    pauseOtherAudio(null);
     if (blobUrl) return;
     setIsLoading(true);
     setError("");
@@ -91,7 +121,18 @@ export default function CallRecordingAudioPlayer({ recordingId, fileName = "Reco
         src={blobUrl}
         onPlay={() => {
           if (audioRef.current) {
+            pauseOtherAudio(audioRef.current);
             audioRef.current.playbackRate = playbackRate;
+          }
+        }}
+        onPause={() => {
+          if (activeAudioEl === audioRef.current) {
+            activeAudioEl = null;
+          }
+        }}
+        onEnded={() => {
+          if (activeAudioEl === audioRef.current) {
+            activeAudioEl = null;
           }
         }}
         style={{ height: "32px", maxWidth: "240px" }}
