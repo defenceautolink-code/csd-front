@@ -616,6 +616,7 @@ export default function AdminCallRecordingsAudit() {
                   <table className="table table-hover align-middle mb-0">
                     <thead className="table-light">
                       <tr>
+                        <th className="text-center" style={{ width: "56px" }}>No</th>
                         <th>Action</th>
                         <th>Date</th>
                         <th>Staff Member</th>
@@ -629,8 +630,11 @@ export default function AdminCallRecordingsAudit() {
                     <tbody>
                       {summaryRows
                         .slice((summaryPage - 1) * summaryPerPage, summaryPage * summaryPerPage)
-                        .map((row) => (
+                        .map((row, idx) => (
                         <tr key={`${row.user_id}_${row.date || "none"}`}>
+                          <td className="text-center fw-semibold text-muted">
+                            {(summaryPage - 1) * summaryPerPage + idx + 1}
+                          </td>
                           <td className="text-nowrap">
                             <button
                               type="button"
@@ -727,6 +731,7 @@ export default function AdminCallRecordingsAudit() {
                   <table className="table table-hover align-middle mb-0">
                     <thead className="table-light">
                       <tr>
+                        <th className="text-center" style={{ width: "56px" }}>No</th>
                         <th>Staff</th>
                         <th>Recording File</th>
                         <th>Date</th>
@@ -736,8 +741,11 @@ export default function AdminCallRecordingsAudit() {
                       </tr>
                     </thead>
                     <tbody>
-                      {recordings.map((rec) => (
+                      {recordings.map((rec, idx) => (
                         <tr key={rec.id}>
+                          <td className="text-center fw-semibold text-muted">
+                            {(currentPage - 1) * perPage + idx + 1}
+                          </td>
                           <td>
                             <div className="fw-semibold">{rec.user?.name || "Unknown"}</div>
                             <span className={`badge ${getRoleBadgeClass(rec.user?.role)}`} style={{ fontSize: "0.7rem" }}>
