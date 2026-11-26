@@ -226,12 +226,14 @@ export default function AdminCallRecordingsAudit() {
   const handleOpenStaffDetail = async (row) => {
     setDetailModalOpen(true);
     setDetailLoading(true);
-    setStaffDetail({ staff: row, follow_ups: [], recordings: [] });
+    setStaffDetail({ staff: row, date: row.date || null, follow_ups: [], recordings: [] });
     try {
-      const res = await callRecordingApi.getStaffDetail(row.user_id, buildDateParams());
+      const detailParams = row.date ? { date: row.date } : buildDateParams();
+      const res = await callRecordingApi.getStaffDetail(row.user_id, detailParams);
       if (res?.status) {
         setStaffDetail({
           staff: res.staff || row,
+          date: row.date || null,
           follow_ups: Array.isArray(res.follow_ups) ? res.follow_ups : [],
           recordings: Array.isArray(res.recordings) ? res.recordings : [],
         });
@@ -555,6 +557,7 @@ export default function AdminCallRecordingsAudit() {
                   <table className="table table-hover align-middle mb-0">
                     <thead className="table-light">
                       <tr>
+                        <th>Date</th>
                         <th>Staff Member</th>
                         <th>Role</th>
                         <th className="text-center">Call Follow-Ups</th>
@@ -568,7 +571,17 @@ export default function AdminCallRecordingsAudit() {
                       {summaryRows
                         .slice((summaryPage - 1) * summaryPerPage, summaryPage * summaryPerPage)
                         .map((row) => (
-                        <tr key={row.user_id}>
+                        <tr key={`${row.user_id}_${row.date || "none"}`}>
+                          <td className="small text-nowrap fw-semibold">
+                            {row.date ? (
+                              <>
+                                <i className="bi bi-calendar3 text-primary me-1"></i>
+                                {row.date}
+                              </>
+                            ) : (
+                              <span className="text-muted">-</span>
+                            )}
+                          </td>
                           <td>
                             <div className="fw-semibold">{row.name}</div>
                             <div className="small text-muted">{row.phone || row.email}</div>
@@ -627,7 +640,7 @@ export default function AdminCallRecordingsAudit() {
               lastPage={Math.max(1, Math.ceil(summaryRows.length / summaryPerPage))}
               total={summaryRows.length}
               perPage={summaryPerPage}
-              itemName="staff"
+              itemName="records"
               onPageChange={(p) => setSummaryPage(p)}
               onPerPageChange={(n) => {
                 setSummaryPerPage(n);
@@ -760,7 +773,9 @@ export default function AdminCallRecordingsAudit() {
                   </h5>
                   <small className="text-muted">
                     {staffDetail.staff?.role} •{" "}
-                    {!fromDate && !toDate
+                    {staffDetail.date
+                      ? staffDetail.date
+                      : !fromDate && !toDate
                       ? "All Dates"
                       : fromDate === toDate
                       ? fromDate
