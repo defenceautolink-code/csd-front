@@ -806,17 +806,31 @@ export default function StaffCallRecordingsManager() {
                 <table className="table table-hover align-middle mb-0">
                   <thead className="table-light">
                     <tr>
+                      <th className="text-center" style={{ width: "56px" }}>No</th>
+                      <th>Action</th>
                       <th>Date</th>
                       <th className="text-center">Call Follow-Ups</th>
                       <th className="text-center">Recordings Uploaded</th>
                       <th>Compliance Status</th>
                       <th>Verification</th>
-                      <th className="text-end">Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {dailyRows.map((row) => (
+                    {dailyRows.map((row, idx) => (
                       <tr key={row.date}>
+                        <td className="text-center fw-semibold text-muted">
+                          {((pagination.current_page || 1) - 1) * perPage + idx + 1}
+                        </td>
+                        <td className="text-nowrap">
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-primary text-nowrap"
+                            onClick={() => handleOpenDayDetail(row)}
+                          >
+                            <i className="bi bi-headphones me-1"></i>
+                            View &amp; Listen ({row.recordings_uploaded})
+                          </button>
+                        </td>
                         <td className="fw-semibold text-nowrap">
                           <i className="bi bi-calendar3 text-primary me-2"></i>
                           {row.date}
@@ -852,16 +866,6 @@ export default function StaffCallRecordingsManager() {
                               <span className="small text-muted">-</span>
                             )}
                           </div>
-                        </td>
-                        <td className="text-end">
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-primary"
-                            onClick={() => handleOpenDayDetail(row)}
-                          >
-                            <i className="bi bi-headphones me-1"></i>
-                            View &amp; Listen ({row.recordings_uploaded})
-                          </button>
                         </td>
                       </tr>
                     ))}
