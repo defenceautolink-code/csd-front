@@ -170,6 +170,16 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                   <span>Follow-Ups & Notes</span>
                 </Link>
               </li>}
+              {canNavigate("/sales-executive/call-recordings") && <li className="nav-item">
+                <Link
+                  href="/sales-executive/call-recordings"
+                  className={`nav-link ${isLinkActive("/sales-executive/call-recordings") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-mic-fill"></i>
+                  <span>Call Recordings</span>
+                </Link>
+              </li>}
               {canNavigate("/sales-executive/quotation") && <li className="nav-item">
                 <Link
                   href="/sales-executive/quotation"
@@ -283,6 +293,16 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                 >
                   <i className="bi bi-telephone-outbound-fill"></i>
                   <span>Follow-Ups & Call Logs</span>
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link
+                  href="/sales-manager/call-recordings"
+                  className={`nav-link ${isLinkActive("/sales-manager/call-recordings") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-mic-fill"></i>
+                  <span>Call Recordings Audit</span>
                 </Link>
               </li>
               <li className="nav-item">
@@ -408,6 +428,16 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                 >
                   <i className="bi bi-calendar2-check-fill"></i>
                   <span>Scheduled Visits</span>
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link
+                  href="/receptionist/call-recordings"
+                  className={`nav-link ${isLinkActive("/receptionist/call-recordings") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-mic-fill"></i>
+                  <span>Call Recordings</span>
                 </Link>
               </li>
               <li className="nav-item">
@@ -570,6 +600,16 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                 >
                   <i className="bi bi-telephone-outbound-fill"></i>
                   <span>Follow-Ups</span>
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link
+                  href="/admin/call-recordings"
+                  className={`nav-link ${isLinkActive("/admin/call-recordings") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-mic-fill"></i>
+                  <span>Call Recordings</span>
                 </Link>
               </li>
               <li className="nav-item">

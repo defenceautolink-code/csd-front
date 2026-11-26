@@ -27,6 +27,7 @@ export default function QuotationMainPage() {
   // Comparable variants (Task 6) - Range: +/- 1,00,000
   const [comparableVariants, setComparableVariants] = useState([]);
   const [isLoadingComparable, setIsLoadingComparable] = useState(false);
+  const [leadBudget, setLeadBudget] = useState("");
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -262,6 +263,11 @@ export default function QuotationMainPage() {
       setClientMobile(lead.phone || "");
       setCityJurisdiction(lead.posting || lead.city || lead.home_town || lead.address || "Ahmedabad");
       setClientEmail(lead.email || "");
+      setLeadBudget(
+        lead.budget && Number(lead.budget) > 0
+          ? String(lead.budget)
+          : ""
+      );
       // Auto-fill approved discount from follow-up interaction (Task 11)
       let approvedDiscAmount = 0;
       if (lead.approved_discount && Number(lead.approved_discount) > 0) {
@@ -536,16 +542,22 @@ export default function QuotationMainPage() {
     }
   };
 
+  const comparableTargetPrice =
+    leadBudget && Number(leadBudget) > 0
+      ? Number(leadBudget)
+      : Number(csdPrice || 0);
+  const isUsingLeadBudget = Boolean(leadBudget && Number(leadBudget) > 0);
+
   useEffect(() => {
-    if (csdPrice && Number(csdPrice) > 0) {
+    if (comparableTargetPrice > 0) {
       const timer = setTimeout(() => {
-        fetchComparableVariants(csdPrice);
+        fetchComparableVariants(comparableTargetPrice);
       }, 350);
       return () => clearTimeout(timer);
     } else {
       setComparableVariants([]);
     }
-  }, [csdPrice]);
+  }, [leadBudget, csdPrice, comparableTargetPrice]);
 
   const handleSelectComparableVariant = async (v) => {
     if (!v) return;
@@ -601,6 +613,7 @@ export default function QuotationMainPage() {
     setWarranty("");
     setMsReward("");
     setDiffAmtCash("");
+    setLeadBudget("");
     showToast("Quotation sheet parameters cleared.", "info");
   };
 
@@ -1625,18 +1638,30 @@ export default function QuotationMainPage() {
                       </span>
                     </h5>
                     <div className="text-muted small">
-                      {csdPrice && Number(csdPrice) > 0 ? (
+                      {comparableTargetPrice > 0 ? (
                         <span>
-                          Selected Variant Price: <strong>₹{Number(csdPrice).toLocaleString("en-IN")}</strong> •
-                          Matching Range: <strong>₹{Math.max(0, Number(csdPrice) - 100000).toLocaleString("en-IN")}</strong> to <strong>₹{(Number(csdPrice) + 100000).toLocaleString("en-IN")}</strong>
+                          {isUsingLeadBudget ? (
+                            <>
+                              Lead Budget: <strong>₹{comparableTargetPrice.toLocaleString("en-IN")}</strong>{" "}
+                              <span className="badge bg-success-subtle text-success border border-success-subtle me-1" style={{ fontSize: "10px" }}>
+                                From Lead
+                              </span>
+                              •{" "}
+                            </>
+                          ) : (
+                            <>
+                              Selected Variant Price: <strong>₹{comparableTargetPrice.toLocaleString("en-IN")}</strong> •{" "}
+                            </>
+                          )}
+                          Matching Range: <strong>₹{Math.max(0, comparableTargetPrice - 100000).toLocaleString("en-IN")}</strong> to <strong>₹{(comparableTargetPrice + 100000).toLocaleString("en-IN")}</strong>
                         </span>
                       ) : (
-                        <span>Select any vehicle variant on the left to discover matching models in price range.</span>
+                        <span>Select a lead with Customer Budget or any vehicle variant on the left to discover matching models in price range.</span>
                       )}
                     </div>
                   </div>
 
-                  {csdPrice && Number(csdPrice) > 0 && (
+                  {comparableTargetPrice > 0 && (
                     <span className="badge bg-light text-secondary border px-2 py-1 fw-semibold">
                       {comparableVariants.length} Alternative(s) Found
                     </span>
@@ -1649,7 +1674,7 @@ export default function QuotationMainPage() {
                     <div className="spinner-border text-primary mb-2" role="status"></div>
                     <div className="text-muted small">Searching comparable vehicles within ± ₹1,00,000...</div>
                   </div>
-                ) : !csdPrice || Number(csdPrice) <= 0 ? (
+                ) : comparableTargetPrice <= 0 ? (
                   <div className="text-center py-5 my-auto">
                     <div
                       className="mx-auto rounded-circle d-flex align-items-center justify-content-center mb-3"
@@ -1657,9 +1682,9 @@ export default function QuotationMainPage() {
                     >
                       <i className="bi bi-car-front fs-2 text-primary"></i>
                     </div>
-                    <h6 className="fw-bold text-dark">No Vehicle Variant Selected</h6>
+                    <h6 className="fw-bold text-dark">No Vehicle Variant or Budget Selected</h6>
                     <p className="text-muted small mx-auto" style={{ maxWidth: "340px" }}>
-                      Choose Brand, Model and Variant from the left form to automatically view all matching alternative vehicle models within <strong>± ₹1,00,000</strong> price range.
+                      Select a Lead with Customer Budget or choose Brand, Model and Variant from the left form to automatically view all matching vehicle models within <strong>± ₹1,00,000</strong> price range.
                     </p>
                   </div>
                 ) : comparableVariants.length === 0 ? (
@@ -1667,14 +1692,14 @@ export default function QuotationMainPage() {
                     <i className="bi bi-inbox fs-1 text-secondary mb-2 d-block"></i>
                     <h6 className="fw-bold text-dark">No Other Alternatives in this Exact Range</h6>
                     <p className="text-muted small">
-                      No other vehicle variants found between ₹{Math.max(0, Number(csdPrice) - 100000).toLocaleString("en-IN")} and ₹{(Number(csdPrice) + 100000).toLocaleString("en-IN")}.
+                      No other vehicle variants found between ₹{Math.max(0, comparableTargetPrice - 100000).toLocaleString("en-IN")} and ₹{(comparableTargetPrice + 100000).toLocaleString("en-IN")}.
                     </p>
                   </div>
                 ) : (
                   <div className="row g-3" style={{ maxHeight: "700px", overflowY: "auto" }}>
                     {comparableVariants.map((v) => {
                       const vPrice = Number(v.price || 0);
-                      const currentP = Number(csdPrice);
+                      const currentP = comparableTargetPrice;
                       const diff = vPrice - currentP;
                       const isCurrentlySelected = selectedVariantId === String(v.id);
 

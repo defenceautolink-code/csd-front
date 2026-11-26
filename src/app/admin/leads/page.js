@@ -290,6 +290,7 @@ export default function LeadsPage() {
     model_variant: "",
     priority: "Hot", // "Hot", "Warm", "Cold"
     purchase_timeline: "Immediate (Within 7 Days)",
+    variant_price: "",
     budget: "",
     source_id: "",
     status_id: "",
@@ -653,6 +654,7 @@ export default function LeadsPage() {
           model_variant: "",
           priority: "Hot",
           purchase_timeline: "Immediate (Within 7 Days)",
+          variant_price: "",
           budget: "",
           source_id: "",
           status_id: "",
@@ -721,7 +723,7 @@ export default function LeadsPage() {
         model_variant: computedModelVariant.trim(),
         priority: editLead.priority || "Hot",
         purchase_timeline: editLead.purchase_timeline,
-        budget: editLead.budget || null,
+        budget: editLead.budget ? parseFloat(editLead.budget) : null,
         source_id: editLead.source_id || null,
         status_id: editLead.status_id || null,
         status_name: editLead.status_name || "New",
@@ -1510,6 +1512,7 @@ export default function LeadsPage() {
                   model_variant: "",
                   priority: "Hot",
                   purchase_timeline: "Immediate (Within 7 Days)",
+                  variant_price: "",
                   budget: "",
                   source_id: sources[0]?.id || "",
                   status_id: statuses[0]?.id || "",
@@ -2111,6 +2114,7 @@ export default function LeadsPage() {
                                           model_variant: lead.model_variant || "",
                                           priority: lead.priority || "Hot",
                                           purchase_timeline: lead.purchase_timeline || "Immediate (Within 7 Days)",
+                                          variant_price: lead.variant?.price || lead.variant?.on_road_price || "",
                                           budget: lead.budget || "",
                                           source_id: lead.source_id || "",
                                           status_id: lead.status_id || "",
@@ -2515,7 +2519,7 @@ export default function LeadsPage() {
                         value={formData.brand_id}
                         onChange={(e) => {
                           const bId = e.target.value;
-                          setFormData({ ...formData, brand_id: bId, model_id: "", variant_id: "", model_variant: "" });
+                          setFormData({ ...formData, brand_id: bId, model_id: "", variant_id: "", model_variant: "", variant_price: "" });
                           fetchAddModels(bId);
                         }}
                       >
@@ -2542,7 +2546,7 @@ export default function LeadsPage() {
                           const mId = e.target.value;
                           const selectedM = addModels.find((m) => String(m.id) === String(mId));
                           const modelName = selectedM ? selectedM.name : "";
-                          setFormData({ ...formData, model_id: mId, variant_id: "", model_variant: modelName });
+                          setFormData({ ...formData, model_id: mId, variant_id: "", model_variant: modelName, variant_price: "" });
                           fetchAddVariants(mId);
                         }}
                       >
@@ -2574,7 +2578,7 @@ export default function LeadsPage() {
                             ...formData,
                             variant_id: vId,
                             model_variant: variantName ? `${modelName} ${variantName}`.trim() : modelName,
-                            budget: vPrice ? String(vPrice) : formData.budget,
+                            variant_price: vId ? (vPrice ? String(vPrice) : "") : "",
                           });
                         }}
                       >
@@ -2675,14 +2679,37 @@ export default function LeadsPage() {
 
                     <div className="col-md-6">
                       <label className="form-label text-dark fw-bold small">
-                        Budget (₹)
+                        Variant Price (₹) <span className="text-muted fw-normal">(Auto from Variant)</span>
+                      </label>
+                      <div className="input-group" style={{ cursor: "not-allowed" }} title="Auto-filled from selected variant price">
+                        <span className="input-group-text bg-light fw-bold">₹</span>
+                        <input
+                          type="number"
+                          className="form-control fw-bold"
+                          placeholder="Select Variant to auto-fill"
+                          value={formData.variant_price || ""}
+                          disabled
+                          readOnly
+                          tabIndex={-1}
+                          style={{ backgroundColor: "#f1f5f9", color: "#131C27", pointerEvents: "none", userSelect: "none" }}
+                        />
+                        <span className="input-group-text bg-light text-muted" title="Locked">
+                          <i className="bi bi-lock-fill"></i>
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="col-md-6">
+                      <label className="form-label text-dark fw-bold small">
+                        Budget (₹) <span className="text-muted fw-normal">(For Quotation Range)</span>
                       </label>
                       <div className="input-group">
                         <span className="input-group-text bg-light fw-bold">₹</span>
                         <input
                           type="number"
                           className="form-control fw-bold"
-                          placeholder="e.g. 1450000"
+                          placeholder="e.g. 1200000"
+                          min="0"
                           value={formData.budget || ""}
                           onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
                         />
@@ -2985,7 +3012,7 @@ export default function LeadsPage() {
                         value={editLead.brand_id || ""}
                         onChange={(e) => {
                           const bId = e.target.value;
-                          setEditLead({ ...editLead, brand_id: bId, model_id: "", variant_id: "", model_variant: "" });
+                          setEditLead({ ...editLead, brand_id: bId, model_id: "", variant_id: "", model_variant: "", variant_price: "" });
                           fetchEditModels(bId);
                         }}
                       >
@@ -3012,7 +3039,7 @@ export default function LeadsPage() {
                           const mId = e.target.value;
                           const selectedM = editModels.find((m) => String(m.id) === String(mId));
                           const modelName = selectedM ? selectedM.name : "";
-                          setEditLead({ ...editLead, model_id: mId, variant_id: "", model_variant: modelName });
+                          setEditLead({ ...editLead, model_id: mId, variant_id: "", model_variant: modelName, variant_price: "" });
                           fetchEditVariants(mId);
                         }}
                       >
@@ -3039,10 +3066,12 @@ export default function LeadsPage() {
                           const selectedM = editModels.find((m) => String(m.id) === String(editLead.model_id));
                           const modelName = selectedM ? selectedM.name : "";
                           const variantName = selectedV ? selectedV.name : "";
+                          const vPrice = selectedV && selectedV.price ? selectedV.price : (selectedV?.on_road_price || "");
                           setEditLead({
                             ...editLead,
                             variant_id: vId,
                             model_variant: variantName ? `${modelName} ${variantName}`.trim() : modelName,
+                            variant_price: vId ? (vPrice ? String(vPrice) : "") : "",
                           });
                         }}
                       >
@@ -3097,14 +3126,41 @@ export default function LeadsPage() {
 
                     <div className="col-md-6">
                       <label className="form-label text-dark fw-bold small">
-                        Budget (₹)
+                        Variant Price (₹) <span className="text-muted fw-normal">(Auto from Variant)</span>
+                      </label>
+                      <div className="input-group" style={{ cursor: "not-allowed" }} title="Auto-filled from selected variant price">
+                        <span className="input-group-text bg-light fw-bold">₹</span>
+                        <input
+                          type="number"
+                          className="form-control fw-bold"
+                          placeholder="Select Variant to auto-fill"
+                          value={
+                            editLead.variant_price ||
+                            editVariants.find((v) => String(v.id) === String(editLead.variant_id))?.price ||
+                            ""
+                          }
+                          disabled
+                          readOnly
+                          tabIndex={-1}
+                          style={{ backgroundColor: "#f1f5f9", color: "#131C27", pointerEvents: "none", userSelect: "none" }}
+                        />
+                        <span className="input-group-text bg-light text-muted" title="Locked">
+                          <i className="bi bi-lock-fill"></i>
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="col-md-6">
+                      <label className="form-label text-dark fw-bold small">
+                        Budget (₹) <span className="text-muted fw-normal">(For Quotation Range)</span>
                       </label>
                       <div className="input-group">
                         <span className="input-group-text bg-light fw-bold">₹</span>
                         <input
                           type="number"
                           className="form-control fw-bold"
-                          placeholder="e.g. 1450000"
+                          placeholder="e.g. 1200000"
+                          min="0"
                           value={editLead.budget || ""}
                           onChange={(e) => setEditLead({ ...editLead, budget: e.target.value })}
                         />
