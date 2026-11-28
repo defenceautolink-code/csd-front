@@ -589,11 +589,10 @@ export default function SalesRegisterReportPage() {
                         </td>
                         <td className="text-center">
                           <span
-                            className={`badge rounded-pill px-3 py-1 ${
-                              isDelivered
+                            className={`badge rounded-pill px-3 py-1 ${isDelivered
                                 ? "bg-success-subtle text-success"
                                 : "bg-primary-subtle text-primary"
-                            }`}
+                              }`}
                           >
                             {isDelivered ? "Delivered" : "Booking Confirmed"}
                           </span>
