@@ -491,6 +491,34 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                 </li>
               )}
             </ul>
+
+            <div className="nav-section-title">Website &amp; CMS</div>
+            <ul className="sidebar-nav">
+              {canNavigate("/receptionist/blogs") && (
+                <li className="nav-item">
+                  <Link
+                    href="/receptionist/blogs"
+                    className={`nav-link ${isLinkActive("/receptionist/blogs") ? "active" : ""}`}
+                    onClick={onCloseMobile}
+                  >
+                    <i className="bi bi-newspaper"></i>
+                    <span>Blogs</span>
+                  </Link>
+                </li>
+              )}
+              {canNavigate("/receptionist/contacts") && (
+                <li className="nav-item">
+                  <Link
+                    href="/receptionist/contacts"
+                    className={`nav-link ${isLinkActive("/receptionist/contacts") ? "active" : ""}`}
+                    onClick={onCloseMobile}
+                  >
+                    <i className="bi bi-envelope-paper-fill"></i>
+                    <span>Contact Inquiries</span>
+                  </Link>
+                </li>
+              )}
+            </ul>
           </>
         )}
 

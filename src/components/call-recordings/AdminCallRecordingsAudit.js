@@ -146,7 +146,7 @@ export default function AdminCallRecordingsAudit() {
       try {
         const stored = localStorage.getItem("user");
         if (stored) setCurrentUser(JSON.parse(stored));
-      } catch (_) {}
+      } catch (_) { }
     }
   }, []);
 
@@ -471,10 +471,10 @@ export default function AdminCallRecordingsAudit() {
                     {!roleFilter
                       ? "Select Role First"
                       : roleFilter === "sales_executive"
-                      ? "All Sales Executives"
-                      : roleFilter === "receptionist"
-                      ? "All Receptionists"
-                      : "All Staff Members"}
+                        ? "All Sales Executives"
+                        : roleFilter === "receptionist"
+                          ? "All Receptionists"
+                          : "All Staff Members"}
                   </option>
                   {roleFilter &&
                     staffOptions.map((u) => (
@@ -526,9 +526,8 @@ export default function AdminCallRecordingsAudit() {
                 <span className="small text-muted fw-semibold">Quick Date:</span>
                 <button
                   type="button"
-                  className={`btn btn-sm py-0 px-2 ${
-                    !fromDate && !toDate ? "btn-primary" : "btn-outline-secondary"
-                  }`}
+                  className={`btn btn-sm py-0 px-2 ${!fromDate && !toDate ? "btn-primary" : "btn-outline-secondary"
+                    }`}
                   onClick={() => {
                     setFromDate("");
                     setToDate("");
@@ -539,11 +538,10 @@ export default function AdminCallRecordingsAudit() {
                 </button>
                 <button
                   type="button"
-                  className={`btn btn-sm py-0 px-2 ${
-                    fromDate === getTodayDate() && toDate === getTodayDate()
+                  className={`btn btn-sm py-0 px-2 ${fromDate === getTodayDate() && toDate === getTodayDate()
                       ? "btn-primary"
                       : "btn-outline-secondary"
-                  }`}
+                    }`}
                   onClick={() => {
                     const today = getTodayDate();
                     setFromDate(today);
@@ -555,11 +553,10 @@ export default function AdminCallRecordingsAudit() {
                 </button>
                 <button
                   type="button"
-                  className={`btn btn-sm py-0 px-2 ${
-                    fromDate === getYesterdayDate() && toDate === getYesterdayDate()
+                  className={`btn btn-sm py-0 px-2 ${fromDate === getYesterdayDate() && toDate === getYesterdayDate()
                       ? "btn-primary"
                       : "btn-outline-secondary"
-                  }`}
+                    }`}
                   onClick={() => {
                     const yesterday = getYesterdayDate();
                     setFromDate(yesterday);
@@ -631,67 +628,67 @@ export default function AdminCallRecordingsAudit() {
                       {summaryRows
                         .slice((summaryPage - 1) * summaryPerPage, summaryPage * summaryPerPage)
                         .map((row, idx) => (
-                        <tr key={`${row.user_id}_${row.date || "none"}`}>
-                          <td className="text-center fw-semibold text-muted">
-                            {(summaryPage - 1) * summaryPerPage + idx + 1}
-                          </td>
-                          <td className="text-nowrap">
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-primary text-nowrap"
-                              onClick={() => handleOpenStaffDetail(row)}
-                            >
-                              <i className="bi bi-headphones me-1"></i>
-                              View &amp; Listen ({row.recordings_uploaded})
-                            </button>
-                          </td>
-                          <td className="small text-nowrap fw-semibold">
-                            {row.date ? (
-                              <>
-                                <i className="bi bi-calendar3 text-primary me-1"></i>
-                                {row.date}
-                              </>
-                            ) : (
-                              <span className="text-muted">-</span>
-                            )}
-                          </td>
-                          <td>
-                            <div className="fw-semibold">{row.name}</div>
-                            <div className="small text-muted">{row.phone || row.email}</div>
-                          </td>
-                          <td>
-                            <span className={`badge ${getRoleBadgeClass(row.role)}`}>
-                              {row.role}
-                            </span>
-                          </td>
-                          <td className="text-center">
-                            <span className="fw-bold fs-6">{row.call_follow_ups}</span>
-                            {row.total_follow_ups !== row.call_follow_ups && (
-                              <div className="small text-muted">({row.total_follow_ups} total)</div>
-                            )}
-                          </td>
-                          <td className="text-center">
-                            <span className="fw-bold fs-6 text-primary">{row.recordings_uploaded}</span>
-                          </td>
-                          <td>{getComplianceBadge(row)}</td>
-                          <td>
-                            <div className="d-flex gap-1 flex-wrap">
-                              {row.verified_count > 0 && (
-                                <span className="badge bg-success-subtle text-success">{row.verified_count} Verified</span>
+                          <tr key={`${row.user_id}_${row.date || "none"}`}>
+                            <td className="text-center fw-semibold text-muted">
+                              {(summaryPage - 1) * summaryPerPage + idx + 1}
+                            </td>
+                            <td className="text-nowrap">
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-primary text-nowrap"
+                                onClick={() => handleOpenStaffDetail(row)}
+                              >
+                                <i className="bi bi-headphones me-1"></i>
+                                View &amp; Listen ({row.recordings_uploaded})
+                              </button>
+                            </td>
+                            <td className="small text-nowrap fw-semibold">
+                              {row.date ? (
+                                <>
+                                  <i className="bi bi-calendar3 text-primary me-1"></i>
+                                  {row.date}
+                                </>
+                              ) : (
+                                <span className="text-muted">-</span>
                               )}
-                              {row.pending_count > 0 && (
-                                <span className="badge bg-warning-subtle text-warning">{row.pending_count} Pending</span>
+                            </td>
+                            <td>
+                              <div className="fw-semibold">{row.name}</div>
+                              <div className="small text-muted">{row.phone || row.email}</div>
+                            </td>
+                            <td>
+                              <span className={`badge ${getRoleBadgeClass(row.role)}`}>
+                                {row.role}
+                              </span>
+                            </td>
+                            <td className="text-center">
+                              <span className="fw-bold fs-6">{row.call_follow_ups}</span>
+                              {row.total_follow_ups !== row.call_follow_ups && (
+                                <div className="small text-muted">({row.total_follow_ups} total)</div>
                               )}
-                              {row.flagged_count > 0 && (
-                                <span className="badge bg-danger-subtle text-danger">{row.flagged_count} Flagged</span>
-                              )}
-                              {row.recordings_uploaded === 0 && (
-                                <span className="small text-muted">-</span>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td className="text-center">
+                              <span className="fw-bold fs-6 text-primary">{row.recordings_uploaded}</span>
+                            </td>
+                            <td>{getComplianceBadge(row)}</td>
+                            <td>
+                              <div className="d-flex gap-1 flex-wrap">
+                                {row.verified_count > 0 && (
+                                  <span className="badge bg-success-subtle text-success">{row.verified_count} Verified</span>
+                                )}
+                                {row.pending_count > 0 && (
+                                  <span className="badge bg-warning-subtle text-warning">{row.pending_count} Pending</span>
+                                )}
+                                {row.flagged_count > 0 && (
+                                  <span className="badge bg-danger-subtle text-danger">{row.flagged_count} Flagged</span>
+                                )}
+                                {row.recordings_uploaded === 0 && (
+                                  <span className="small text-muted">-</span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
                     </tbody>
                   </table>
                 </div>
@@ -843,10 +840,10 @@ export default function AdminCallRecordingsAudit() {
                     {staffDetail.date
                       ? staffDetail.date
                       : !fromDate && !toDate
-                      ? "All Dates"
-                      : fromDate === toDate
-                      ? fromDate
-                      : `${fromDate || "..."} to ${toDate || "..."}`}
+                        ? "All Dates"
+                        : fromDate === toDate
+                          ? fromDate
+                          : `${fromDate || "..."} to ${toDate || "..."}`}
                   </small>
                 </div>
                 <button
@@ -1086,9 +1083,8 @@ export default function AdminCallRecordingsAudit() {
                         Matching recordings before {cleanupInfo.cutoffDate}:
                       </span>
                       <span
-                        className={`badge fs-6 ${
-                          cleanupInfo.count > 0 ? "bg-danger" : "bg-secondary"
-                        }`}
+                        className={`badge fs-6 ${cleanupInfo.count > 0 ? "bg-danger" : "bg-secondary"
+                          }`}
                       >
                         {cleanupInfo.count} Recording{cleanupInfo.count === 1 ? "" : "s"}
                       </span>
