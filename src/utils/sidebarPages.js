@@ -33,20 +33,26 @@ export function getSidebarPages(currentUser) {
     ];
   } else if (normalized === "sales_manager") {
     pages = [
-      // Team Leadership
-      { title: "Manager Dashboard", path: "/sales-manager/dashboard", icon: "bi bi-grid-1x2-fill", section: "Team Leadership", keywords: ["dashboard", "home", "stats", "overview"] },
-      { title: "Team Leads Pipeline", path: "/sales-manager/leads", icon: "bi bi-funnel-fill", section: "Team Leadership", keywords: ["leads", "team leads", "pipeline", "customers"] },
-      { title: "Follow-Ups & Call Logs", path: "/sales-manager/follow-up", icon: "bi bi-telephone-outbound-fill", section: "Team Leadership", keywords: ["calls", "follow up", "call logs", "tracker", "interactions"] },
-      { title: "Call Recordings Audit", path: "/sales-manager/call-recordings", icon: "bi bi-mic-fill", section: "Team Leadership", keywords: ["recording", "audio", "audit", "verify", "call proof"] },
-      { title: "Quotation Approvals", path: "/sales-manager/quotation", icon: "bi bi-file-earmark-spreadsheet-fill", section: "Team Leadership", keywords: ["quotations", "approvals", "quote", "discount"] },
-      { title: "Deals & Bookings", path: "/sales-manager/deals", icon: "bi bi-trophy-fill", section: "Team Leadership", keywords: ["deals", "bookings", "won", "orders", "sales"] },
-      { title: "Insurance Reminders", path: "/sales-manager/insurance", icon: "bi bi-shield-check", section: "Team Leadership", keywords: ["insurance", "renewals", "reminders", "policy"] },
-      { title: "Sales Reps Team", path: "/sales-manager/users", icon: "bi bi-people-fill", section: "Team Leadership", keywords: ["users", "team", "sales reps", "staff", "employees"] },
-      { title: "Performance Reports", path: "/sales-manager/reports", icon: "bi bi-bar-chart-line-fill", section: "Team Leadership", keywords: ["reports", "performance", "analytics", "stats"] },
-      // Vehicle Inventory
-      { title: "Brands", path: "/sales-manager/brand", icon: "bi bi-shield-shaded", section: "Vehicle Inventory", keywords: ["brand", "manufacturer", "oem"] },
-      { title: "Models", path: "/sales-manager/model", icon: "bi bi-car-front-fill", section: "Vehicle Inventory", keywords: ["model", "cars", "vehicles"] },
-      { title: "Variants & Pricing", path: "/sales-manager/variant", icon: "bi bi-tag-fill", section: "Vehicle Inventory", keywords: ["variant", "pricing", "trims", "prices"] },
+      // Main Menu
+      { title: "Dashboard", path: "/sales-manager/dashboard", icon: "bi bi-grid-1x2-fill", section: "Main Menu", keywords: ["dashboard", "home", "stats", "overview"] },
+      { title: "Leads Pipeline", path: "/sales-manager/leads", icon: "bi bi-funnel-fill", section: "Main Menu", keywords: ["leads", "team leads", "pipeline", "customers"] },
+      { title: "Follow-Ups", path: "/sales-manager/follow-up", icon: "bi bi-telephone-outbound-fill", section: "Main Menu", keywords: ["calls", "follow up", "call logs", "tracker", "interactions"] },
+      { title: "Call Recordings", path: "/sales-manager/call-recordings", icon: "bi bi-mic-fill", section: "Main Menu", keywords: ["recording", "audio", "audit", "verify", "call proof"] },
+      { title: "Send Quotation", path: "/sales-manager/quotation", icon: "bi bi-file-earmark-spreadsheet-fill", section: "Main Menu", keywords: ["quotations", "approvals", "quote", "discount"] },
+      { title: "Generate Invoice", path: "/sales-manager/invoice", icon: "bi bi-receipt-cutoff", section: "Main Menu", keywords: ["invoice", "generate invoice", "deals register", "billing", "tax invoice"] },
+      { title: "Pending Insurance", path: "/sales-manager/deals/pending-insurance", icon: "bi bi-shield-plus", section: "Main Menu", keywords: ["insurance", "pending insurance", "policy", "coverage"] },
+      { title: "Insurance Reminders", path: "/sales-manager/insurance", icon: "bi bi-shield-check", section: "Main Menu", keywords: ["insurance", "renewals", "reminders", "policy"] },
+      { title: "Insurance Records", path: "/sales-manager/insurance-records", icon: "bi bi-file-earmark-medical-fill", section: "Main Menu", keywords: ["insurance records", "policies", "policy list"] },
+      { title: "Users & Team", path: "/sales-manager/users", icon: "bi bi-people-fill", section: "Main Menu", keywords: ["users", "team", "sales reps", "staff", "employees"] },
+      { title: "Expense Details", path: "/sales-manager/expense-detail", icon: "bi bi-journal-text", section: "Main Menu", keywords: ["expense details", "expenses", "costs", "spending", "vouchers"] },
+      // Master Data
+      { title: "Brands", path: "/sales-manager/brand", icon: "bi bi-shield-shaded", section: "Master Data", keywords: ["brand", "manufacturer", "oem"] },
+      { title: "Models", path: "/sales-manager/model", icon: "bi bi-car-front-fill", section: "Master Data", keywords: ["model", "cars", "vehicles"] },
+      { title: "Variants", path: "/sales-manager/variant", icon: "bi bi-tag-fill", section: "Master Data", keywords: ["variant", "pricing", "trims", "prices"] },
+      { title: "Update Price", path: "/sales-manager/update-price", icon: "bi bi-currency-rupee", section: "Master Data", keywords: ["update price", "price list", "bulk price", "rates"] },
+      { title: "Insurance Companies", path: "/sales-manager/insurance-companies", icon: "bi bi-building-fill-check", section: "Master Data", keywords: ["insurance companies", "providers", "insurers", "companies"] },
+      { title: "Expense", path: "/sales-manager/expense-master", icon: "bi bi-wallet2", section: "Master Data", keywords: ["expense", "expense master", "expense categories", "heads"] },
+      { title: "Lead Sources", path: "/sales-manager/lead-source", icon: "bi bi-diagram-3-fill", section: "Master Data", keywords: ["lead sources", "campaigns", "channels", "source"] },
       // Account
       { title: "My Profile", path: "/admin/profile", icon: "bi bi-person-badge-fill", section: "Account", keywords: ["profile", "account", "settings", "password", "user"] },
     ];
