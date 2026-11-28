@@ -195,6 +195,8 @@ const ROLE_PERMISSIONS = {
     "lead_source.manage",
     "lead_status.manage",
     "settings.manage",
+    "website.blogs",
+    "website.contacts",
     "support.view",
     "invoice.generate",
     "invoice.view",
@@ -318,6 +320,8 @@ const ROLE_PERMISSIONS = {
     "invoice.generate",
     "invoice.view",
     "insurance.reminder",
+    "website.blogs",
+    "website.contacts",
   ],
   accountant: [
     "dashboard.view",
@@ -479,6 +483,9 @@ export function canAccessAdminPath(pathname, customUser = undefined) {
     ["/admin/expense-detail", "reports.view"],
     ["/admin/lead-source", "lead_source.manage"],
     ["/admin/lead-status", "lead_status.manage"],
+    ["/admin/blogs", "website.blogs"],
+    ["/admin/contacts", "website.contacts"],
+    ["/admin/crm", "settings.manage"],
     ["/admin/settings", "settings.manage"],
   ].find(([path]) => normalizedPath === path || normalizedPath.startsWith(`${path}/`));
 

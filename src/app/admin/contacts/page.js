@@ -5,6 +5,7 @@ import Link from "next/link";
 import axios from "axios";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
+import { getAuthenticatedUser, getRoleDashboardPath } from "@/utils/auth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 
@@ -116,7 +117,7 @@ export default function AdminContactsPage() {
           <div>
             <ul className="breadcrumb-custom">
               <li className="breadcrumb-item">
-                <Link href="/admin/dashboard">Home</Link>
+                <Link href={getRoleDashboardPath(getAuthenticatedUser()?.role)}>Home</Link>
               </li>
               <li className="breadcrumb-item">Website &amp; CMS</li>
               <li className="breadcrumb-item active">Contact Us Inquiries</li>

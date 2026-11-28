@@ -62,6 +62,9 @@ export function getSidebarPages(currentUser) {
       { title: "Brands", path: "/receptionist/brand", icon: "bi bi-shield-shaded", section: "Vehicle Inventory", keywords: ["brand", "manufacturer"] },
       { title: "Models", path: "/receptionist/model", icon: "bi bi-car-front-fill", section: "Vehicle Inventory", keywords: ["model", "cars"] },
       { title: "Variants & Pricing", path: "/receptionist/variant", icon: "bi bi-tag-fill", section: "Vehicle Inventory", keywords: ["variant", "pricing", "trims"] },
+      // Website & CMS (Blogs & Contact Inquiries only — CRM stays Admin-only)
+      { title: "Blogs", path: "/receptionist/blogs", icon: "bi bi-newspaper", section: "Website & CMS", keywords: ["blogs", "articles", "news", "posts", "cms"] },
+      { title: "Contact Inquiries", path: "/receptionist/contacts", icon: "bi bi-envelope-paper-fill", section: "Website & CMS", keywords: ["contact", "inquiries", "messages", "leads", "contact us"] },
       // Account
       { title: "My Profile", path: "/admin/profile", icon: "bi bi-person-badge-fill", section: "Account", keywords: ["profile", "account", "settings", "password", "user"] },
     ];

@@ -6,6 +6,7 @@ import axios from "axios";
 import AdminLayout from "@/app/components/AdminLayout";
 import { useToast } from "@/app/components/Toast";
 import CKEditorComponent from "@/components/common/CKEditorComponent";
+import { getAuthenticatedUser, getRoleDashboardPath } from "@/utils/auth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 const BACKEND_BASE_URL = API_BASE_URL.replace(/\/api\/?$/, "");
@@ -276,7 +277,7 @@ export default function AdminBlogsPage() {
           <div>
             <ul className="breadcrumb-custom">
               <li className="breadcrumb-item">
-                <Link href="/admin/dashboard">Home</Link>
+                <Link href={getRoleDashboardPath(getAuthenticatedUser()?.role)}>Home</Link>
               </li>
               <li className="breadcrumb-item">Website &amp; CMS</li>
               <li className="breadcrumb-item active">Blogs</li>

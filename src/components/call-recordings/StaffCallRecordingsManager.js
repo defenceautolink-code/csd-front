@@ -611,17 +611,15 @@ export default function StaffCallRecordingsManager() {
                     return (
                       <div
                         key={`${file.name}_${idx}`}
-                        className={`d-flex align-items-center gap-2 px-2 py-1 rounded border small ${
-                          isTooLarge ? "border-danger bg-danger-subtle" : ""
-                        }`}
+                        className={`d-flex align-items-center gap-2 px-2 py-1 rounded border small ${isTooLarge ? "border-danger bg-danger-subtle" : ""
+                          }`}
                         style={!isTooLarge ? { backgroundColor: "rgba(37, 99, 235, 0.06)" } : undefined}
                       >
                         <i
-                          className={`bi ${
-                            isTooLarge
+                          className={`bi ${isTooLarge
                               ? "bi-exclamation-triangle-fill text-danger"
                               : "bi-file-earmark-music-fill text-primary"
-                          }`}
+                            }`}
                         ></i>
                         <span className="text-truncate" style={{ maxWidth: "200px" }} title={file.name}>
                           {file.name}
@@ -1092,11 +1090,10 @@ export default function StaffCallRecordingsManager() {
                     </div>
                     <div className="progress" style={{ height: "10px" }}>
                       <div
-                        className={`progress-bar ${
-                          !uploadModal.isComplete
+                        className={`progress-bar ${!uploadModal.isComplete
                             ? "progress-bar-striped progress-bar-animated"
                             : "bg-success"
-                        }`}
+                          }`}
                         role="progressbar"
                         style={{
                           width: `${Math.round(
