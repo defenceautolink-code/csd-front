@@ -50,7 +50,7 @@ export default function SalesRegisterReportPage() {
     try {
       const [dealsRes, brandsRes] = await Promise.allSettled([
         dealApi.getDeals({ per_page: 500 }),
-        api.get("/brands", { params: { per_page: 100 } }),
+        api.get("/brands", { params: { all: 1 } }),
       ]);
 
       if (dealsRes.status === "fulfilled" && dealsRes.value?.data) {

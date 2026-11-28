@@ -226,7 +226,7 @@ export default function QuotationMainPage() {
           }
         }
 
-        const brandsRes = await api.get("/brands");
+        const brandsRes = await api.get("/brands?all=1");
         if (brandsRes && brandsRes.data && brandsRes.data.data) {
           setBrandsList(brandsRes.data.data);
         }
@@ -295,7 +295,7 @@ export default function QuotationMainPage() {
       let availableBrands = brandsList;
       if (!availableBrands || availableBrands.length === 0) {
         try {
-          const bRes = await api.get("/brands");
+          const bRes = await api.get("/brands?all=1");
           availableBrands = bRes?.data?.data || bRes?.data || [];
           if (availableBrands.length > 0) setBrandsList(availableBrands);
         } catch (e) { }
@@ -319,7 +319,7 @@ export default function QuotationMainPage() {
 
         setIsLoadingModels(true);
         try {
-          const modelsRes = await api.get(`/models?brand_id=${brandId}`);
+          const modelsRes = await api.get(`/models?brand_id=${brandId}&all=1`);
           models = modelsRes?.data?.data || modelsRes?.data || [];
           setModelsList(models);
         } catch (e) { } finally {
@@ -344,7 +344,7 @@ export default function QuotationMainPage() {
 
         setIsLoadingVariants(true);
         try {
-          const variantsRes = await api.get(`/variants?model_id=${foundModelId}`);
+          const variantsRes = await api.get(`/variants?model_id=${foundModelId}&all=1`);
           variants = variantsRes?.data?.data || variantsRes?.data || [];
           setVariantsList(variants);
         } catch (e) { } finally {
@@ -403,7 +403,7 @@ export default function QuotationMainPage() {
     }
     setIsLoadingModels(true);
     try {
-      const res = await api.get(`/models?brand_id=${brandId}`);
+      const res = await api.get(`/models?brand_id=${brandId}&all=1`);
       if (res && res.data && res.data.data) {
         setModelsList(res.data.data);
       }
@@ -437,7 +437,7 @@ export default function QuotationMainPage() {
     }
     setIsLoadingVariants(true);
     try {
-      const res = await api.get(`/variants?model_id=${modelId}`);
+      const res = await api.get(`/variants?model_id=${modelId}&all=1`);
       if (res && res.data && res.data.data) {
         setVariantsList(res.data.data);
       }
@@ -526,7 +526,7 @@ export default function QuotationMainPage() {
     try {
       const minPrice = Math.max(0, numPrice - 100000);
       const maxPrice = numPrice + 100000;
-      const res = await api.get(`/variants?min_price=${minPrice}&max_price=${maxPrice}&per_page=50`);
+      const res = await api.get(`/variants?min_price=${minPrice}&max_price=${maxPrice}&all=1`);
       let list = [];
       if (res && res.data && Array.isArray(res.data.data)) {
         list = res.data.data;

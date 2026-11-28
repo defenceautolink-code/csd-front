@@ -160,7 +160,7 @@ export const leadApi = {
    */
   getMasterData: async () => {
     const [brandRes, sourceRes, statusRes, userRes] = await Promise.all([
-      api.get("/brands").catch(() => ({ data: { data: [] } })),
+      api.get("/brands?all=1").catch(() => ({ data: { data: [] } })),
       api.get("/lead-sources").catch(() => ({ data: { data: [] } })),
       api.get("/lead-statuses").catch(() => ({ data: { data: [] } })),
       api.get("/users").catch(() => ({ data: { data: [] } })),

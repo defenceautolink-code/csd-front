@@ -444,7 +444,7 @@ export default function LeadsPage() {
   const fetchMasterData = async () => {
     try {
       const [brandRes, sourceRes, statusRes, userRes] = await Promise.all([
-        axios.get(`${API_URL}/brands`).catch(() => ({ data: { data: [] } })),
+        axios.get(`${API_URL}/brands?all=1`).catch(() => ({ data: { data: [] } })),
         axios.get(`${API_URL}/lead-sources`).catch(() => ({ data: { data: [] } })),
         axios.get(`${API_URL}/lead-statuses`).catch(() => ({ data: { data: [] } })),
         axios.get(`${API_URL}/users`).catch(() => ({ data: { data: [] } })),
@@ -489,7 +489,7 @@ export default function LeadsPage() {
     }
     setIsLoadingAddModels(true);
     try {
-      const res = await axios.get(`${API_URL}/models?brand_id=${brandId}`).catch(() => null);
+      const res = await axios.get(`${API_URL}/models?brand_id=${brandId}&all=1`).catch(() => null);
       if (res && res.data && res.data.data) {
         setAddModels(res.data.data);
       } else {
@@ -510,7 +510,7 @@ export default function LeadsPage() {
     }
     setIsLoadingAddVariants(true);
     try {
-      const res = await axios.get(`${API_URL}/variants?model_id=${modelId}`).catch(() => null);
+      const res = await axios.get(`${API_URL}/variants?model_id=${modelId}&all=1`).catch(() => null);
       if (res && res.data && res.data.data) {
         setAddVariants(res.data.data);
       } else {
@@ -533,7 +533,7 @@ export default function LeadsPage() {
     }
     setIsLoadingEditModels(true);
     try {
-      const res = await axios.get(`${API_URL}/models?brand_id=${brandId}`).catch(() => null);
+      const res = await axios.get(`${API_URL}/models?brand_id=${brandId}&all=1`).catch(() => null);
       if (res && res.data && res.data.data) {
         setEditModels(res.data.data);
       } else {
@@ -554,7 +554,7 @@ export default function LeadsPage() {
     }
     setIsLoadingEditVariants(true);
     try {
-      const res = await axios.get(`${API_URL}/variants?model_id=${modelId}`).catch(() => null);
+      const res = await axios.get(`${API_URL}/variants?model_id=${modelId}&all=1`).catch(() => null);
       if (res && res.data && res.data.data) {
         setEditVariants(res.data.data);
       } else {
