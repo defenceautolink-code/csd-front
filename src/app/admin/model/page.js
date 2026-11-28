@@ -125,7 +125,7 @@ export default function ModelPage() {
   // Fetch all brands to populate dropdowns
   const fetchBrands = async () => {
     try {
-      const response = await axios.get(`${API_URL}/brands`);
+      const response = await axios.get(`${API_URL}/brands?all=1`);
       if (response.data && response.data.status) {
         setBrands(response.data.data);
       }

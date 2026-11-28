@@ -104,7 +104,7 @@ export default function VariantPage() {
   // Fetch Brands for dropdowns
   const fetchBrands = async () => {
     try {
-      const response = await axios.get(`${API_URL}/brands`);
+      const response = await axios.get(`${API_URL}/brands?all=1`);
       if (response.data && response.data.status) {
         setBrands(response.data.data);
       }
@@ -116,7 +116,7 @@ export default function VariantPage() {
   // Fetch Models for dropdowns
   const fetchModels = async () => {
     try {
-      const response = await axios.get(`${API_URL}/models`);
+      const response = await axios.get(`${API_URL}/models?all=1`);
       if (response.data && response.data.status) {
         setModels(response.data.data);
       }

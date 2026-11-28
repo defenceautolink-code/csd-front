@@ -54,9 +54,9 @@ export default function UpdatePricePage() {
     try {
       setLoading(true);
       const [variantsSettled, brandsSettled, modelsSettled] = await Promise.allSettled([
-        priceMasterApi.getVariants({ per_page: 100 }),
-        api.get("/brands"),
-        api.get("/models"),
+        priceMasterApi.getVariants({ all: 1 }),
+        api.get("/brands?all=1"),
+        api.get("/models?all=1"),
       ]);
 
       const variantsRes = variantsSettled.status === "fulfilled" ? variantsSettled.value : null;
