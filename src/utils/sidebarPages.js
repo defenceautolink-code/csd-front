@@ -19,11 +19,13 @@ export function getSidebarPages(currentUser) {
       { title: "Sales Dashboard", path: "/sales-executive/dashboard", icon: "bi bi-grid-1x2-fill", section: "Conversion Desk", keywords: ["dashboard", "home", "stats", "kpi"] },
       { title: "My Assigned Leads", path: "/sales-executive/leads", icon: "bi bi-funnel-fill", section: "Conversion Desk", keywords: ["leads", "my leads", "customers", "inquiries"] },
       { title: "Leads Pipeline", path: "/sales-executive/pipeline", icon: "bi bi-funnel", section: "Conversion Desk", keywords: ["pipeline", "stages", "kanban", "funnel"] },
-      { title: "Follow-Ups & Notes", path: "/sales-executive/follow-up", icon: "bi bi-telephone-outbound-fill", section: "Conversion Desk", keywords: ["calls", "follow up", "tracker", "call log", "notes", "schedule"] },
+      { title: "Follow-Ups", path: "/sales-executive/follow-up", icon: "bi bi-telephone-outbound-fill", section: "Conversion Desk", keywords: ["calls", "follow up", "tracker", "call log", "notes", "schedule"] },
       { title: "Call Recordings", path: "/sales-executive/call-recordings", icon: "bi bi-mic-fill", section: "Conversion Desk", keywords: ["recording", "audio", "upload", "call proof", "voice"] },
       { title: "Send Quotation", path: "/sales-executive/quotation", icon: "bi bi-file-earmark-spreadsheet-fill", section: "Conversion Desk", keywords: ["quote", "quotation", "price quote", "estimate"] },
       { title: "Deals & Bookings", path: "/sales-executive/deals", icon: "bi bi-trophy-fill", section: "Conversion Desk", keywords: ["deals", "bookings", "won", "orders", "sales"] },
+      { title: "Pending Insurance", path: "/sales-executive/deals/pending-insurance", icon: "bi bi-shield-plus", section: "Conversion Desk", keywords: ["insurance", "pending insurance", "policy", "coverage"] },
       { title: "Insurance Reminders", path: "/sales-executive/insurance", icon: "bi bi-shield-check", section: "Conversion Desk", keywords: ["insurance", "reminders", "renewals", "policy"] },
+      { title: "Insurance Records", path: "/sales-executive/insurance-records", icon: "bi bi-file-earmark-medical-fill", section: "Conversion Desk", keywords: ["insurance records", "policies", "policy list"] },
       // Vehicle Inventory
       { title: "Brands", path: "/sales-executive/brand", icon: "bi bi-shield-shaded", section: "Vehicle Inventory", keywords: ["brand", "manufacturer", "oem", "car brand"] },
       { title: "Models", path: "/sales-executive/model", icon: "bi bi-car-front-fill", section: "Vehicle Inventory", keywords: ["model", "cars", "vehicles"] },
@@ -60,10 +62,13 @@ export function getSidebarPages(currentUser) {
     pages = [
       // Front Desk
       { title: "Reception Concierge", path: "/receptionist/dashboard", icon: "bi bi-door-open-fill", section: "Front Desk", keywords: ["dashboard", "reception", "desk", "home"] },
-      { title: "Walk-Ins & Leads", path: "/receptionist/leads", icon: "bi bi-funnel-fill", section: "Front Desk", keywords: ["leads", "walk ins", "visitors", "inquiries"] },
-      { title: "Scheduled Visits", path: "/receptionist/follow-up", icon: "bi bi-calendar2-check-fill", section: "Front Desk", keywords: ["visits", "appointments", "follow up", "schedule"] },
+      { title: "Leads Pipeline", path: "/receptionist/leads", icon: "bi bi-funnel-fill", section: "Front Desk", keywords: ["leads", "walk ins", "visitors", "inquiries", "pipeline"] },
+      { title: "Follow-Ups", path: "/receptionist/follow-up", icon: "bi bi-telephone-outbound-fill", section: "Front Desk", keywords: ["visits", "appointments", "follow up", "schedule"] },
       { title: "Call Recordings", path: "/receptionist/call-recordings", icon: "bi bi-mic-fill", section: "Front Desk", keywords: ["recording", "audio", "upload", "call proof", "voice"] },
-      { title: "Auto Calculator & Quote", path: "/receptionist/quotation", icon: "bi bi-calculator-fill", section: "Front Desk", keywords: ["calculator", "quote", "quotation", "price"] },
+      { title: "Send Quotation", path: "/receptionist/quotation", icon: "bi bi-file-earmark-spreadsheet-fill", section: "Front Desk", keywords: ["calculator", "quote", "quotation", "price"] },
+      { title: "Pending Insurance", path: "/receptionist/deals/pending-insurance", icon: "bi bi-shield-plus", section: "Front Desk", keywords: ["insurance", "pending insurance", "policy", "coverage"] },
+      { title: "Insurance Reminders", path: "/receptionist/insurance", icon: "bi bi-shield-check", section: "Front Desk", keywords: ["insurance", "reminders", "renewals", "policy"] },
+      { title: "Insurance Records", path: "/receptionist/insurance-records", icon: "bi bi-file-earmark-medical-fill", section: "Front Desk", keywords: ["insurance records", "policies", "policy list"] },
       // Vehicle Inventory
       { title: "Brands", path: "/receptionist/brand", icon: "bi bi-shield-shaded", section: "Vehicle Inventory", keywords: ["brand", "manufacturer"] },
       { title: "Models", path: "/receptionist/model", icon: "bi bi-car-front-fill", section: "Vehicle Inventory", keywords: ["model", "cars"] },
