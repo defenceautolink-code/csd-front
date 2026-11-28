@@ -167,7 +167,7 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                   onClick={onCloseMobile}
                 >
                   <i className="bi bi-telephone-outbound-fill"></i>
-                  <span>Follow-Ups & Notes</span>
+                  <span>Follow-Ups</span>
                 </Link>
               </li>}
               {canNavigate("/sales-executive/call-recordings") && <li className="nav-item">
@@ -202,12 +202,32 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
               </li>
               <li className="nav-item">
                 <Link
+                  href="/sales-executive/deals/pending-insurance"
+                  className={`nav-link ${isLinkActive("/sales-executive/deals/pending-insurance") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-shield-plus"></i>
+                  <span>Pending Insurance</span>
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link
                   href="/sales-executive/insurance"
                   className={`nav-link ${isLinkActive("/sales-executive/insurance") ? "active" : ""}`}
                   onClick={onCloseMobile}
                 >
                   <i className="bi bi-shield-check"></i>
                   <span>Insurance Reminders</span>
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link
+                  href="/sales-executive/insurance-records"
+                  className={`nav-link ${isLinkActive("/sales-executive/insurance-records") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-file-earmark-medical-fill"></i>
+                  <span>Insurance Records</span>
                 </Link>
               </li>
             </ul>
@@ -469,7 +489,7 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                   onClick={onCloseMobile}
                 >
                   <i className="bi bi-funnel-fill"></i>
-                  <span>Walk-Ins & Leads</span>
+                  <span>Leads Pipeline</span>
                 </Link>
               </li>
               <li className="nav-item">
@@ -478,8 +498,8 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                   className={`nav-link ${isLinkActive("/receptionist/follow-up") ? "active" : ""}`}
                   onClick={onCloseMobile}
                 >
-                  <i className="bi bi-calendar2-check-fill"></i>
-                  <span>Scheduled Visits</span>
+                  <i className="bi bi-telephone-outbound-fill"></i>
+                  <span>Follow-Ups</span>
                 </Link>
               </li>
               <li className="nav-item">
@@ -498,8 +518,38 @@ export default function Sidebar({ isOpen, isCollapsed, onCloseMobile }) {
                   className={`nav-link ${isLinkActive("/receptionist/quotation") ? "active" : ""}`}
                   onClick={onCloseMobile}
                 >
-                  <i className="bi bi-calculator-fill"></i>
-                  <span>Auto Calculator & Quote</span>
+                  <i className="bi bi-file-earmark-spreadsheet-fill"></i>
+                  <span>Send Quotation</span>
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link
+                  href="/receptionist/deals/pending-insurance"
+                  className={`nav-link ${isLinkActive("/receptionist/deals/pending-insurance") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-shield-plus"></i>
+                  <span>Pending Insurance</span>
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link
+                  href="/receptionist/insurance"
+                  className={`nav-link ${isLinkActive("/receptionist/insurance") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-shield-check"></i>
+                  <span>Insurance Reminders</span>
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link
+                  href="/receptionist/insurance-records"
+                  className={`nav-link ${isLinkActive("/receptionist/insurance-records") ? "active" : ""}`}
+                  onClick={onCloseMobile}
+                >
+                  <i className="bi bi-file-earmark-medical-fill"></i>
+                  <span>Insurance Records</span>
                 </Link>
               </li>
             </ul>
